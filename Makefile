@@ -10,7 +10,7 @@ DEV_IMAGE_REPOSITORY ?= koderover.tencentcloudcr.com/test
 DEV_IMAGE_REPOSITORY := $(DEV_IMAGE_REPOSITORY)
 VERSION ?= $(shell date +'%Y%m%d%H%M%S')
 VERSION := $(VERSION)
-MICROSERVICE_TARGETS = aslan cron executor hub-agent hub-server init jenkins-plugin packager-plugin predator-plugin ua user warpdrive
+MICROSERVICE_TARGETS = aslan cron executor hub-agent hub-server init jenkins-plugin packager-plugin predator-plugin plutus_vendor ua user warpdrive
 BUILD_BASE_TARGETS = focal bionic
 DEBUG_TOOLS_TARGETS = zadig-debug zgctl-sidecar
 
