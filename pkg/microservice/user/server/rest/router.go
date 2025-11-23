@@ -19,6 +19,7 @@ package rest
 import (
 	"github.com/gin-gonic/gin"
 
+	policyhandler "github.com/koderover/zadig/pkg/microservice/policy/core/handler"
 	"github.com/koderover/zadig/pkg/microservice/user/core/handler"
 )
 
@@ -27,6 +28,12 @@ func (s *engine) injectRouterGroup(router *gin.RouterGroup) {
 		new(handler.Router),
 	} {
 		r.Inject(router.Group("/api/v1"))
+	}
+
+	for _, r := range []injector{
+		new(policyhandler.Router),
+	} {
+		r.Inject(router.Group("/api/v1/policy"))
 	}
 }
 
