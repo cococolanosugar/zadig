@@ -13,7 +13,7 @@ COPY pkg pkg
 RUN go mod download
 
 RUN --mount=type=cache,id=gobuild,target=/gocache \
-    go build -v -o /plutus_vendor ./cmd/plutus_vendor/main.go
+    go build -v -o /plutus-vendor ./cmd/plutus-vendor/main.go
 
 FROM alpine/git:v2.36.3
 
@@ -26,7 +26,7 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
 WORKDIR /app
 
-COPY --from=build /plutus_vendor .
+COPY --from=build /plutus-vendor .
 
-ENTRYPOINT ["/app/plutus_vendor"]
+ENTRYPOINT ["/app/plutus-vendor"]
 
