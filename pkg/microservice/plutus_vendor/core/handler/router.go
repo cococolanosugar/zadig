@@ -18,6 +18,7 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	commonhandler "github.com/koderover/zadig/v2/pkg/microservice/aslan/core/common/handler"
 	"github.com/koderover/zadig/v2/pkg/microservice/plutus_vendor/core/handler/license"
 )
 
@@ -26,7 +27,7 @@ type Router struct{}
 func (*Router) Inject(router *gin.RouterGroup) {
 	plutus := router.Group("/plutus")
 	{
+		plutus.GET("/health", commonhandler.Health)
 		plutus.GET("/license", license.GetLicense)
 	}
 }
-
