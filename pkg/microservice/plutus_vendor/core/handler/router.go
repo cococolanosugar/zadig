@@ -29,5 +29,6 @@ func (*Router) Inject(router *gin.RouterGroup) {
 	{
 		plutus.GET("/health", commonhandler.Health)
 		plutus.GET("/license", license.GetLicense)
+		plutus.POST("/signature/check", license.SignatureCheck)
 	}
 }
