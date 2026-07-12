@@ -68,3 +68,14 @@ func GetLicense(c *gin.Context) {
 		UpdatedTime:      0,
 	}
 }
+
+type CheckSignatrueResp struct {
+	Code int64 `json:"code"`
+}
+
+func SignatureCheck(c *gin.Context) {
+	ctx := internalhandler.NewContext(c)
+	defer func() { internalhandler.JSONResponse(c, ctx) }()
+
+	ctx.Resp = &CheckSignatrueResp{}
+}
