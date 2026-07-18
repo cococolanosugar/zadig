@@ -20,6 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	commonhandler "github.com/koderover/zadig/v2/pkg/microservice/aslan/core/common/handler"
 	"github.com/koderover/zadig/v2/pkg/microservice/plutus_vendor/core/handler/license"
+	"github.com/koderover/zadig/v2/pkg/microservice/plutus_vendor/core/handler/organization"
 )
 
 type Router struct{}
@@ -30,5 +31,11 @@ func (*Router) Inject(router *gin.RouterGroup) {
 		plutus.GET("/health", commonhandler.Health)
 		plutus.GET("/license", license.GetLicense)
 		plutus.POST("/signature/check", license.SignatureCheck)
+
+		organizationRoute := plutus.Group("/organization")
+		{
+			organizationRoute.GET("", organization.GetOrganization)
+			organizationRoute.POST("", organization.UpdateOrganization)
+		}
 	}
 }
