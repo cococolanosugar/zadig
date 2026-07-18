@@ -19,18 +19,19 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 	commonhandler "github.com/koderover/zadig/v2/pkg/microservice/aslan/core/common/handler"
-	"github.com/koderover/zadig/v2/pkg/microservice/plutus_vendor/core/handler/license"
-	"github.com/koderover/zadig/v2/pkg/microservice/plutus_vendor/core/handler/organization"
+	"github.com/koderover/zadig/v2/pkg/microservice/plutus_enterprise/core/handler/license"
+	"github.com/koderover/zadig/v2/pkg/microservice/plutus_enterprise/core/handler/organization"
 )
 
 type Router struct{}
 
 func (*Router) Inject(router *gin.RouterGroup) {
-	plutus := router.Group("/plutus")
+	plutus := router.Group("/plutus-enterprise")
 	{
 		plutus.GET("/health", commonhandler.Health)
 		plutus.GET("/license", license.GetLicense)
 		plutus.POST("/signature/check", license.SignatureCheck)
+		plutus.POST("/license/upgrade/check", license.UpgradeCheck)
 
 		organizationRoute := plutus.Group("/organization")
 		{
