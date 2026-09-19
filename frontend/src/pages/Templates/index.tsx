@@ -11,12 +11,22 @@ import {
   PlusOutlined,
   RocketOutlined,
 } from '@ant-design/icons';
+import { useParams, useSearchParams } from 'react-router-dom';
 import templateApi, { type WorkflowTemplateItem, type WorkflowTemplateI18n } from '../../api/template';
 
 const { Title, Text, Paragraph } = Typography;
 
 export const TemplateCenterPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('workflows');
+  const { tab } = useParams<{ tab?: string }>();
+  const [searchParams] = useSearchParams();
+  const initialTab = tab || searchParams.get('tab') || 'workflows';
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    if (tab || searchParams.get('tab')) {
+      setActiveTab(tab || searchParams.get('tab') || 'workflows');
+    }
+  }, [tab, searchParams]);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
 

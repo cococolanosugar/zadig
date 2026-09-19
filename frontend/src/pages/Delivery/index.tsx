@@ -6,12 +6,22 @@ import {
   PlusOutlined,
   DropboxOutlined,
 } from '@ant-design/icons';
+import { useParams, useSearchParams } from 'react-router-dom';
 import http from '../../api/client';
 
 const { Title, Text } = Typography;
 
 export const DeliveryPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('artifacts');
+  const { tab } = useParams<{ tab?: string }>();
+  const [searchParams] = useSearchParams();
+  const initialTab = tab || searchParams.get('tab') || 'artifacts';
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    if (tab || searchParams.get('tab')) {
+      setActiveTab(tab || searchParams.get('tab') || 'artifacts');
+    }
+  }, [tab, searchParams]);
   const [loading, setLoading] = useState(false);
   const [artifacts, setArtifacts] = useState<unknown[]>([]);
   const [searchText, setSearchText] = useState('');

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, Tabs, Typography } from 'antd';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
   HddOutlined,
   BranchesOutlined,
@@ -14,7 +15,16 @@ import StoragePage from '../Settings/Storage';
 const { Title, Text } = Typography;
 
 export const ResourcePage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('cluster');
+  const { tab } = useParams<{ tab?: string }>();
+  const [searchParams] = useSearchParams();
+  const initialTab = tab || searchParams.get('tab') || 'cluster';
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    if (tab || searchParams.get('tab')) {
+      setActiveTab(tab || searchParams.get('tab') || 'cluster');
+    }
+  }, [tab, searchParams]);
 
   const tabItems = [
     {
