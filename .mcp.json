@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "antd": {
+      "command": "antd",
+      "args": ["mcp"]
+    },
+    "codegraph": {
+      "command": "codegraph",
+      "args": ["serve", "--mcp"]
+    },
+    "gitnexus": {
+      "command": "gitnexus",
+      "args": ["mcp"]
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest"]
+    }
+  }
+}

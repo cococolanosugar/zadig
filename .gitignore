@@ -75,3 +75,7 @@ debug/init
 debug/ua
 debug/user
 debug/zadig-agent
+
+.claude/
+.agents/
+.omp/
