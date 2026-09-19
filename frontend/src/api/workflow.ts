@@ -94,7 +94,7 @@ export const workflowApi = {
   async getWorkflows(projectName: string): Promise<WorkflowV4Item[]> {
     try {
       const res = await http.get<{ workflow_list?: WorkflowV4Item[] } | WorkflowV4Item[]>(
-        `/api/aslan/workflow/v4/workflows?projectName=${projectName}`,
+        `/api/aslan/workflow/v4?projectName=${projectName}`,
         { skipErrorHandler: true }
       );
       if (Array.isArray(res)) return res;
@@ -131,7 +131,7 @@ export const workflowApi = {
    * Get single workflow detail
    */
   async getWorkflow(name: string, projectName: string): Promise<WorkflowV4Item> {
-    return http.get<WorkflowV4Item>(`/api/aslan/workflow/v4/workflow/${name}?projectName=${projectName}`);
+    return http.get<WorkflowV4Item>(`/api/aslan/workflow/v4/name/${name}?projectName=${projectName}`);
   },
 
   /**

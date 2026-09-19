@@ -71,13 +71,14 @@ export const LoginPage: React.FC = () => {
   const setAuth = useAuthStore((state) => state.setAuth);
   const setRoles = useAuthStore((state) => state.setRoles);
 
-  const fetchCaptcha = async () => {
+  const fetchCaptcha = async (accountName?: string) => {
     try {
-      const res = await fetch('/api/v1/captcha');
+      const acc = accountName || form.getFieldValue('account') || '';
+      const res = await fetch(`/api/v1/captcha?account=${encodeURIComponent(acc)}`);
       if (res.ok) {
         const data = await res.json();
         setCaptchaId(data.id || data.captcha_id);
-        setCaptchaImage(data.data || data.image);
+        setCaptchaImage(data.content || data.data || data.image);
         setShowCaptcha(true);
       }
     } catch {
@@ -143,7 +144,7 @@ export const LoginPage: React.FC = () => {
       setErrorMessage(msg);
 
       if (msg.includes('captcha') || msg.includes('验证码')) {
-        await fetchCaptcha();
+        await fetchCaptcha(values.account);
       }
     } finally {
       setLoading(false);
@@ -316,7 +317,7 @@ export const LoginPage: React.FC = () => {
                     <img
                       src={captchaImage}
                       alt="验证码"
-                      onClick={fetchCaptcha}
+                      onClick={() => fetchCaptcha()}
                       style={{ cursor: 'pointer', height: 42, borderRadius: 6 }}
                       title="点击刷新验证码"
                     />

@@ -109,13 +109,13 @@
 
 | 路由 Path | 前端页面组件 | 页面布局与特性 (100% 对齐线上) | 核心业务功能 | 调用的后端 Microservice API |
 | :--- | :--- | :--- | :--- | :--- |
-| `/v1/system/integration`<br>`/v1/system/integration/:category` | `pages/Settings/Integration/index.tsx` | **垂直单列通栏卡片列表 (`.integration-list`)**，具有 `translateX(5px)` 悬浮微动、30px 纯色图标与镂空配置按钮 | 完整对齐 **12 大系统集成能力**（账号系统、代码源、项目管理、IM 集成、AI 模型、CI/CD 工具、代码扫描、配置管理、网关组件、监控系统、云服务、其他系统），支持连通性测试与配置弹窗 | `/api/aslan/code/workspace`<br>`/api/aslan/system/llm/integration`<br>`/api/aslan/system/cicdTools`<br>`/api/aslan/system/sonar/integration`<br>`/api/aslan/system/im_app`<br>`/api/aslan/system/configuration`<br>`/api/aslan/system/project_management` |
+| `/v1/system/integration`<br>`/v1/system/integration/:category` | `pages/Settings/Integration/index.tsx` | **垂直单列通栏卡片列表 (`.integration-list`)**，具有 `translateX(5px)` 悬浮微动、30px 纯色图标与镂空配置按钮 | 完整对齐 **12 大系统集成能力**（账号系统、代码源、项目管理、IM 集成、AI 模型、CI/CD 工具、代码扫描、配置管理、网关组件、监控系统、云服务、其他系统），支持连通性测试与配置弹窗 | `/api/aslan/code/codehost`<br>`/api/aslan/system/llm/integration`<br>`/api/aslan/system/cicdTools`<br>`/api/aslan/system/sonar/integration`<br>`/api/aslan/system/im_app`<br>`/api/aslan/system/configuration`<br>`/api/aslan/system/project_management` |
 | `/v1/system/clusters` | `pages/Settings/Clusters/index.tsx` | 基础设施配置表格 | Kubernetes 集群接入向导 (Agent / KubeConfig 模式)、连通性探测、命名空间同步 | `GET /api/aslan/cluster/clusters`<br>`POST /api/aslan/cluster/clusters` |
-| `/v1/system/codehosts` | `pages/Settings/CodeHosts/index.tsx` | 资产卡片列表 | GitLab/GitHub/Gitee 代码源授权接入与 OAuth 回调测试 | `GET /api/aslan/code/workspace`<br>`POST /api/aslan/code/workspace` |
-| `/v1/system/registries` | `pages/Settings/Registries/index.tsx` | 镜像仓维护表格 | Harbor / DockerHub / 阿里云 ACR / 腾讯云 TCR 镜像仓库凭据与连通性验证 | `GET /api/aslan/system/registry`<br>`POST /api/aslan/system/registry` |
-| `/v1/system/storage` | `pages/Settings/Storage/index.tsx` | 对象存储配置表格 | S3 / MinIO / 阿里云 OSS 对象存储桶集成与构建缓存目录配置 | `GET /api/aslan/system/s3storage`<br>`POST /api/aslan/system/s3storage` |
-| `/v1/system/users` | `pages/Settings/Users/index.tsx` | 用户管理 ProTable | 统一用户账号维护、系统管理员/普通成员角色授权、重置密码 | `GET /api/v1/users`<br>`POST /api/v1/users` |
-| `/v1/system/config`<br>`?tab=mail` | `pages/Settings/Config/index.tsx` | 系统基础综合配置 Tab | SMTP 邮件服务器配置、发送连通性测试邮件、全局广播公告管理、网络正向代理、审计日志 | `GET /api/v1/emails/host`<br>`POST /api/v1/emails/host`<br>`GET /api/aslan/system/announcement` |
+| `/v1/system/codehosts` | `pages/Settings/CodeHosts/index.tsx` | 资产卡片列表 | GitLab/GitHub/Gitee 代码源授权接入与 OAuth 回调测试 | `GET /api/aslan/code/codehost`<br>`POST /api/aslan/code/codehost` |
+| `/v1/system/registries` | `pages/Settings/Registries/index.tsx` | 镜像仓维护表格 | Harbor / DockerHub / 阿里云 ACR / 腾讯云 TCR 镜像仓库凭据与信封加密连通性验证 | `GET /api/aslan/system/registry/namespaces?encryptedKey=`<br>`POST /api/aslan/system/registry/namespaces` |
+| `/v1/system/storage`<br>`/v1/system/secrets` | `pages/Settings/Storage/index.tsx` | 对象存储与密钥配置表格 | S3 / MinIO / 阿里云 OSS 对象存储桶集成与构建缓存凭据配置 | `GET /api/aslan/system/s3storage?encryptedKey=`<br>`POST /api/aslan/system/s3storage` |
+| `/v1/system/users` | `pages/Settings/Users/index.tsx` | 用户管理 ProTable | 统一用户账号维护、系统管理员/普通成员角色授权、重置密码 | `POST /api/v1/users/search`<br>`POST /api/v1/users`<br>`GET /api/v1/policy/roles` |
+| `/v1/system/config`<br>`/v1/system/apps`<br>`/v1/system/imgs`<br>`/v1/system/workflowTasks`<br>`/v1/system/plugins`<br>`/v1/system/announcement`<br>`/v1/system/auditlog` | `pages/Settings/Config/index.tsx` | 全系统基础设施综合配置 Tab 体系（URL 同步） | 8 大核心系统配置：<br>1. **SMTP 邮箱服务器** (`mail`)<br>2. **任务并发与调度** (`workflowTasks` / `concurrency`)<br>3. **构建系统镜像** (`imgs`)<br>4. **依赖软件包管理** (`apps`)<br>5. **系统插件** (`plugins`)<br>6. **系统公告** (`announcement`)<br>7. **网络代理** (`proxy`)<br>8. **操作审计日志** (`auditlog`) | `GET/POST /api/aslan/system/concurrency/workflow`<br>`GET/POST/DELETE /api/aslan/system/basicImages`<br>`GET /api/aslan/system/install`<br>`GET /api/aslan/system/plugin`<br>`GET /api/aslan/system/operation?status=0&per_page=50&page=1`<br>`GET/POST /api/v1/emails/host`<br>`GET/POST /api/aslan/system/proxyManage` |
 
 ---
 
@@ -139,3 +139,4 @@
 4. **Git 管理准则**：
    * 所有重构与对齐修改均规范落入本地提交；
    * 严格遵守“不随意推送”指令，确保远端分支安全。
+

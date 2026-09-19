@@ -81,21 +81,42 @@ export const AppRouter: React.FC = () => {
             <Route path="pipelines" element={<PipelinesPage />} />
             <Route path="pipelines/:name" element={<PipelinesPage />} />
             <Route path="pipelines/:name/task/:taskId" element={<PipelineExecutionPage />} />
+            <Route path="pipelines/custom/create" element={<PipelinesPage />} />
+            <Route path="pipelines/custom/edit/:name" element={<PipelinesPage />} />
             <Route path="pipelines/custom/:name" element={<PipelinesPage />} />
             <Route path="pipelines/custom/:name/:taskId" element={<PipelineExecutionPage />} />
+            <Route path="pipelines/custom/testcase/*" element={<PipelineExecutionPage />} />
             <Route path="envs" element={<EnvironmentsPage />} />
+            <Route path="envs/create" element={<EnvironmentsPage />} />
             <Route path="envs/:envName" element={<EnvironmentsPage />} />
+            <Route path="envs/:envName/k8s/:serviceName" element={<EnvironmentsPage />} />
+            <Route path="envs/:envName/helm/:serviceName" element={<EnvironmentsPage />} />
+            <Route path="envs/:envName/pm/:serviceName" element={<EnvironmentsPage />} />
+            <Route path="envs/:envName/log" element={<EnvironmentsPage />} />
             <Route path="services" element={<ServicesPage />} />
+            <Route path="services/production" element={<ServicesPage />} />
             <Route path="sprints" element={<SprintsPage />} />
+            <Route path="sprints/config" element={<SprintsPage />} />
             <Route path="builds" element={<BuildsPage />} />
             <Route path="builds/create" element={<BuildsPage />} />
             <Route path="builds/detail/:buildName" element={<BuildsPage />} />
             <Route path="test" element={<QualityCenterPage />} />
+            <Route path="test/*" element={<QualityCenterPage />} />
             <Route path="scanner" element={<ScannersPage />} />
             <Route path="scanner/create" element={<ScannersPage />} />
+            <Route path="scanner/edit/:scannerName" element={<ScannersPage />} />
             <Route path="scanner/ai-review/create" element={<ScannersPage />} />
+            <Route path="scanner/ai-review/edit/:scannerName" element={<ScannersPage />} />
             <Route path="scanner/detail/:scannerName" element={<ScannersPage />} />
+            <Route path="scanner/detail/:scannerName/task/:taskId" element={<ScannersPage />} />
             <Route path="version" element={<DeliveryPage />} />
+            <Route path="version/helm/create" element={<DeliveryPage />} />
+            <Route path="version/k8s/create" element={<DeliveryPage />} />
+            <Route path="version/detail/:id" element={<DeliveryPage />} />
+            <Route path="version/*" element={<DeliveryPage />} />
+            <Route path="secrets" element={<StoragePage />} />
+            <Route path="rbac" element={<UsersPage />} />
+            <Route path="integration/*" element={<SystemIntegrationPage />} />
           </Route>
 
           {/* Global Release & Pipelines */}
@@ -146,6 +167,13 @@ export const AppRouter: React.FC = () => {
           <Route path="system/storage" element={<StoragePage />} />
           <Route path="system/users" element={<UsersPage />} />
           <Route path="system/config" element={<SystemConfigPage />} />
+          <Route path="system/apps" element={<SystemConfigPage />} />
+          <Route path="system/imgs" element={<SystemConfigPage />} />
+          <Route path="system/workflowTasks" element={<SystemConfigPage />} />
+          <Route path="system/plugins" element={<SystemConfigPage />} />
+          <Route path="system/secrets" element={<StoragePage />} />
+          <Route path="system/announcement" element={<SystemConfigPage />} />
+          <Route path="system/auditlog" element={<SystemConfigPage />} />
           <Route path="system/integration" element={<SystemIntegrationPage />} />
           <Route path="system/integration/:category" element={<SystemIntegrationPage />} />
 
