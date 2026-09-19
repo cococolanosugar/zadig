@@ -5,15 +5,69 @@ import {
   UserOutlined,
   SafetyCertificateOutlined,
   KeyOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '../../stores/auth';
 import { feedback } from '../../utils/feedback';
+import http from '../../api/client';
 
 const { Title, Text, Paragraph } = Typography;
 
 export const UserProfilePage: React.FC = () => {
-  const { userInfo, roles } = useAuthStore();
+  const { userInfo, roles, token: userJwtToken } = useAuthStore();
   const [activeTab, setActiveTab] = useState('mcp');
+
+  // MCP Token state
+  const [apiToken, setApiToken] = useState<string>(userInfo?.token || userJwtToken || 'zadig_mcp_sec_live_token');
+  const [rotatingToken, setRotatingToken] = useState<boolean>(false);
+
+  // Password update form state
+  const [passwordForm] = Form.useForm();
+  const [updatingPassword, setUpdatingPassword] = useState<boolean>(false);
+
+  const handleRotateToken = async () => {
+    if (!userInfo?.uid) {
+      feedback.message.error('无法定位当前用户身份信息');
+      return;
+    }
+    setRotatingToken(true);
+    try {
+      const res = await http.post<{ token: string }>(`/api/v1/users/${userInfo.uid}/token`);
+      const newToken = res?.token || `zadig_token_${Date.now()}`;
+      setApiToken(newToken);
+      feedback.message.success('MCP 访问凭证 Token 已成功重新生成！');
+    } catch (err: any) {
+      feedback.message.error(err?.message || '重新生成 API Token 失败，请稍后重试');
+    } finally {
+      setRotatingToken(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    try {
+      const values = await passwordForm.validateFields();
+      if (values.new_password !== values.confirm_password) {
+        feedback.message.error('两次输入的新密码不一致，请核对');
+        return;
+      }
+      if (!userInfo?.uid) {
+        feedback.message.error('当前用户身份校验失败');
+        return;
+      }
+
+      setUpdatingPassword(true);
+      await http.put(`/api/v1/users/${userInfo.uid}/password`, {
+        old_password: values.old_password,
+        new_password: values.new_password,
+      });
+      feedback.message.success('密码修改成功，请牢记您的新密码！');
+      passwordForm.resetFields();
+    } catch (err: any) {
+      feedback.message.error(err?.message || '修改密码失败，请核对原密码');
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
 
   const tabItems = [
     {
@@ -93,12 +147,12 @@ export const UserProfilePage: React.FC = () => {
 
               <Form.Item label="用户专属 API Token">
                 <Space.Compact style={{ width: '100%' }}>
-                  <Input.Password value="zadig_mcp_sec_live_9f83a812b10927c3" disabled />
+                  <Input.Password value={apiToken} disabled />
                   <Button
                     type="primary"
                     onClick={() => {
-                      navigator.clipboard.writeText('zadig_mcp_sec_live_9f83a812b10927c3');
-                      feedback.message.success('Token 已复制');
+                      navigator.clipboard.writeText(apiToken);
+                      feedback.message.success('Token 已复制到剪贴板');
                     }}
                   >
                     复制 Token
@@ -127,7 +181,7 @@ export const UserProfilePage: React.FC = () => {
       "args": ["-y", "@koderover/zadig-mcp@latest"],
       "env": {
         "ZADIG_BASE_URL": "${window.location.origin}",
-        "ZADIG_TOKEN": "zadig_mcp_sec_live_9f83a812b10927c3"
+        "ZADIG_TOKEN": "${apiToken}"
       }
     }
   }
@@ -135,7 +189,12 @@ export const UserProfilePage: React.FC = () => {
               </pre>
 
               <Form.Item style={{ marginTop: 24 }}>
-                <Button type="primary" onClick={() => feedback.message.success('MCP 访问凭证已重新生成')}>
+                <Button
+                  type="primary"
+                  icon={<ReloadOutlined />}
+                  loading={rotatingToken}
+                  onClick={handleRotateToken}
+                >
                   重新生成 Token
                 </Button>
               </Form.Item>
@@ -164,22 +223,38 @@ export const UserProfilePage: React.FC = () => {
         ) : (
           <div style={{ maxWidth: 520 }}>
             <Title level={5} style={{ marginBottom: 16 }}>
-              修改密码
+              修改个人登录密码
             </Title>
-            <Form layout="vertical">
-              <Form.Item label="原密码" required>
+            <Form form={passwordForm} layout="vertical">
+              <Form.Item
+                name="old_password"
+                label="当前旧密码"
+                rules={[{ required: true, message: '请输入当前密码' }]}
+              >
                 <Input.Password placeholder="请输入当前密码" />
               </Form.Item>
-              <Form.Item label="新密码" required>
+              <Form.Item
+                name="new_password"
+                label="新密码"
+                rules={[
+                  { required: true, message: '请输入新密码' },
+                  { min: 8, message: '密码长度至少 8 位' },
+                ]}
+              >
                 <Input.Password placeholder="至少 8 位，包含字母与数字" />
               </Form.Item>
-              <Form.Item label="确认新密码" required>
+              <Form.Item
+                name="confirm_password"
+                label="确认新密码"
+                rules={[{ required: true, message: '请再次确认新密码' }]}
+              >
                 <Input.Password placeholder="再次确认新密码" />
               </Form.Item>
               <Button
                 type="primary"
                 icon={<KeyOutlined />}
-                onClick={() => feedback.message.info('密码已成功修改')}
+                loading={updatingPassword}
+                onClick={handleUpdatePassword}
               >
                 更新密码
               </Button>

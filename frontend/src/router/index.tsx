@@ -9,6 +9,7 @@ import ProjectsPage from '../pages/Projects';
 import ProjectOverviewPage from '../pages/Projects/Overview';
 import ServicesPage from '../pages/Services';
 import EnvironmentsPage from '../pages/Environments';
+import EnvironmentWizardPage from '../pages/Environments/Wizard';
 import PipelinesPage from '../pages/Pipelines';
 import PipelineExecutionPage from '../pages/Pipelines/Execution';
 import InsightsPage from '../pages/Insights';
@@ -87,7 +88,7 @@ export const AppRouter: React.FC = () => {
             <Route path="pipelines/custom/:name/:taskId" element={<PipelineExecutionPage />} />
             <Route path="pipelines/custom/testcase/*" element={<PipelineExecutionPage />} />
             <Route path="envs" element={<EnvironmentsPage />} />
-            <Route path="envs/create" element={<EnvironmentsPage />} />
+            <Route path="envs/create" element={<EnvironmentWizardPage />} />
             <Route path="envs/:envName" element={<EnvironmentsPage />} />
             <Route path="envs/:envName/k8s/:serviceName" element={<EnvironmentsPage />} />
             <Route path="envs/:envName/helm/:serviceName" element={<EnvironmentsPage />} />
