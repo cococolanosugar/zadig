@@ -24,14 +24,43 @@ interface AuthState {
   logout: () => void;
 }
 
+const getInitialState = () => {
+  try {
+    const stored = localStorage.getItem('zadig_auth_store');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed?.state?.token) {
+        return {
+          token: parsed.state.token as string,
+          userInfo: (parsed.state.userInfo as UserInfo) || null,
+          roles: (parsed.state.roles as string[]) || [],
+          publicKey: (parsed.state.publicKey as string) || null,
+          isAuthenticated: Boolean(parsed.state.token),
+        };
+      }
+    }
+  } catch {
+    // Ignore error
+  }
+  return {
+    token: null,
+    userInfo: null,
+    roles: [],
+    publicKey: null,
+    isAuthenticated: false,
+  };
+};
+
+const initial = getInitialState();
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      token: null,
-      userInfo: null,
-      roles: [],
-      publicKey: null,
-      isAuthenticated: false,
+      token: initial.token,
+      userInfo: initial.userInfo,
+      roles: initial.roles,
+      publicKey: initial.publicKey,
+      isAuthenticated: initial.isAuthenticated,
 
       setAuth: (token: string, userInfo: UserInfo) => {
         set({

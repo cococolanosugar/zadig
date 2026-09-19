@@ -8,6 +8,11 @@ export interface ProjectItem {
   product_name?: string;
   created_at?: number;
   updated_at?: number;
+  updatedAt?: number;
+  updatedBy?: string;
+  onboard?: boolean;
+  public?: boolean;
+  deployType?: string;
   is_favorite?: boolean;
 }
 
