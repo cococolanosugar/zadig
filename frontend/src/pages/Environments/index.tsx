@@ -19,10 +19,11 @@ import {
   FileTextOutlined,
   SyncOutlined,
   ControlOutlined,
+  PlusOutlined,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/project';
 import PodTerminal from '../../components/Terminal/PodTerminal';
 import LogViewer from '../../components/Terminal/LogViewer';
@@ -53,6 +54,7 @@ interface PodItem {
 
 export const EnvironmentsPage: React.FC = () => {
   const { projectName } = useParams<{ projectName?: string }>();
+  const navigate = useNavigate();
   const { currentProject } = useProjectStore();
   const activeProject = projectName || currentProject;
   const [environments, setEnvironments] = useState<EnvironmentItem[]>([]);
@@ -72,6 +74,7 @@ export const EnvironmentsPage: React.FC = () => {
   // Scale modal state
   const [scaleModalVisible, setScaleModalVisible] = useState(false);
   const [replicas, setReplicas] = useState<number>(1);
+  const [scaling, setScaling] = useState(false);
 
   const loadEnvironments = useCallback(async () => {
     if (!activeProject) {
@@ -129,9 +132,22 @@ export const EnvironmentsPage: React.FC = () => {
     setLogDrawerVisible(true);
   };
 
-  const handleScaleReplicas = () => {
-    feedback.message.success(`服务副本数已调整为 ${replicas}`);
-    setScaleModalVisible(false);
+  const handleScaleReplicas = async () => {
+    if (!activeProject || !currentEnv) return;
+    setScaling(true);
+    try {
+      const targetService = pods[0]?.container_name || pods[0]?.name || activeProject;
+      await http.post(
+        `/api/aslan/environment/environments/${currentEnv}/services/${targetService}/scaleNew?projectName=${activeProject}&type=Deployment&name=${targetService}&number=${replicas}`
+      );
+      feedback.message.success(`工作负载 [${targetService}] 副本数已调整为 ${replicas}`);
+      setScaleModalVisible(false);
+      loadWorkloadPods();
+    } catch (err: any) {
+      feedback.message.error(err?.message || '调整工作负载副本数失败，请检查集群连接与权限');
+    } finally {
+      setScaling(false);
+    }
   };
 
   const podColumns: ProColumns<PodItem>[] = [
@@ -256,6 +272,13 @@ export const EnvironmentsPage: React.FC = () => {
           <Col>
             <Space orientation="horizontal">
               <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => navigate(`/v1/projects/detail/${activeProject}/envs/create`)}
+              >
+                新建环境
+              </Button>
+              <Button
                 icon={<ControlOutlined />}
                 onClick={() => setScaleModalVisible(true)}
               >
@@ -336,6 +359,7 @@ export const EnvironmentsPage: React.FC = () => {
         open={scaleModalVisible}
         onOk={handleScaleReplicas}
         onCancel={() => setScaleModalVisible(false)}
+        confirmLoading={scaling}
         okText="确认扩缩容"
         cancelText="取消"
       >
