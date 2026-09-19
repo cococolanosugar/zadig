@@ -37,48 +37,6 @@ interface ServiceItem {
   status?: string;
 }
 
-const DEFAULT_SAMPLE_YAML = `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: demo-service
-  labels:
-    app.kubernetes.io/name: demo-service
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: demo-service
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: demo-service
-    spec:
-      containers:
-        - name: demo-service
-          image: nginx:alpine
-          ports:
-            - containerPort: 80
-          resources:
-            limits:
-              cpu: 200m
-              memory: 256Mi
-            requests:
-              cpu: 100m
-              memory: 128Mi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: demo-service
-spec:
-  type: ClusterIP
-  ports:
-    - port: 80
-      targetPort: 80
-  selector:
-    app.kubernetes.io/name: demo-service
-`;
-
 export const ServicesPage: React.FC = () => {
   const { projectName } = useParams<{ projectName?: string }>();
   const { currentProject } = useProjectStore();
@@ -86,8 +44,8 @@ export const ServicesPage: React.FC = () => {
 
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [selectedService, setSelectedService] = useState<string | null>(null);
-  const [yamlContent, setYamlContent] = useState<string>(DEFAULT_SAMPLE_YAML);
-  const [originalYaml, setOriginalYaml] = useState<string>(DEFAULT_SAMPLE_YAML);
+  const [yamlContent, setYamlContent] = useState<string>('');
+  const [originalYaml, setOriginalYaml] = useState<string>('');
   const [isDiffMode, setIsDiffMode] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [createModalVisible, setCreateModalVisible] = useState<boolean>(false);
@@ -96,10 +54,7 @@ export const ServicesPage: React.FC = () => {
 
   const loadServices = useCallback(async () => {
     if (!activeProject) {
-      setServices([
-        { service_name: 'demo-service', type: 'k8s', status: 'normal' },
-      ]);
-      setSelectedService('demo-service');
+      setServices([]);
       return;
     }
 
@@ -109,17 +64,22 @@ export const ServicesPage: React.FC = () => {
         `/api/aslan/service/services?projectName=${activeProject}`
       );
       const list = Array.isArray(res) ? res : ('data' in res && Array.isArray(res.data) ? res.data : []);
+      setServices(list);
       if (list.length > 0) {
-        setServices(list);
         setSelectedService(list[0].service_name);
+        setYamlContent(list[0].yaml || '');
+        setOriginalYaml(list[0].yaml || '');
       } else {
-        // Fallback default sample for testing
-        setServices([{ service_name: 'demo-service', type: 'k8s', status: 'normal' }]);
-        setSelectedService('demo-service');
+        setSelectedService(null);
+        setYamlContent('');
+        setOriginalYaml('');
       }
     } catch {
-      setServices([{ service_name: 'demo-service', type: 'k8s', status: 'normal' }]);
-      setSelectedService('demo-service');
+      setServices([]);
+      setSelectedService(null);
+      setYamlContent('');
+      setOriginalYaml('');
+      feedback.message.error('获取服务列表失败，请稍后重试');
     } finally {
       setLoading(false);
     }
@@ -130,15 +90,13 @@ export const ServicesPage: React.FC = () => {
   }, [loadServices]);
 
   const handleSaveYaml = async () => {
-    if (!selectedService) return;
+    if (!selectedService || !activeProject) return;
     try {
-      if (activeProject) {
-        await http.put(`/api/aslan/service/services/${selectedService}`, {
-          service_name: selectedService,
-          yaml: yamlContent,
-          projectName: activeProject,
-        });
-      }
+      await http.put(`/api/aslan/service/services/${selectedService}`, {
+        service_name: selectedService,
+        yaml: yamlContent,
+        projectName: activeProject,
+      });
       setOriginalYaml(yamlContent);
       feedback.message.success(`服务 ${selectedService} 配置已保存成功！`);
     } catch {
@@ -155,12 +113,12 @@ export const ServicesPage: React.FC = () => {
       service_name: newServiceName.trim(),
       type: 'k8s',
       status: 'created',
-      yaml: DEFAULT_SAMPLE_YAML,
+      yaml: '',
     };
     setServices([...services, newService]);
     setSelectedService(newService.service_name);
-    setYamlContent(DEFAULT_SAMPLE_YAML);
-    setOriginalYaml(DEFAULT_SAMPLE_YAML);
+    setYamlContent('');
+    setOriginalYaml('');
     setCreateModalVisible(false);
     setNewServiceName('');
     feedback.message.success(`服务 ${newService.service_name} 创建成功`);
@@ -179,7 +137,7 @@ export const ServicesPage: React.FC = () => {
                   服务配置管理
                 </Title>
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  所属项目: <Tag color="blue">{currentProject || '全局工作区'}</Tag>
+                  所属项目: <Tag color="blue">{activeProject || '全局工作区'}</Tag>
                 </Text>
               </div>
             </Space>
@@ -242,6 +200,8 @@ export const ServicesPage: React.FC = () => {
                       key={item.service_name}
                       onClick={() => {
                         setSelectedService(item.service_name);
+                        setYamlContent(item.yaml || '');
+                        setOriginalYaml(item.yaml || '');
                         setIsDiffMode(false);
                       }}
                       style={{
@@ -299,27 +259,36 @@ export const ServicesPage: React.FC = () => {
                 <Button
                   size="small"
                   icon={<ReloadOutlined />}
-                  onClick={() => setYamlContent(DEFAULT_SAMPLE_YAML)}
+                  disabled={!selectedService}
+                  onClick={() => setYamlContent(originalYaml)}
                 >
-                  重置示例
+                  放弃修改
                 </Button>
               </Space>
             }
             style={{ borderRadius: 8 }}
           >
-            {isDiffMode ? (
-              <YamlDiffEditor
-                original={originalYaml}
-                modified={yamlContent}
-                theme={editorTheme}
-                height={520}
-              />
+            {selectedService ? (
+              isDiffMode ? (
+                <YamlDiffEditor
+                  original={originalYaml}
+                  modified={yamlContent}
+                  theme={editorTheme}
+                  height={520}
+                />
+              ) : (
+                <YamlEditor
+                  value={yamlContent}
+                  onChange={setYamlContent}
+                  theme={editorTheme}
+                  height={520}
+                />
+              )
             ) : (
-              <YamlEditor
-                value={yamlContent}
-                onChange={setYamlContent}
-                theme={editorTheme}
-                height={520}
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="请在左侧选择或新建服务组件以查看并编辑 YAML 配置"
+                style={{ padding: '120px 0' }}
               />
             )}
           </Card>

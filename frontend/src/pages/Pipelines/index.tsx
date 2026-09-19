@@ -11,6 +11,7 @@ import {
   Input,
   Popconfirm,
   Tabs,
+  Empty,
 } from 'antd';
 import {
   BranchesOutlined,
@@ -22,6 +23,7 @@ import {
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
+import { useParams } from 'react-router-dom';
 import { useProjectStore } from '../../stores/project';
 import { workflowApi, type WorkflowV4Item } from '../../api/workflow';
 import WorkflowCanvas from '../../components/WorkflowDAG/WorkflowCanvas';
@@ -30,39 +32,13 @@ import { feedback } from '../../utils/feedback';
 
 const { Title, Text } = Typography;
 
-const DEFAULT_SAMPLE_WORKFLOW: WorkflowV4Item = {
-  name: 'standard-build-and-deploy',
-  project: 'default',
-  description: '全自动拉取代码、容器镜像构建与 K8s 集群发布工作流',
-  stages: [
-    {
-      name: 'Stage-1: 代码构建',
-      jobs: [
-        {
-          name: 'build-service',
-          type: 'zadig-build',
-          spec: { service_name: 'demo-service', branch: 'main' },
-        },
-      ],
-    },
-    {
-      name: 'Stage-2: 环境发布',
-      jobs: [
-        {
-          name: 'deploy-service',
-          type: 'zadig-deploy',
-          spec: { service_name: 'demo-service', env: 'dev' },
-        },
-      ],
-    },
-  ],
-};
-
 export const PipelinesPage: React.FC = () => {
+  const { projectName } = useParams<{ projectName?: string }>();
   const { currentProject } = useProjectStore();
+  const activeProject = projectName || currentProject;
 
-  const [workflows, setWorkflows] = useState<WorkflowV4Item[]>([DEFAULT_SAMPLE_WORKFLOW]);
-  const [activeWorkflow, setActiveWorkflow] = useState<WorkflowV4Item>(DEFAULT_SAMPLE_WORKFLOW);
+  const [workflows, setWorkflows] = useState<WorkflowV4Item[]>([]);
+  const [activeWorkflow, setActiveWorkflow] = useState<WorkflowV4Item | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'dag'>('list');
   const [loading, setLoading] = useState(false);
 
@@ -76,24 +52,20 @@ export const PipelinesPage: React.FC = () => {
   const [newWorkflowDesc, setNewWorkflowDesc] = useState('');
 
   const loadWorkflows = useCallback(async () => {
-    if (!currentProject) return;
+    if (!activeProject) return;
     setLoading(true);
     try {
-      const list = await workflowApi.getWorkflows(currentProject);
-      if (list.length > 0) {
-        setWorkflows(list);
-        setActiveWorkflow(list[0]);
-      } else {
-        setWorkflows([DEFAULT_SAMPLE_WORKFLOW]);
-        setActiveWorkflow(DEFAULT_SAMPLE_WORKFLOW);
-      }
+      const list = await workflowApi.getWorkflows(activeProject);
+      setWorkflows(list);
+      setActiveWorkflow(list.length > 0 ? list[0] : null);
     } catch {
-      setWorkflows([DEFAULT_SAMPLE_WORKFLOW]);
-      setActiveWorkflow(DEFAULT_SAMPLE_WORKFLOW);
+      setWorkflows([]);
+      setActiveWorkflow(null);
+      feedback.message.error('获取工作流列表失败，请稍后重试');
     } finally {
       setLoading(false);
     }
-  }, [currentProject]);
+  }, [activeProject]);
 
   useEffect(() => {
     loadWorkflows();
@@ -111,8 +83,8 @@ export const PipelinesPage: React.FC = () => {
 
   const handleDelete = async (name: string) => {
     try {
-      if (currentProject) {
-        await workflowApi.deleteWorkflow(name, currentProject);
+      if (activeProject) {
+        await workflowApi.deleteWorkflow(name, activeProject);
       }
       setWorkflows(workflows.filter((w) => w.name !== name));
       feedback.message.success(`工作流 ${name} 已删除`);
@@ -129,7 +101,7 @@ export const PipelinesPage: React.FC = () => {
 
     const newWf: WorkflowV4Item = {
       name: newWorkflowName.trim(),
-      project: currentProject || 'default',
+      project: activeProject || 'default',
       description: newWorkflowDesc.trim() || '自定义 V4 流水线',
       stages: [
         {
@@ -146,7 +118,7 @@ export const PipelinesPage: React.FC = () => {
     };
 
     try {
-      if (currentProject) {
+      if (activeProject) {
         await workflowApi.createWorkflow(newWf);
       }
       setWorkflows([...workflows, newWf]);
@@ -242,7 +214,7 @@ export const PipelinesPage: React.FC = () => {
                   工作流 V4 编排与调度
                 </Title>
                 <Text type="secondary" style={{ fontSize: 13 }}>
-                  所属项目: <Tag color="blue">{currentProject || '全局工作区'}</Tag>
+                  所属项目: <Tag color="blue">{activeProject || '全局工作区'}</Tag>
                 </Text>
               </div>
             </Space>
@@ -293,14 +265,20 @@ export const PipelinesPage: React.FC = () => {
                 <BranchesOutlined /> DAG 画布设计器
               </span>
             ),
-            children: (
+            children: activeWorkflow ? (
               <WorkflowCanvas
                 workflow={activeWorkflow}
-                projectName={currentProject || 'default'}
+                projectName={activeProject || 'default'}
                 onSave={(updated) => {
                   setActiveWorkflow(updated);
                   setWorkflows(workflows.map((w) => (w.name === updated.name ? updated : w)));
                 }}
+              />
+            ) : (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="请先在工作流列表中选择一个工作流"
+                style={{ padding: '60px 0' }}
               />
             ),
           },

@@ -51,36 +51,13 @@ interface PodItem {
   age?: string;
 }
 
-const SAMPLE_PODS: PodItem[] = [
-  {
-    name: 'demo-service-67b58849b7-jkm4x',
-    container_name: 'demo-service',
-    status: 'Running',
-    ready: '1/1',
-    restarts: 0,
-    node_name: 'k8s-node-01',
-    ip: '10.244.1.22',
-    age: '2d 4h',
-  },
-  {
-    name: 'demo-gateway-78c9497bc8-88zqk',
-    container_name: 'gateway',
-    status: 'Running',
-    ready: '1/1',
-    restarts: 1,
-    node_name: 'k8s-node-02',
-    ip: '10.244.2.15',
-    age: '5d 1h',
-  },
-];
-
 export const EnvironmentsPage: React.FC = () => {
   const { projectName } = useParams<{ projectName?: string }>();
   const { currentProject } = useProjectStore();
   const activeProject = projectName || currentProject;
   const [environments, setEnvironments] = useState<EnvironmentItem[]>([]);
-  const [currentEnv, setCurrentEnv] = useState<string>('dev');
-  const [pods, setPods] = useState<PodItem[]>(SAMPLE_PODS);
+  const [currentEnv, setCurrentEnv] = useState<string>('');
+  const [pods, setPods] = useState<PodItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
   // Terminal Modal state
@@ -98,7 +75,7 @@ export const EnvironmentsPage: React.FC = () => {
 
   const loadEnvironments = useCallback(async () => {
     if (!activeProject) {
-      setEnvironments([{ name: 'dev', status: 'Running', namespace: 'default-dev' }]);
+      setEnvironments([]);
       return;
     }
     setLoading(true);
@@ -107,14 +84,12 @@ export const EnvironmentsPage: React.FC = () => {
         `/api/aslan/environment/environments?projectName=${activeProject}`
       );
       const list = Array.isArray(res) ? res : ('data' in res && Array.isArray(res.data) ? res.data : []);
-      if (list.length > 0) {
-        setEnvironments(list);
-        setCurrentEnv(list[0].name);
-      } else {
-        setEnvironments([{ name: 'dev', status: 'Running', namespace: `${activeProject}-dev` }]);
-      }
+      setEnvironments(list);
+      setCurrentEnv(list.length > 0 ? list[0].name : '');
     } catch {
-      setEnvironments([{ name: 'dev', status: 'Running', namespace: `${activeProject}-dev` }]);
+      setEnvironments([]);
+      setCurrentEnv('');
+      feedback.message.error('获取环境列表失败，请稍后重试');
     } finally {
       setLoading(false);
     }
@@ -130,13 +105,10 @@ export const EnvironmentsPage: React.FC = () => {
       const res = await http.get<PodItem[]>(
         `/api/aslan/environment/environments/${currentEnv}/workloads/pods?projectName=${activeProject}`
       );
-      if (Array.isArray(res) && res.length > 0) {
-        setPods(res);
-      } else {
-        setPods(SAMPLE_PODS);
-      }
+      setPods(Array.isArray(res) ? res : []);
     } catch {
-      setPods(SAMPLE_PODS);
+      setPods([]);
+      feedback.message.error('获取 Pod 列表失败，请稍后重试');
     }
   }, [activeProject, currentEnv]);
 
@@ -152,7 +124,7 @@ export const EnvironmentsPage: React.FC = () => {
   const openLogs = (pod: PodItem) => {
     setActiveLogPod(pod.name);
     setStreamingLogUrl(
-      `/api/aslan/environment/environments/${currentEnv}/workloads/pods/${pod.name}/logs?container=${pod.container_name}&projectName=${currentProject}&follow=true`
+      `/api/aslan/environment/environments/${currentEnv}/workloads/pods/${pod.name}/logs?container=${pod.container_name}&projectName=${activeProject}&follow=true`
     );
     setLogDrawerVisible(true);
   };
@@ -262,7 +234,7 @@ export const EnvironmentsPage: React.FC = () => {
                 </Title>
                 <Space orientation="horizontal" style={{ marginTop: 4 }}>
                   <Text type="secondary" style={{ fontSize: 13 }}>
-                    所属项目: <Tag color="blue">{currentProject || '全局工作区'}</Tag>
+                    所属项目: <Tag color="blue">{activeProject || '全局工作区'}</Tag>
                   </Text>
                   <Text type="secondary" style={{ fontSize: 13 }}>
                     当前环境:
@@ -327,11 +299,11 @@ export const EnvironmentsPage: React.FC = () => {
         width={960}
         styles={{ body: { padding: 0 } }}
       >
-        {activePod && terminalVisible && (
+        {activePod && terminalVisible && activeProject && (
           <PodTerminal
             podName={activePod.podName}
             containerName={activePod.containerName}
-            projectName={currentProject || 'default'}
+            projectName={activeProject}
             envName={currentEnv}
             height={540}
           />
@@ -353,13 +325,6 @@ export const EnvironmentsPage: React.FC = () => {
         styles={{ body: { padding: 0 } }}
       >
         <LogViewer
-          logs={[
-            'Starting Zadig workload agent container...',
-            '2026-09-19T13:00:01Z [INFO] Configuration loaded from /etc/config/service.yaml',
-            '2026-09-19T13:00:02Z [INFO] Connected to redis cache at 10.244.0.15:6379',
-            '2026-09-19T13:00:03Z [INFO] HTTP server listening on :8080',
-            '2026-09-19T13:00:10Z [INFO] Health check probe GET /healthz 200 OK (0.8ms)',
-          ]}
           streamUrl={streamingLogUrl}
           height="100%"
         />
