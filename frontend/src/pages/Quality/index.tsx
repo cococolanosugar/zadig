@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Card, Table, Typography, Button, Space, Input, Tag, Row, Col, Statistic, Empty, Spin } from 'antd';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Card, Table, Typography, Button, Space, Input, Tag, Row, Col, Statistic, Empty, Spin, Modal, Form, Select } from 'antd';
 import {
   CheckCircleOutlined,
   PlayCircleOutlined,
@@ -26,34 +26,80 @@ export const QualityCenterPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [tests, setTests] = useState<TestItem[]>([]);
   const [searchText, setSearchText] = useState('');
-  const [stats, setStats] = useState<{ total?: number; success?: number; pass_rate?: number }>({
+  const [stats, setStats] = useState<{ total?: number; success?: number; pass_rate?: number; avg_duration?: number }>({
     total: 0,
     success: 0,
-    pass_rate: 100,
+    pass_rate: undefined,
+    avg_duration: undefined,
   });
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [testsRes, statRes] = await Promise.all([
-          http.get<TestItem[]>('/api/aslan/testing/test', { skipErrorHandler: true }),
-          http.get<{ total?: number; success?: number; pass_rate?: number }>('/api/aslan/stat/v2/quality/test/count', {
-            skipErrorHandler: true,
-          }),
-        ]);
-        setTests(Array.isArray(testsRes) ? testsRes : []);
-        if (statRes && typeof statRes === 'object') {
-          setStats(statRes);
-        }
-      } catch {
-        // Handled
-      } finally {
-        setLoading(false);
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [form] = Form.useForm();
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [testsRes, statRes] = await Promise.all([
+        http.get<TestItem[]>('/api/aslan/testing/test'),
+        http.get<{ total?: number; success?: number; pass_rate?: number; avg_duration?: number }>(
+          '/api/aslan/stat/v2/quality/test/count',
+          { skipErrorHandler: true }
+        ),
+      ]);
+      const list = Array.isArray(testsRes) ? testsRes : [];
+      setTests(list);
+      if (statRes && typeof statRes === 'object') {
+        setStats(statRes);
       }
-    };
-    fetchData();
+    } catch (err: unknown) {
+      setTests([]);
+      const msg = err instanceof Error ? err.message : '获取测试用例列表失败';
+      feedback.message.error(msg);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleRunTest = async (record: TestItem) => {
+    feedback.message.loading(`正在对 [${record.name}] 触发自动化测试任务...`, 1);
+    try {
+      await http.post('/api/aslan/testing/testtask', {
+        product_name: record.product_name,
+        test_name: record.name,
+      });
+      feedback.message.success(`自动化测试任务 [${record.name}] 已成功触发！`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '触发测试任务失败，请检查测试配置';
+      feedback.message.error(msg);
+    }
+  };
+
+  const handleCreateTest = async () => {
+    try {
+      const values = await form.validateFields();
+      setCreating(true);
+      await http.post('/api/aslan/testing/test', {
+        name: values.name,
+        desc: values.desc,
+        product_name: values.product_name,
+        test_type: values.test_type || 'function',
+      });
+      feedback.message.success(`测试模块 [${values.name}] 创建成功！`);
+      setCreateModalVisible(false);
+      form.resetFields();
+      fetchData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '创建测试模块失败';
+      feedback.message.error(msg);
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const filteredTests = tests.filter((t) => {
     if (!searchText) return true;
@@ -98,7 +144,10 @@ export const QualityCenterPage: React.FC = () => {
             type="primary"
             icon={<PlusOutlined />}
             style={{ borderRadius: 4 }}
-            onClick={() => feedback.message.info('新建测试向导')}
+            onClick={() => {
+              form.resetFields();
+              setCreateModalVisible(true);
+            }}
           >
             新建测试
           </Button>
@@ -121,7 +170,7 @@ export const QualityCenterPage: React.FC = () => {
           <Card variant="borderless" style={{ borderRadius: 8, border: '1px solid #ebeef5' }}>
             <Statistic
               title="最近执行成功率"
-              value={stats.pass_rate !== undefined ? `${stats.pass_rate}%` : '100%'}
+              value={tests.length > 0 && stats.pass_rate !== undefined ? `${stats.pass_rate}%` : (tests.length > 0 ? '100%' : '-')}
               prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
               styles={{ content: { color: '#52c41a', fontWeight: 600 } }}
             />
@@ -131,7 +180,7 @@ export const QualityCenterPage: React.FC = () => {
           <Card variant="borderless" style={{ borderRadius: 8, border: '1px solid #ebeef5' }}>
             <Statistic
               title="平均质检耗时"
-              value="42 秒"
+              value={tests.length > 0 && stats.avg_duration ? `${stats.avg_duration} 秒` : '-'}
               prefix={<FieldTimeOutlined style={{ color: '#faad14' }} />}
               styles={{ content: { fontWeight: 600 } }}
             />
@@ -194,12 +243,12 @@ export const QualityCenterPage: React.FC = () => {
               {
                 title: '操作',
                 key: 'action',
-                render: () => (
+                render: (_, record) => (
                   <Space orientation="horizontal" size={8}>
                     <Button
                       type="link"
                       icon={<PlayCircleOutlined />}
-                      onClick={() => feedback.message.success('已触发自动化测试任务')}
+                      onClick={() => handleRunTest(record)}
                     >
                       执行测试
                     </Button>
@@ -208,11 +257,64 @@ export const QualityCenterPage: React.FC = () => {
               },
             ]}
             locale={{
-              emptyText: <Empty description="暂无自动化测试配置，请点击右上角新建测试" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+              emptyText: (
+                <Empty description="暂无自动化测试配置，请点击右上角新建测试" image={Empty.PRESENTED_IMAGE_SIMPLE}>
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={() => {
+                      form.resetFields();
+                      setCreateModalVisible(true);
+                    }}
+                  >
+                    新建测试
+                  </Button>
+                </Empty>
+              ),
             }}
           />
         )}
       </Card>
+
+      {/* Create Test Modal */}
+      <Modal
+        title="新建自动化测试套件"
+        open={createModalVisible}
+        confirmLoading={creating}
+        onOk={handleCreateTest}
+        onCancel={() => setCreateModalVisible(false)}
+        okText="创建"
+        cancelText="取消"
+      >
+        <Form form={form} layout="vertical" initialValues={{ test_type: 'function' }} style={{ marginTop: 16 }}>
+          <Form.Item
+            name="name"
+            label="测试用例名称"
+            rules={[{ required: true, message: '请输入测试名称' }]}
+          >
+            <Input placeholder="例如: api-regression-test" />
+          </Form.Item>
+          <Form.Item
+            name="product_name"
+            label="归属项目名称"
+            rules={[{ required: true, message: '请输入归属项目' }]}
+          >
+            <Input placeholder="例如: default 或项目英文标识" />
+          </Form.Item>
+          <Form.Item name="test_type" label="测试类型">
+            <Select
+              options={[
+                { label: '功能自动化测试 (function)', value: 'function' },
+                { label: '集成接口测试 (integration)', value: 'integration' },
+                { label: '性能基准测试 (performance)', value: 'performance' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="desc" label="用例描述">
+            <Input.TextArea rows={3} placeholder="测试范围、用例套件说明" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

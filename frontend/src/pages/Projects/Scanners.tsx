@@ -17,6 +17,7 @@ import {
   Popconfirm,
   Badge,
   Descriptions,
+  Empty,
 } from 'antd';
 import {
   PlusOutlined,
@@ -74,80 +75,14 @@ export const ScannersPage: React.FC = () => {
     setLoading(true);
     try {
       const res = await http.get<ScannerItem[]>(
-        `/api/aslan/testing/scanning?projectName=${projectName}`,
-        { skipErrorHandler: true }
+        `/api/aslan/testing/scanning?projectName=${projectName}`
       );
       const list = Array.isArray(res) ? res : [];
-      if (list.length > 0) {
-        setScanners(list);
-      } else {
-        // Fallback default scanners for initial project display
-        setScanners([
-          {
-            name: `${projectName}-sonar-check`,
-            description: 'SonarQube 全量静态代码规范、漏洞与坏味道检测',
-            scanner_type: 'sonar',
-            repos: [{ repo_name: `${projectName}-repo`, branch: 'main' }],
-            update_time: Math.floor((Date.now() - 3600000 * 2) / 1000),
-            update_by: 'admin',
-            last_status: 'passed',
-            quality_metrics: {
-              bugs: 0,
-              vulnerabilities: 0,
-              code_smells: 3,
-              coverage: 84.5,
-              ai_suggestions: '代码规范良好，建议对部分空指针判断补充前置校验单元测试。',
-            },
-          },
-          {
-            name: `${projectName}-ai-review`,
-            description: '基于大模型上下文的 PR 提交自动化智能代码审查',
-            scanner_type: 'ai-review',
-            enable_ai_review: true,
-            repos: [{ repo_name: `${projectName}-repo`, branch: 'develop' }],
-            update_time: Math.floor((Date.now() - 3600000 * 8) / 1000),
-            update_by: 'admin',
-            last_status: 'passed',
-            quality_metrics: {
-              bugs: 0,
-              vulnerabilities: 0,
-              code_smells: 1,
-              coverage: 91.2,
-              ai_suggestions:
-                'AI 审查分析已就绪：逻辑结构清晰，未检出敏感凭据泄露，建议封装重复的错误处理管道。',
-            },
-          },
-          {
-            name: `${projectName}-security-trivy`,
-            description: '容器镜像与第三方开源依赖组件 CVE 严重漏洞扫描',
-            scanner_type: 'trivy',
-            repos: [{ repo_name: `${projectName}-repo`, branch: 'main' }],
-            update_time: Math.floor((Date.now() - 86400000) / 1000),
-            update_by: 'admin',
-            last_status: 'passed',
-            quality_metrics: {
-              bugs: 0,
-              vulnerabilities: 0,
-              code_smells: 0,
-              coverage: 100,
-              ai_suggestions: '所有基础依赖包版本均处于安全补丁周期内。',
-            },
-          },
-        ]);
-      }
-    } catch {
-      setScanners([
-        {
-          name: `${projectName || 'service'}-code-scanner`,
-          description: '静态代码安全门禁审查',
-          scanner_type: 'sonar',
-          repos: [{ repo_name: 'main', branch: 'main' }],
-          update_time: Math.floor(Date.now() / 1000),
-          update_by: 'admin',
-          last_status: 'passed',
-          quality_metrics: { bugs: 0, vulnerabilities: 0, code_smells: 2, coverage: 78 },
-        },
-      ]);
+      setScanners(list);
+    } catch (err: unknown) {
+      setScanners([]);
+      const msg = err instanceof Error ? err.message : '获取代码审查模块失败';
+      feedback.message.error(msg);
     } finally {
       setLoading(false);
     }
@@ -169,58 +104,40 @@ export const ScannersPage: React.FC = () => {
         last_status: 'untested',
       };
 
-      await http.post(`/api/aslan/testing/scanning?projectName=${projectName}`, payload, {
-        skipErrorHandler: true,
-      });
+      await http.post(`/api/aslan/testing/scanning?projectName=${projectName}`, payload);
       feedback.message.success('代码审查规则创建成功');
       setModalVisible(false);
       form.resetFields();
       fetchScanners();
-    } catch {
-      feedback.message.success('代码审查规则已配置');
-      setModalVisible(false);
-      setScanners((prev) => [
-        ...prev,
-        {
-          name: form.getFieldValue('name') || 'new-scanner',
-          description: form.getFieldValue('description'),
-          scanner_type: form.getFieldValue('scanner_type') || 'sonar',
-          last_status: 'untested',
-          update_time: Math.floor(Date.now() / 1000),
-          update_by: 'admin',
-        },
-      ]);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '创建代码审查规则失败，请检查配置参数';
+      feedback.message.error(msg);
     }
   };
 
   const handleTriggerScan = async (record: ScannerItem) => {
-    feedback.message.loading(`正在对 [${record.name}] 触发代码安全扫描...`, 1.5);
+    feedback.message.loading(`正在对 [${record.name}] 触发代码安全扫描...`, 1);
     try {
       await http.post(
         `/api/aslan/testing/scanning/${record.name}/task?projectName=${projectName}`,
-        {},
-        { skipErrorHandler: true }
+        {}
       );
-      setTimeout(() => {
-        feedback.message.success(`代码扫描任务已在后台启动，检测完成后将同步质量门禁`);
-      }, 1500);
-    } catch {
-      setTimeout(() => {
-        feedback.message.success(`代码审查任务已触发`);
-      }, 1500);
+      feedback.message.success(`代码审查任务 [${record.name}] 已在后台成功启动，检测完成后将同步质量门禁`);
+      fetchScanners();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '触发代码审查任务失败';
+      feedback.message.error(msg);
     }
   };
 
   const handleDelete = async (name: string) => {
     try {
-      await http.delete(`/api/aslan/testing/scanning/${name}?projectName=${projectName}`, {
-        skipErrorHandler: true,
-      });
+      await http.delete(`/api/aslan/testing/scanning/${name}?projectName=${projectName}`);
       feedback.message.success('代码审查模块已删除');
       fetchScanners();
-    } catch {
-      setScanners((prev) => prev.filter((s) => s.name !== name));
-      feedback.message.success('代码审查模块已移除');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '删除代码审查模块失败';
+      feedback.message.error(msg);
     }
   };
 
@@ -348,6 +265,13 @@ export const ScannersPage: React.FC = () => {
     },
   ];
 
+  const passedScanners = scanners.filter((s) => s.last_status === 'passed').length;
+  const passRate = scanners.length > 0 ? `${Math.round((passedScanners / scanners.length) * 100)}%` : '-';
+  const totalBugsOrVulns = scanners.reduce(
+    (acc, s) => acc + (s.quality_metrics?.vulnerabilities || 0) + (s.quality_metrics?.bugs || 0),
+    0
+  );
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Metric Cards */}
@@ -366,7 +290,7 @@ export const ScannersPage: React.FC = () => {
           <Card variant="borderless" styles={{ body: { padding: '16px 20px' } }}>
             <Statistic
               title="门禁通过率"
-              value="100%"
+              value={passRate}
               prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
               styles={{ content: { fontSize: 24, fontWeight: 600, color: '#52c41a' } }}
             />
@@ -386,7 +310,7 @@ export const ScannersPage: React.FC = () => {
           <Card variant="borderless" styles={{ body: { padding: '16px 20px' } }}>
             <Statistic
               title="阻断漏洞数"
-              value={0}
+              value={totalBugsOrVulns}
               prefix={<CloseCircleOutlined style={{ color: '#8c8c8c' }} />}
               styles={{ content: { fontSize: 24, fontWeight: 600 } }}
             />
@@ -438,6 +362,25 @@ export const ScannersPage: React.FC = () => {
           dataSource={filteredScanners}
           loading={loading}
           pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 个审查配置` }}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="暂无代码审查配置，可点击右上角「新建审查规则」添加扫描任务"
+              >
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => {
+                    form.resetFields();
+                    setModalVisible(true);
+                  }}
+                >
+                  新建审查规则
+                </Button>
+              </Empty>
+            ),
+          }}
         />
       </Card>
 

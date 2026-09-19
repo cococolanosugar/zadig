@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
@@ -25,7 +25,7 @@ const { Title, Text } = Typography;
 export interface WorkflowCanvasProps {
   workflow: WorkflowV4Item;
   projectName: string;
-  onSave?: (updated: WorkflowV4Item) => void;
+  onSave?: (updated: WorkflowV4Item) => Promise<void> | void;
   readOnly?: boolean;
 }
 
@@ -37,6 +37,13 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
 }) => {
   const nodeTypes = useMemo(() => ({ jobNode: JobNode }), []);
 
+  const [currentWorkflow, setCurrentWorkflow] = useState<WorkflowV4Item>(workflow);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setCurrentWorkflow(workflow);
+  }, [workflow]);
+
   // Compute initial React Flow nodes and edges from workflow stages
   const { initialNodes, initialEdges } = useMemo(() => {
     const nodes: Node[] = [];
@@ -44,7 +51,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
 
     let currentX = 50;
 
-    workflow.stages.forEach((stage, stageIndex) => {
+    currentWorkflow.stages.forEach((stage, stageIndex) => {
       let currentY = 50;
 
       stage.jobs.forEach((job, jobIndex) => {
@@ -65,7 +72,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
 
       // Connect all jobs in previous stage to this stage's jobs
       if (stageIndex > 0) {
-        const prevStage = workflow.stages[stageIndex - 1];
+        const prevStage = currentWorkflow.stages[stageIndex - 1];
         prevStage.jobs.forEach((_, pIndex) => {
           stage.jobs.forEach((_, cIndex) => {
             edges.push({
@@ -83,10 +90,15 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     });
 
     return { initialNodes: nodes, initialEdges: edges };
-  }, [workflow]);
+  }, [currentWorkflow]);
 
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  useEffect(() => {
+    setNodes(initialNodes);
+    setEdges(initialEdges);
+  }, [initialNodes, initialEdges, setNodes, setEdges]);
 
   const [selectedJob, setSelectedJob] = useState<WorkflowJob | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -106,7 +118,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     (_: React.MouseEvent, node: Node) => {
       const jobData = node.data as unknown as JobNodeData;
       // Find job in workflow
-      for (const stage of workflow.stages) {
+      for (const stage of currentWorkflow.stages) {
         const found = stage.jobs.find((j) => j.name === jobData.jobName);
         if (found) {
           setSelectedJob(found);
@@ -115,22 +127,20 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
         }
       }
     },
-    [workflow]
+    [currentWorkflow]
   );
 
   const handleSaveJob = (updatedJob: WorkflowJob) => {
-    const updatedStages = workflow.stages.map((stage) => ({
+    const updatedStages = currentWorkflow.stages.map((stage) => ({
       ...stage,
       jobs: stage.jobs.map((j) => (j.name === updatedJob.name ? updatedJob : j)),
     }));
 
-    if (onSave) {
-      onSave({
-        ...workflow,
-        stages: updatedStages,
-      });
-    }
-    feedback.message.success(`任务 ${updatedJob.name} 配置已更新`);
+    setCurrentWorkflow((prev) => ({
+      ...prev,
+      stages: updatedStages,
+    }));
+    feedback.message.success(`任务 ${updatedJob.name} 配置已更新（点击“保存编排”可持久化）`);
   };
 
   const handleAddJobConfirm = () => {
@@ -146,20 +156,27 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     };
 
     // Append to latest stage or create stage
-    const updatedStages = [...workflow.stages];
+    const updatedStages = [...currentWorkflow.stages];
     if (updatedStages.length === 0) {
       updatedStages.push({ name: 'Stage-1', jobs: [newJob] });
     } else {
       updatedStages[updatedStages.length - 1].jobs.push(newJob);
     }
 
-    if (onSave) {
-      onSave({ ...workflow, stages: updatedStages });
-    }
-
+    setCurrentWorkflow((prev) => ({ ...prev, stages: updatedStages }));
     setAddJobModalVisible(false);
     setNewJobName('');
-    feedback.message.success(`任务 ${newJob.name} 已添加`);
+    feedback.message.success(`任务 ${newJob.name} 已添加至画布（点击“保存编排”可持久化）`);
+  };
+
+  const handleSaveWorkflow = async () => {
+    if (!onSave) return;
+    setSaving(true);
+    try {
+      await onSave(currentWorkflow);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -170,7 +187,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
       title={
         <Space orientation="horizontal">
           <Title level={5} style={{ margin: 0 }}>
-            工作流编排画布: {workflow.name}
+            工作流编排画布: {currentWorkflow.name}
           </Title>
           <Text type="secondary" style={{ fontSize: 12 }}>
             (点击任务节点可进入配置抽屉)
@@ -189,10 +206,8 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
               </Button>
               <Button
                 icon={<SaveOutlined />}
-                onClick={() => {
-                  if (onSave) onSave(workflow);
-                  feedback.message.success('工作流编排已保存');
-                }}
+                loading={saving}
+                onClick={handleSaveWorkflow}
               >
                 保存编排
               </Button>

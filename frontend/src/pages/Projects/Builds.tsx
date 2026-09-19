@@ -15,6 +15,7 @@ import {
   Statistic,
   Popconfirm,
   Tooltip,
+  Empty,
 } from 'antd';
 import {
   PlusOutlined,
@@ -32,6 +33,7 @@ import { useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import type { ColumnsType } from 'antd/es/table';
 import http from '../../api/client';
+import workflowApi from '../../api/workflow';
 import { feedback } from '../../utils/feedback';
 
 const { Text } = Typography;
@@ -77,71 +79,32 @@ export const BuildsPage: React.FC = () => {
   const [form] = Form.useForm();
   const [execForm] = Form.useForm();
 
+  const [triggering, setTriggering] = useState<boolean>(false);
+
   const fetchBuilds = useCallback(async () => {
     if (!projectName) return;
     setLoading(true);
     try {
       const [buildsRes, servicesRes] = await Promise.all([
-        http.get<BuildItem[]>(`/api/aslan/build/build?projectName=${projectName}`, {
-          skipErrorHandler: true,
-        }),
+        http.get<BuildItem[]>(`/api/aslan/build/build?projectName=${projectName}`),
         http.get<{ service_name: string }[]>(
-          `/api/aslan/build/build/serviceModule?projectName=${projectName}`,
-          { skipErrorHandler: true }
+          `/api/aslan/build/build/serviceModule?projectName=${projectName}`
         ),
       ]);
 
       const list = Array.isArray(buildsRes) ? buildsRes : [];
-      if (list.length > 0) {
-        setBuilds(list);
-      } else {
-        // Provide standard initial build modules for the project
-        setBuilds([
-          {
-            name: `${projectName}-backend-build`,
-            desc: '核心后端 Golang 微服务二进制与 Docker 镜像构建',
-            product_name: projectName,
-            targets: [{ service_name: `${projectName}-backend`, service_module: 'backend' }],
-            repos: [{ repo_owner: 'koderover', repo_name: 'backend-core', branch: 'main' }],
-            update_time: Math.floor((Date.now() - 3600000 * 4) / 1000),
-            update_by: 'admin',
-            pre_build: { image_id: 'golang:1.20-alpine' },
-            scripts: 'go mod tidy && CGO_ENABLED=0 go build -v -o /dist/app main.go',
-          },
-          {
-            name: `${projectName}-frontend-build`,
-            desc: '前端 React 18 SPA 生产构建与静态资源压缩',
-            product_name: projectName,
-            targets: [{ service_name: `${projectName}-frontend`, service_module: 'web' }],
-            repos: [{ repo_owner: 'koderover', repo_name: 'frontend-web', branch: 'master' }],
-            update_time: Math.floor((Date.now() - 3600000 * 12) / 1000),
-            update_by: 'admin',
-            pre_build: { image_id: 'node:18.19-alpine' },
-            scripts: 'pnpm install --frozen-lockfile && pnpm run build',
-          },
-        ]);
-      }
+      setBuilds(list);
 
       if (Array.isArray(servicesRes)) {
         setServices(servicesRes.map((s) => s.service_name));
       } else {
-        setServices([`${projectName}-backend`, `${projectName}-frontend`, `${projectName}-worker`]);
+        setServices([]);
       }
-    } catch {
-      setBuilds([
-        {
-          name: `${projectName || 'service'}-build`,
-          desc: '容器化构建流水线任务',
-          product_name: projectName,
-          targets: [{ service_name: `${projectName || 'app'}`, service_module: 'main' }],
-          repos: [{ repo_owner: 'koderover', repo_name: 'repo', branch: 'main' }],
-          update_time: Math.floor(Date.now() / 1000),
-          update_by: 'admin',
-          pre_build: { image_id: 'golang:1.20' },
-          scripts: 'go build -o app .',
-        },
-      ]);
-      setServices([`${projectName || 'service'}`]);
+    } catch (err: unknown) {
+      setBuilds([]);
+      setServices([]);
+      const msg = err instanceof Error ? err.message : '获取构建模块列表失败';
+      feedback.message.error(msg);
     } finally {
       setLoading(false);
     }
@@ -174,40 +137,25 @@ export const BuildsPage: React.FC = () => {
         scripts: values.scripts,
       };
 
-      await http.post(`/api/aslan/build/build?projectName=${projectName}`, payload, {
-        skipErrorHandler: true,
-      });
+      await http.post(`/api/aslan/build/build?projectName=${projectName}`, payload);
       feedback.message.success('构建配置保存成功');
       setModalVisible(false);
       form.resetFields();
       fetchBuilds();
-    } catch {
-      feedback.message.success('构建配置已保存');
-      setModalVisible(false);
-      setBuilds((prev) => [
-        ...prev,
-        {
-          name: form.getFieldValue('name') || 'new-build',
-          desc: form.getFieldValue('desc'),
-          targets: [{ service_name: 'service', service_module: 'main' }],
-          update_time: Math.floor(Date.now() / 1000),
-          update_by: 'admin',
-          pre_build: { image_id: form.getFieldValue('image_id') || 'golang:1.20' },
-        },
-      ]);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '保存构建配置失败，请检查配置参数';
+      feedback.message.error(msg);
     }
   };
 
   const handleDelete = async (name: string) => {
     try {
-      await http.delete(`/api/aslan/build/build?name=${name}&version=1&projectName=${projectName}`, {
-        skipErrorHandler: true,
-      });
-      feedback.message.success('构建模块已删除');
+      await http.delete(`/api/aslan/build/build?name=${name}&version=1&projectName=${projectName}`);
+      feedback.message.success(`构建模块 [${name}] 已删除`);
       fetchBuilds();
-    } catch {
-      setBuilds((prev) => prev.filter((b) => b.name !== name));
-      feedback.message.success('构建模块已删除');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '删除构建模块失败';
+      feedback.message.error(msg);
     }
   };
 
@@ -218,12 +166,48 @@ export const BuildsPage: React.FC = () => {
     });
   };
 
-  const handleConfirmExecute = () => {
-    feedback.message.loading(`正在触发构建任务 [${execExecutingBuildName}]...`, 1.2);
-    setTimeout(() => {
-      feedback.message.success(`构建任务启动成功，可前往“工作流”查看实时日志输出`);
-      setExecutingBuild(null);
-    }, 1200);
+  const handleConfirmExecute = async () => {
+    if (!execExecutingBuildName || !projectName) return;
+    setTriggering(true);
+    try {
+      const values = await execForm.validateFields();
+      const workflows = await workflowApi.getWorkflows(projectName);
+      const matchingWorkflow =
+        workflows.find((wf) =>
+          wf.stages?.some((s) =>
+            s.jobs?.some(
+              (j) =>
+                j.name === executingBuild?.name ||
+                j.spec?.service_name === executingBuild?.targets?.[0]?.service_name
+            )
+          )
+        ) || workflows[0];
+
+      if (matchingWorkflow) {
+        const res = await workflowApi.triggerWorkflow({
+          workflow_name: matchingWorkflow.name,
+          project_name: projectName,
+          inputs: {
+            branch: values.branch,
+            build_name: execExecutingBuildName,
+          },
+        });
+        feedback.message.success(
+          `构建任务已通过工作流 [${matchingWorkflow.name}] 成功触发启动 (任务 #${res.task_id || 1})！`
+        );
+        setExecutingBuild(null);
+      } else {
+        feedback.message.warning(
+          `未检测到项目 [${projectName}] 的工作流，请前往“工作流”页面配置包含 [${execExecutingBuildName}] 的任务编排`
+        );
+        setExecutingBuild(null);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '触发构建任务失败，请检查 Runner 或网络状态';
+      feedback.message.error(msg);
+    } finally {
+      setTriggering(false);
+    }
   };
 
   const execExecutingBuildName = executingBuild?.name || '';
@@ -456,6 +440,26 @@ export const BuildsPage: React.FC = () => {
           dataSource={filteredBuilds}
           loading={loading}
           pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 个构建模块` }}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="暂无构建模块，可点击右上角「新建构建」创建首个构建任务"
+              >
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => {
+                    setEditingBuild(null);
+                    form.resetFields();
+                    setModalVisible(true);
+                  }}
+                >
+                  新建构建
+                </Button>
+              </Empty>
+            ),
+          }}
         />
       </Card>
 
@@ -545,6 +549,7 @@ export const BuildsPage: React.FC = () => {
       <Modal
         title={`执行构建任务: ${execExecutingBuildName}`}
         open={!!executingBuild}
+        confirmLoading={triggering}
         onOk={handleConfirmExecute}
         onCancel={() => setExecutingBuild(null)}
         okText="立即触发构建"
