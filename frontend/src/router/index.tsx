@@ -79,13 +79,22 @@ export const AppRouter: React.FC = () => {
             <Route index element={<Navigate to="detail" replace />} />
             <Route path="detail" element={<ProjectOverviewPage />} />
             <Route path="pipelines" element={<PipelinesPage />} />
+            <Route path="pipelines/:name" element={<PipelinesPage />} />
             <Route path="pipelines/:name/task/:taskId" element={<PipelineExecutionPage />} />
+            <Route path="pipelines/custom/:name" element={<PipelinesPage />} />
+            <Route path="pipelines/custom/:name/:taskId" element={<PipelineExecutionPage />} />
             <Route path="envs" element={<EnvironmentsPage />} />
+            <Route path="envs/:envName" element={<EnvironmentsPage />} />
             <Route path="services" element={<ServicesPage />} />
             <Route path="sprints" element={<SprintsPage />} />
             <Route path="builds" element={<BuildsPage />} />
+            <Route path="builds/create" element={<BuildsPage />} />
+            <Route path="builds/detail/:buildName" element={<BuildsPage />} />
             <Route path="test" element={<QualityCenterPage />} />
             <Route path="scanner" element={<ScannersPage />} />
+            <Route path="scanner/create" element={<ScannersPage />} />
+            <Route path="scanner/ai-review/create" element={<ScannersPage />} />
+            <Route path="scanner/detail/:scannerName" element={<ScannersPage />} />
             <Route path="version" element={<DeliveryPage />} />
           </Route>
 
@@ -99,13 +108,17 @@ export const AppRouter: React.FC = () => {
           {/* Standalone Fallbacks for Services & Envs */}
           <Route path="services" element={<ServicesPage />} />
           <Route path="envs" element={<EnvironmentsPage />} />
+          <Route path="envs/:envName" element={<EnvironmentsPage />} />
 
           {/* Asset Management Routes */}
           <Route path="directory" element={<DirectoryPage />} />
           <Route path="template" element={<TemplateCenterPage />} />
+          <Route path="template/:tab" element={<TemplateCenterPage />} />
           <Route path="tests" element={<QualityCenterPage />} />
           <Route path="delivery" element={<DeliveryPage />} />
+          <Route path="delivery/:tab" element={<DeliveryPage />} />
           <Route path="resource" element={<ResourcePage />} />
+          <Route path="resource/:tab" element={<ResourcePage />} />
 
           {/* Insights & Statistics */}
           <Route path="statistics" element={<StatisticsPage />} />
