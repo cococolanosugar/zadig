@@ -32,6 +32,7 @@ import SprintsPage from '../pages/Projects/Sprints';
 import BuildsPage from '../pages/Projects/Builds';
 import ScannersPage from '../pages/Projects/Scanners';
 import ProjectWizardPage from '../pages/Projects/Wizard';
+import SystemIntegrationPage from '../pages/Settings/Integration';
 
 export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -132,6 +133,8 @@ export const AppRouter: React.FC = () => {
           <Route path="system/storage" element={<StoragePage />} />
           <Route path="system/users" element={<UsersPage />} />
           <Route path="system/config" element={<SystemConfigPage />} />
+          <Route path="system/integration" element={<SystemIntegrationPage />} />
+          <Route path="system/integration/:category" element={<SystemIntegrationPage />} />
 
           <Route
             path="*"
