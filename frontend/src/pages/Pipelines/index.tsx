@@ -269,9 +269,17 @@ export const PipelinesPage: React.FC = () => {
               <WorkflowCanvas
                 workflow={activeWorkflow}
                 projectName={activeProject || 'default'}
-                onSave={(updated) => {
-                  setActiveWorkflow(updated);
-                  setWorkflows(workflows.map((w) => (w.name === updated.name ? updated : w)));
+                onSave={async (updated) => {
+                  try {
+                    await workflowApi.updateWorkflow(updated.name, updated);
+                    setActiveWorkflow(updated);
+                    setWorkflows((prev) => prev.map((w) => (w.name === updated.name ? updated : w)));
+                    feedback.message.success(`工作流 [${updated.name}] 编排配置已成功保存！`);
+                  } catch (err: unknown) {
+                    const msg = err instanceof Error ? err.message : '保存失败，请检查配置参数';
+                    feedback.message.error(`保存工作流失败: ${msg}`);
+                    throw err;
+                  }
                 }}
               />
             ) : (

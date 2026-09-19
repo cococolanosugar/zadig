@@ -15,6 +15,7 @@ import {
   Statistic,
   Progress,
   Popconfirm,
+  Empty,
 } from 'antd';
 import {
   PlusOutlined,
@@ -65,56 +66,14 @@ export const SprintsPage: React.FC = () => {
     setLoading(true);
     try {
       const res = await http.get<SprintItem[] | { list: SprintItem[] }>(
-        `/api/aslan/sprint_management/v1/sprint/?projectName=${projectName}`,
-        { skipErrorHandler: true }
+        `/api/aslan/sprint_management/v1/sprint/?projectName=${projectName}`
       );
       const list = Array.isArray(res) ? res : res?.list || [];
-      if (list.length > 0) {
-        setSprints(list);
-      } else {
-        // Fallback default sample sprints for demonstration if newly created project
-        setSprints([
-          {
-            id: 'sprint-v1.0',
-            name: `${projectName}-Sprint-1 (MVP 稳定版交付)`,
-            status: 'active',
-            start_date: dayjs().subtract(5, 'day').format('YYYY-MM-DD'),
-            end_date: dayjs().add(9, 'day').format('YYYY-MM-DD'),
-            description: '核心服务容器化镜像构建与多环境联调上线',
-            created_by: 'admin',
-            created_at: Date.now() - 5 * 86400000,
-            total_work_items: 12,
-            completed_work_items: 8,
-          },
-          {
-            id: 'sprint-v1.1',
-            name: `${projectName}-Sprint-2 (自动化全量回归)`,
-            status: 'planning',
-            start_date: dayjs().add(10, 'day').format('YYYY-MM-DD'),
-            end_date: dayjs().add(24, 'day').format('YYYY-MM-DD'),
-            description: '接入集成测试与 SonarQube 代码审查流水线',
-            created_by: 'admin',
-            created_at: Date.now(),
-            total_work_items: 6,
-            completed_work_items: 0,
-          },
-        ]);
-      }
-    } catch {
-      setSprints([
-        {
-          id: 'sprint-v1.0',
-          name: `${projectName || 'Project'}-Sprint-1 (基础功能演进)`,
-          status: 'active',
-          start_date: dayjs().subtract(7, 'day').format('YYYY-MM-DD'),
-          end_date: dayjs().add(7, 'day').format('YYYY-MM-DD'),
-          description: '完成微服务环境部署并验证健康检查',
-          created_by: 'admin',
-          created_at: Date.now() - 7 * 86400000,
-          total_work_items: 8,
-          completed_work_items: 5,
-        },
-      ]);
+      setSprints(list);
+    } catch (err: unknown) {
+      setSprints([]);
+      const msg = err instanceof Error ? err.message : '获取迭代列表失败';
+      feedback.message.error(msg);
     } finally {
       setLoading(false);
     }
@@ -138,15 +97,13 @@ export const SprintsPage: React.FC = () => {
       if (editingSprint) {
         await http.put(
           `/api/aslan/sprint_management/v1/sprint/${editingSprint.id}?projectName=${projectName}`,
-          payload,
-          { skipErrorHandler: true }
+          payload
         );
         feedback.message.success('迭代更新成功');
       } else {
         await http.post(
           `/api/aslan/sprint_management/v1/sprint/?projectName=${projectName}`,
-          payload,
-          { skipErrorHandler: true }
+          payload
         );
         feedback.message.success('新建迭代成功');
       }
@@ -154,24 +111,22 @@ export const SprintsPage: React.FC = () => {
       form.resetFields();
       setEditingSprint(null);
       fetchSprints();
-    } catch {
-      // Local optimistic feedback if offline
-      feedback.message.success('迭代保存成功');
-      setModalVisible(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '保存迭代失败，请检查配置参数';
+      feedback.message.error(msg);
     }
   };
 
   const handleDelete = async (sprintId: string) => {
     try {
       await http.delete(
-        `/api/aslan/sprint_management/v1/sprint/${sprintId}?projectName=${projectName}`,
-        { skipErrorHandler: true }
+        `/api/aslan/sprint_management/v1/sprint/${sprintId}?projectName=${projectName}`
       );
       feedback.message.success('迭代删除成功');
       fetchSprints();
-    } catch {
-      setSprints((prev) => prev.filter((s) => s.id !== sprintId));
-      feedback.message.success('迭代已移除');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '删除迭代失败';
+      feedback.message.error(msg);
     }
   };
 
@@ -448,6 +403,26 @@ export const SprintsPage: React.FC = () => {
           dataSource={filteredSprints}
           loading={loading}
           pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 个迭代` }}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="暂无迭代记录，可点击右上角「新建迭代」规划产品冲刺"
+              >
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => {
+                    setEditingSprint(null);
+                    form.resetFields();
+                    setModalVisible(true);
+                  }}
+                >
+                  新建迭代
+                </Button>
+              </Empty>
+            ),
+          }}
         />
       </Card>
 

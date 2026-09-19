@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Card,
@@ -36,7 +36,7 @@ export const PipelineExecutionPage: React.FC = () => {
 
   const [task, setTask] = useState<WorkflowTaskExecution | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selectedJob, setSelectedJob] = useState<string>('build-job');
+  const [selectedJob, setSelectedJob] = useState<string>('');
 
   const loadTask = useCallback(async () => {
     if (!workflowName || !taskId) return;
@@ -49,6 +49,16 @@ export const PipelineExecutionPage: React.FC = () => {
       );
       if (res && res.task_id) {
         setTask(res);
+        // Automatically select the first available job if none selected
+        if (res.stages && res.stages.length > 0) {
+          const allJobs = res.stages.flatMap((s) => s.jobs || []);
+          if (allJobs.length > 0) {
+            setSelectedJob((prev) => {
+              if (prev && allJobs.some((j) => j.name === prev)) return prev;
+              return allJobs[0].name;
+            });
+          }
+        }
       } else {
         setTask(null);
         feedback.message.warning('任务不存在或已被清理');
@@ -60,6 +70,11 @@ export const PipelineExecutionPage: React.FC = () => {
       setLoading(false);
     }
   }, [workflowName, taskId, activeProject]);
+
+  const sseStreamUrl = useMemo(() => {
+    if (!workflowName || !taskId || !selectedJob) return undefined;
+    return `/api/aslan/logs/sse/v4/workflow/${encodeURIComponent(workflowName)}/${taskId}/${encodeURIComponent(selectedJob)}/1000`;
+  }, [workflowName, taskId, selectedJob]);
 
   useEffect(() => {
     loadTask();
@@ -175,14 +190,22 @@ export const PipelineExecutionPage: React.FC = () => {
         variant="borderless"
         title={
           <Space orientation="horizontal">
-            <Text strong>执行控制台日志 (Job: {selectedJob})</Text>
-            <Badge status="default" text="暂未接入日志流" />
+            <Text strong>执行控制台日志 (Job: {selectedJob || '默认'})</Text>
+            {task?.status === 'running' ? (
+              <Badge status="processing" text="SSE 实时日志流传输中" />
+            ) : task?.status === 'passed' ? (
+              <Badge status="success" text="任务已完成 (已归档日志)" />
+            ) : task?.status === 'failed' ? (
+              <Badge status="error" text="任务执行失败" />
+            ) : (
+              <Badge status="default" text="日志流就绪" />
+            )}
           </Space>
         }
         styles={{ body: { padding: 0 } }}
         style={{ borderRadius: 8, overflow: 'hidden' }}
       >
-        <LogViewer height={480} />
+        <LogViewer height={480} streamUrl={sseStreamUrl} />
       </Card>
     </div>
   );

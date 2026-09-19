@@ -11,6 +11,7 @@ import {
   Table,
   Badge,
   Popconfirm,
+  Empty,
 } from 'antd';
 import {
   UserOutlined,
@@ -195,14 +196,10 @@ export const SystemIntegrationPage: React.FC = () => {
         cat.apiEndpoint,
         { skipErrorHandler: true }
       );
-      const list = Array.isArray(res) ? res : res?.list || [];
-      if (list.length > 0) {
-        setItems(list);
-      } else {
-        setItems(getDefaultSampleItems(cat.key));
-      }
+      const list = Array.isArray(res) ? res : (res as any)?.list || [];
+      setItems(list);
     } catch {
-      setItems(getDefaultSampleItems(cat.key));
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -223,50 +220,45 @@ export const SystemIntegrationPage: React.FC = () => {
   };
 
   const handleTestConnection = async () => {
+    if (!currentCategory) return;
     try {
-      await form.validateFields();
+      const values = await form.validateFields();
       setTestingConnection(true);
-      setTimeout(() => {
-        setTestingConnection(false);
-        feedback.message.success('连通性测试通过！服务响应状态 HTTP 200 OK');
-      }, 1000);
-    } catch {
-      // Validation error
+      await http.post(`${currentCategory.apiEndpoint}/connection`, values);
+      feedback.message.success('连通性测试通过！服务响应状态正常');
+    } catch (err: any) {
+      feedback.message.error(err?.message || '连通性测试失败，请检查服务地址或凭据配置');
+    } finally {
+      setTestingConnection(false);
     }
   };
 
   const handleSaveIntegration = async () => {
+    if (!currentCategory) return;
     try {
       const values = await form.validateFields();
-      feedback.message.loading('正在保存配置...', 1);
-      setTimeout(() => {
-        feedback.message.success(`[${values.name}] 集成配置保存成功！`);
-        setModalVisible(false);
-        form.resetFields();
-        if (currentCategory) {
-          setItems((prev) => [
-            ...prev,
-            {
-              id: `item-${Date.now()}`,
-              name: values.name,
-              type: values.vendor || currentCategory.supportVendors[0],
-              url: values.url || 'https://service.internal',
-              status: 'connected',
-              updated_at: '刚刚',
-              updated_by: 'admin',
-              description: values.description,
-            },
-          ]);
-        }
-      }, 1000);
-    } catch {
-      // Validation error
+      setLoading(true);
+      await http.post(currentCategory.apiEndpoint, values);
+      feedback.message.success(`[${values.name}] 集成配置保存成功！`);
+      setModalVisible(false);
+      form.resetFields();
+      await fetchItems(currentCategory);
+    } catch (err: any) {
+      feedback.message.error(err?.message || '保存集成配置失败');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDeleteItem = (id: string) => {
-    setItems((prev) => prev.filter((i) => i.id !== id));
-    feedback.message.success('集成配置已移除');
+  const handleDeleteItem = async (id: string) => {
+    if (!currentCategory) return;
+    try {
+      await http.delete(`${currentCategory.apiEndpoint}/${id}`);
+      feedback.message.success('集成配置已移除');
+      await fetchItems(currentCategory);
+    } catch (err: any) {
+      feedback.message.error(err?.message || '移除集成配置失败');
+    }
   };
 
   const columns: ColumnsType<IntegrationItem> = [
@@ -340,9 +332,15 @@ export const SystemIntegrationPage: React.FC = () => {
             type="link"
             size="small"
             icon={<ReloadOutlined />}
-            onClick={() => {
+            onClick={async () => {
+              if (!currentCategory) return;
               feedback.message.loading(`正在测试 [${record.name}] 连通性...`, 1);
-              setTimeout(() => feedback.message.success('服务连通性健康正常'), 1000);
+              try {
+                await http.post(`${currentCategory.apiEndpoint}/connection`, record);
+                feedback.message.success(`[${record.name}] 服务连通性健康正常`);
+              } catch (err: any) {
+                feedback.message.error(err?.message || `[${record.name}] 连通性检测失败`);
+              }
             }}
           >
             检测
@@ -416,12 +414,37 @@ export const SystemIntegrationPage: React.FC = () => {
           </Space>
         </div>
 
-        {/* Integrated Items Table */}
         <Table
-          rowKey="id"
+          rowKey={(record) => record.id || (record as any)._id || record.name}
           columns={columns}
           dataSource={items}
           loading={loading}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <Space vertical size={4}>
+                    <Text type="secondary">暂无该类型集成配置</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      可通过右上角“添加集成”绑定外部服务
+                    </Text>
+                  </Space>
+                }
+              >
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => {
+                    form.resetFields();
+                    setModalVisible(true);
+                  }}
+                >
+                  添加集成
+                </Button>
+              </Empty>
+            ),
+          }}
           pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 项配置` }}
         />
 
@@ -439,7 +462,7 @@ export const SystemIntegrationPage: React.FC = () => {
             <Button key="cancel" onClick={() => setModalVisible(false)}>
               取消
             </Button>,
-            <Button key="submit" type="primary" onClick={handleSaveIntegration}>
+            <Button key="submit" type="primary" loading={loading} onClick={handleSaveIntegration}>
               保存并启用
             </Button>,
           ]}
@@ -632,120 +655,5 @@ export const SystemIntegrationPage: React.FC = () => {
   );
 };
 
-function getDefaultSampleItems(categoryKey: string): IntegrationItem[] {
-  switch (categoryKey) {
-    case 'account':
-      return [
-        {
-          id: 'acc-1',
-          name: '企业统一 LDAP / Active Directory',
-          type: 'LDAP / AD',
-          url: 'ldap://ldap.internal.corp:389',
-          status: 'connected',
-          updated_at: '2026-09-18 11:20',
-          updated_by: 'admin',
-          description: '企业全员组织架构与凭据同步',
-        },
-      ];
-    case 'git':
-      return [
-        {
-          id: 'git-1',
-          name: '内部生产 GitLab 主集群',
-          type: 'GitLab',
-          url: 'https://gitlab.example.com',
-          status: 'connected',
-          updated_at: '2026-09-18 10:20',
-          updated_by: 'admin',
-          description: '微服务核心代码仓库与 Webhook 触发',
-        },
-        {
-          id: 'git-2',
-          name: '公网 GitHub 依赖仓库',
-          type: 'GitHub',
-          url: 'https://github.com',
-          status: 'connected',
-          updated_at: '2026-09-15 14:30',
-          updated_by: 'admin',
-          description: '开源 SDK 与 Helm Chart 依赖',
-        },
-      ];
-    case 'ai':
-      return [
-        {
-          id: 'ai-1',
-          name: 'OpenAI GPT-4o 审查引擎',
-          type: 'OpenAI',
-          url: 'https://api.openai.com/v1',
-          status: 'connected',
-          updated_at: '2026-09-19 09:00',
-          updated_by: 'admin',
-          description: 'PR 代码智能审查与安全漏洞分析',
-        },
-        {
-          id: 'ai-2',
-          name: '通义千问 Qwen-Max',
-          type: '通义千问',
-          url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-          status: 'connected',
-          updated_at: '2026-09-19 11:30',
-          updated_by: 'admin',
-          description: '中文代码生成与规范研判',
-        },
-      ];
-    case 'ci':
-      return [
-        {
-          id: 'ci-1',
-          name: '核心 Jenkins 构建集群',
-          type: 'Jenkins',
-          url: 'http://jenkins.internal.corp:8080',
-          status: 'connected',
-          updated_at: '2026-09-17 16:40',
-          updated_by: 'admin',
-          description: '调度传统编译打包流水线任务',
-        },
-      ];
-    case 'scanner':
-      return [
-        {
-          id: 'sonar-1',
-          name: 'SonarQube 企业安全质量门禁',
-          type: 'SonarQube',
-          url: 'http://sonar.internal.corp:9000',
-          status: 'connected',
-          updated_at: '2026-09-18 18:20',
-          updated_by: 'admin',
-          description: '静态代码规范审查与缺陷检测',
-        },
-      ];
-    case 'im':
-      return [
-        {
-          id: 'im-1',
-          name: '企业飞书构建发布通知群',
-          type: '飞书 Lark',
-          url: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
-          status: 'connected',
-          updated_at: '2026-09-16 09:15',
-          updated_by: 'admin',
-          description: '发布事件实时群通知推送',
-        },
-      ];
-    default:
-      return [
-        {
-          id: `${categoryKey}-1`,
-          name: `默认 ${categoryKey} 服务实例`,
-          type: 'Standard',
-          url: 'https://service.internal:8443',
-          status: 'connected',
-          updated_at: '2026-09-19 12:00',
-          updated_by: 'admin',
-          description: '系统自动初始化的连接配置',
-        },
-      ];
-  }
-}
-
 export default SystemIntegrationPage;
+
