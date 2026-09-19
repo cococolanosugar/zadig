@@ -79,3 +79,5 @@ debug/zadig-agent
 .claude/
 .agents/
 .omp/
+
+zadig-ee-portal/

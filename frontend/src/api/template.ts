@@ -1,0 +1,114 @@
+import http from './client';
+
+export interface WorkflowTemplateItem {
+  id: string;
+  template_name: string;
+  create_by?: string;
+  create_time?: number;
+  update_by?: string;
+  update_time?: number;
+  stages?: string[];
+  stage_details?: Array<{
+    name: string;
+    jobs: Array<{ name: string; job_type: string }>;
+  }>;
+  description?: string;
+  category?: string;
+  build_in?: boolean;
+}
+
+export interface WorkflowTemplateI18n {
+  name_key: string;
+  name_zh: string;
+  name_en: string;
+  description_zh: string;
+  description_en: string;
+}
+
+export interface WorkflowTemplateResponse {
+  workflow_templates: WorkflowTemplateItem[];
+  build_in_workflow_template_i18ns?: WorkflowTemplateI18n[];
+}
+
+export interface YamlTemplateItem {
+  id?: string;
+  name: string;
+  content: string;
+  variables?: Array<{ key: string; value?: string }>;
+}
+
+export const templateApi = {
+  /**
+   * Get workflow templates (contains 20+ enterprise built-in templates)
+   */
+  async getWorkflowTemplates(): Promise<WorkflowTemplateResponse> {
+    try {
+      const res = await http.get<WorkflowTemplateResponse>('/api/aslan/template/workflow');
+      return res || { workflow_templates: [] };
+    } catch {
+      return { workflow_templates: [] };
+    }
+  },
+
+  /**
+   * Get Kubernetes YAML templates
+   */
+  async getYamlTemplates(): Promise<{ system_variables?: unknown[]; yaml_template?: YamlTemplateItem[]; total?: number }> {
+    try {
+      const res = await http.get<{ system_variables?: unknown[]; yaml_template?: YamlTemplateItem[]; total?: number }>('/api/aslan/template/yaml');
+      return res || { yaml_template: [], total: 0 };
+    } catch {
+      return { yaml_template: [], total: 0 };
+    }
+  },
+
+  /**
+   * Get Dockerfile templates
+   */
+  async getDockerfileTemplates(): Promise<{ dockerfile_template?: unknown[]; total?: number }> {
+    try {
+      const res = await http.get<{ dockerfile_template?: unknown[]; total?: number }>('/api/aslan/template/dockerfile');
+      return res || { dockerfile_template: [], total: 0 };
+    } catch {
+      return { dockerfile_template: [], total: 0 };
+    }
+  },
+
+  /**
+   * Get Helm Chart templates
+   */
+  async getChartTemplates(): Promise<{ chartTemplates?: unknown[] }> {
+    try {
+      const res = await http.get<{ chartTemplates?: unknown[] }>('/api/aslan/template/charts');
+      return res || { chartTemplates: [] };
+    } catch {
+      return { chartTemplates: [] };
+    }
+  },
+
+  /**
+   * Get Build templates
+   */
+  async getBuildTemplates(): Promise<{ build_templates?: unknown[] }> {
+    try {
+      const res = await http.get<{ build_templates?: unknown[] }>('/api/aslan/template/build');
+      return res || { build_templates: [] };
+    } catch {
+      return { build_templates: [] };
+    }
+  },
+
+  /**
+   * Get Scanner templates
+   */
+  async getScannerTemplates(): Promise<{ scanning_templates?: unknown[] }> {
+    try {
+      const res = await http.get<{ scanning_templates?: unknown[] }>('/api/aslan/template/scanning');
+      return res || { scanning_templates: [] };
+    } catch {
+      return { scanning_templates: [] };
+    }
+  },
+};
+
+export default templateApi;

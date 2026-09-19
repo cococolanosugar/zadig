@@ -34,6 +34,8 @@ import {
   LogoutOutlined,
   TeamOutlined,
   MoreOutlined,
+  ApiOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '../stores/auth';
 import { useProjectStore } from '../stores/project';
@@ -244,7 +246,19 @@ export const BasicLayout: React.FC = () => {
       key: 'enterprise',
       icon: <SafetyCertificateOutlined />,
       label: '企业管理',
-      onClick: () => feedback.message.info('企业管理控制台已就绪'),
+      onClick: () => navigate('/v1/enterprise'),
+    },
+    {
+      key: 'mcp-config',
+      icon: <ApiOutlined />,
+      label: '配置 MCP',
+      onClick: () => navigate('/v1/profile/mcp'),
+    },
+    {
+      key: 'account-settings',
+      icon: <UserOutlined />,
+      label: '账号设置',
+      onClick: () => navigate('/v1/profile/info'),
     },
     { type: 'divider' },
     {
@@ -266,6 +280,7 @@ export const BasicLayout: React.FC = () => {
       const subTabKey = parts[5] || 'pipelines';
 
       const tabTitleMap: Record<string, string> = {
+        detail: '项目概览',
         sprints: '迭代管理',
         pipelines: '工作流',
         envs: '环境',
@@ -487,7 +502,7 @@ export const BasicLayout: React.FC = () => {
             </div>
 
             <div
-              onClick={() => feedback.message.info('企业管理控制台已就绪')}
+              onClick={() => navigate('/v1/enterprise')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -495,7 +510,8 @@ export const BasicLayout: React.FC = () => {
                 padding: collapsed ? '10px 0' : '10px 16px',
                 justifyContent: collapsed ? 'center' : 'flex-start',
                 cursor: 'pointer',
-                color: '#4a5568',
+                color: location.pathname.startsWith('/v1/enterprise') ? '#0066ff' : '#4a5568',
+                fontWeight: location.pathname.startsWith('/v1/enterprise') ? 600 : 400,
                 fontSize: 14,
                 transition: 'background 0.2s',
               }}

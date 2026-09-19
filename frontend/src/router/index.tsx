@@ -6,12 +6,22 @@ import ProjectDetailLayout from '../layouts/ProjectDetailLayout';
 import LoginPage from '../pages/Login';
 import DashboardPage from '../pages/Dashboard';
 import ProjectsPage from '../pages/Projects';
+import ProjectOverviewPage from '../pages/Projects/Overview';
 import ServicesPage from '../pages/Services';
 import EnvironmentsPage from '../pages/Environments';
 import PipelinesPage from '../pages/Pipelines';
 import PipelineExecutionPage from '../pages/Pipelines/Execution';
 import InsightsPage from '../pages/Insights';
 import StatisticsPage from '../pages/Statistics';
+import TemplateCenterPage from '../pages/Templates';
+import DeliveryPage from '../pages/Delivery';
+import DirectoryPage from '../pages/Directory';
+import QualityCenterPage from '../pages/Quality';
+import ReleasePlanPage from '../pages/ReleasePlan';
+import PlutusDeliveryPage from '../pages/Plutus';
+import ResourcePage from '../pages/Resource';
+import EnterprisePage from '../pages/Enterprise';
+import UserProfilePage from '../pages/Profile';
 import ClustersPage from '../pages/Settings/Clusters';
 import CodeHostsPage from '../pages/Settings/CodeHosts';
 import RegistriesPage from '../pages/Settings/Registries';
@@ -34,9 +44,10 @@ export const AppRouter: React.FC = () => {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Support both /signin and /login routes */}
+        {/* Support both /signin and /login routes matching live Zadig */}
         <Route path="/signin" element={<LoginPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/login/password" element={<LoginPage />} />
 
         <Route
           path="/v1"
@@ -56,40 +67,55 @@ export const AppRouter: React.FC = () => {
 
           {/* Project-Scoped Workspace with Secondary Sub-Navigation */}
           <Route path="projects/detail/:projectName" element={<ProjectDetailLayout />}>
-            <Route index element={<Navigate to="pipelines" replace />} />
+            <Route index element={<Navigate to="detail" replace />} />
+            <Route path="detail" element={<ProjectOverviewPage />} />
             <Route path="pipelines" element={<PipelinesPage />} />
             <Route path="pipelines/:name/task/:taskId" element={<PipelineExecutionPage />} />
             <Route path="envs" element={<EnvironmentsPage />} />
             <Route path="services" element={<ServicesPage />} />
             <Route path="sprints" element={<PipelinesPage />} />
             <Route path="builds" element={<PipelinesPage />} />
-            <Route path="test" element={<PipelinesPage />} />
+            <Route path="test" element={<QualityCenterPage />} />
             <Route path="scanner" element={<PipelinesPage />} />
-            <Route path="version" element={<PipelinesPage />} />
+            <Route path="version" element={<DeliveryPage />} />
           </Route>
 
           {/* Global Release & Pipelines */}
           <Route path="pipelines" element={<PipelinesPage />} />
           <Route path="releaseWorkflow" element={<PipelinesPage />} />
           <Route path="pipelines/:name/task/:taskId" element={<PipelineExecutionPage />} />
-          <Route path="releasePlan" element={<PipelinesPage />} />
-          <Route path="plutus" element={<PipelinesPage />} />
+          <Route path="releasePlan" element={<ReleasePlanPage />} />
+          <Route path="plutus" element={<PlutusDeliveryPage />} />
 
           {/* Standalone Fallbacks for Services & Envs */}
           <Route path="services" element={<ServicesPage />} />
           <Route path="envs" element={<EnvironmentsPage />} />
 
           {/* Asset Management Routes */}
-          <Route path="directory" element={<ProjectsPage />} />
-          <Route path="template" element={<ProjectsPage />} />
-          <Route path="tests" element={<PipelinesPage />} />
-          <Route path="delivery" element={<PipelinesPage />} />
-          <Route path="resource" element={<ClustersPage />} />
+          <Route path="directory" element={<DirectoryPage />} />
+          <Route path="template" element={<TemplateCenterPage />} />
+          <Route path="tests" element={<QualityCenterPage />} />
+          <Route path="delivery" element={<DeliveryPage />} />
+          <Route path="resource" element={<ResourcePage />} />
 
           {/* Insights & Statistics */}
           <Route path="statistics" element={<StatisticsPage />} />
           <Route path="insight" element={<InsightsPage />} />
           <Route path="insights" element={<InsightsPage />} />
+
+          {/* User Profile & MCP Configuration */}
+          <Route path="profile" element={<UserProfilePage />} />
+          <Route path="profile/info" element={<UserProfilePage />} />
+          <Route path="profile/mcp" element={<UserProfilePage />} />
+          <Route path="profile/security" element={<UserProfilePage />} />
+          <Route path="profile/preference" element={<UserProfilePage />} />
+
+          {/* Enterprise Management */}
+          <Route path="enterprise" element={<EnterprisePage />} />
+          <Route path="enterprise/info" element={<EnterprisePage />} />
+          <Route path="enterprise/license" element={<EnterprisePage />} />
+          <Route path="enterprise/theme" element={<EnterprisePage />} />
+          <Route path="enterprise/language" element={<EnterprisePage />} />
 
           {/* System Settings Routes */}
           <Route path="system/clusters" element={<ClustersPage />} />
