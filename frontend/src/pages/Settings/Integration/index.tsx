@@ -1,8 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  Card,
-  Row,
-  Col,
   Button,
   Tag,
   Space,
@@ -16,22 +13,22 @@ import {
   Popconfirm,
 } from 'antd';
 import {
+  UserOutlined,
   BranchesOutlined,
-  SafetyCertificateOutlined,
+  ProjectOutlined,
+  MessageOutlined,
   RobotOutlined,
   BuildOutlined,
-  ThunderboltOutlined,
-  MessageOutlined,
-  ProjectOutlined,
+  SafetyCertificateOutlined,
   ControlOutlined,
+  ThunderboltOutlined,
   DashboardOutlined,
   CloudOutlined,
   ApiOutlined,
-  SearchOutlined,
+  ArrowLeftOutlined,
   PlusOutlined,
   ReloadOutlined,
   DeleteOutlined,
-  ArrowLeftOutlined,
   LinkOutlined,
 } from '@ant-design/icons';
 import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
@@ -39,7 +36,7 @@ import type { ColumnsType } from 'antd/es/table';
 import http from '../../../api/client';
 import { feedback } from '../../../utils/feedback';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 const { TextArea } = Input;
 const { Option } = Select;
 
@@ -48,180 +45,150 @@ export interface IntegrationItem {
   name: string;
   type: string;
   url?: string;
-  server_address?: string;
   status?: 'connected' | 'disconnected' | 'error';
   updated_at?: string;
   updated_by?: string;
   description?: string;
 }
 
-export interface IntegrationCategory {
+export interface IntegrationMeta {
   key: string;
-  title: string;
-  subtitle: string;
+  name: string;
+  desc: string;
+  link: string;
   icon: React.ReactNode;
-  iconBg: string;
-  category: 'code' | 'collab' | 'ai' | 'infra';
-  description: string;
   apiEndpoint: string;
   supportVendors: string[];
 }
 
-const INTEGRATION_CATEGORIES: IntegrationCategory[] = [
+// 12 Integration Categories strictly matching live Zadig (chunk 87)
+const INTEGRATION_LIST: IntegrationMeta[] = [
+  {
+    key: 'account',
+    name: '账号系统',
+    desc: '统一身份认证，支持 AD、LDAP、GitHub、钉钉、飞书、企业微信、OAuth 等',
+    link: '/v1/system/integration/account',
+    icon: <UserOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
+    apiEndpoint: '/api/v1/picket/user/accounts',
+    supportVendors: ['LDAP / AD', 'OAuth 2.0', '飞书 SSO', '钉钉 SSO', '企业微信 SSO'],
+  },
   {
     key: 'git',
-    title: '代码源',
-    subtitle: '代码仓库接入',
-    icon: <BranchesOutlined style={{ fontSize: 24, color: '#1677ff' }} />,
-    iconBg: '#e6f4ff',
-    category: 'code',
-    description: '集成 GitLab、GitHub、Gerrit、Gitee、Perforce 及标准 Git 协议代码托管平台。',
+    name: '代码源',
+    desc: '代码仓库接入，支持 GitLab、GitHub、Gerrit、Gitee、Perforce、Git 标准协议等',
+    link: '/v1/system/integration/git',
+    icon: <BranchesOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
     apiEndpoint: '/api/aslan/code/workspace',
     supportVendors: ['GitLab', 'GitHub', 'Gitee', 'Gerrit', 'Perforce'],
   },
   {
-    key: 'account',
-    title: '账号系统',
-    subtitle: '统一身份认证 SSO',
-    icon: <SafetyCertificateOutlined style={{ fontSize: 24, color: '#52c41a' }} />,
-    iconBg: '#f6ffed',
-    category: 'collab',
-    description: '统一身份认证，支持 AD、LDAP、GitHub、OAuth、钉钉、飞书与企业微信单点登录。',
-    apiEndpoint: '/api/v1/picket/user/accounts',
-    supportVendors: ['LDAP / AD', 'OAuth 2.0', '飞书 SSO', '钉钉 SSO', '企业微信'],
+    key: 'project',
+    name: '项目管理',
+    desc: '研发项目双向同步，支持飞书项目、Jira、PingCode、TAPD 等',
+    link: '/v1/system/integration/project',
+    icon: <ProjectOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
+    apiEndpoint: '/api/aslan/system/project_management',
+    supportVendors: ['Jira', '飞书项目', 'TAPD', 'PingCode'],
+  },
+  {
+    key: 'im',
+    name: 'IM 集成',
+    desc: '即时通讯通知与审批，支持飞书、钉钉、企业微信等',
+    link: '/v1/system/integration/im',
+    icon: <MessageOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
+    apiEndpoint: '/api/aslan/system/im_app',
+    supportVendors: ['飞书 Lark', '钉钉 DingTalk', '企业微信 WorkWeixin'],
   },
   {
     key: 'ai',
-    title: 'AI 模型',
-    subtitle: '大语言模型服务接入',
-    icon: <RobotOutlined style={{ fontSize: 24, color: '#722ed1' }} />,
-    iconBg: '#f9f0ff',
-    category: 'ai',
-    description: '大模型服务接入，用于 PR 代码智能审查、变更风险研判、测试生成与效能助手。',
+    name: 'AI 模型',
+    desc: '大语言模型服务接入，支持接入 LLM 模型（如 OpenAI、通义千问等）',
+    link: '/v1/system/integration/ai',
+    icon: <RobotOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
     apiEndpoint: '/api/aslan/system/llm/integration',
     supportVendors: ['OpenAI', '通义千问 Qwen', 'DeepSeek', 'Azure OpenAI', 'Ollama (本地)'],
   },
   {
     key: 'ci',
-    title: 'CI/CD 工具',
-    subtitle: '持续集成工具',
-    icon: <BuildOutlined style={{ fontSize: 24, color: '#fa8c16' }} />,
-    iconBg: '#fff7e6',
-    category: 'code',
-    description: '集成外部 Jenkins、蓝鲸等 CI 工具，支持工作流无缝调用已有流水线任务。',
+    name: 'CI/CD 工具',
+    desc: '持续集成与交付工具，支持 Jenkins、蓝鲸等',
+    link: '/v1/system/integration/ci',
+    icon: <BuildOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
     apiEndpoint: '/api/aslan/system/cicdTools',
     supportVendors: ['Jenkins', '蓝鲸 CI', 'GitLab CI'],
   },
   {
     key: 'scanner',
-    title: '代码扫描',
-    subtitle: '质量与安全门禁',
-    icon: <SafetyCertificateOutlined style={{ fontSize: 24, color: '#13c2c2' }} />,
-    iconBg: '#e6fffb',
-    category: 'code',
-    description: '代码质量与安全漏洞检测，集成 SonarQube、Checkmarx，提供发布质量门禁卡点。',
+    name: '代码扫描',
+    desc: '代码质量与安全分析，支持 SonarQube 等',
+    link: '/v1/system/integration/scanner',
+    icon: <SafetyCertificateOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
     apiEndpoint: '/api/aslan/system/sonar/integration',
     supportVendors: ['SonarQube', 'Checkmarx', 'Trivy'],
   },
   {
-    key: 'im',
-    title: 'IM 集成',
-    subtitle: '即时通讯与协同审批',
-    icon: <MessageOutlined style={{ fontSize: 24, color: '#0066ff' }} />,
-    iconBg: '#e6f7ff',
-    category: 'collab',
-    description: '消息通知与人工审批流，支持向飞书、钉钉、企业微信机器人推送构建与发布事件。',
-    apiEndpoint: '/api/aslan/system/im_app',
-    supportVendors: ['飞书 Lark', '钉钉 DingTalk', '企业微信 WorkWeixin'],
-  },
-  {
-    key: 'project',
-    title: '项目管理',
-    subtitle: '研发工单双向同步',
-    icon: <ProjectOutlined style={{ fontSize: 24, color: '#2f54eb' }} />,
-    iconBg: '#f0f5ff',
-    category: 'collab',
-    description: '与敏捷需求平台双向联动，支持飞书项目、Jira、PingCode、TAPD 迭代状态联动。',
-    apiEndpoint: '/api/aslan/system/project_management',
-    supportVendors: ['Jira', '飞书项目', 'TAPD', 'PingCode'],
-  },
-  {
     key: 'config',
-    title: '配置管理',
-    subtitle: '应用集中配置中心',
-    icon: <ControlOutlined style={{ fontSize: 24, color: '#fa541c' }} />,
-    iconBg: '#fff2e8',
-    category: 'infra',
-    description: '微服务运行时集中配置管理工具，支持 Nacos、Apollo 配置发布与热生效。',
+    name: '配置管理',
+    desc: '应用配置管理工具，支持 Nacos、Apollo 等配置变更',
+    link: '/v1/system/integration/config',
+    icon: <ControlOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
     apiEndpoint: '/api/aslan/system/configuration',
     supportVendors: ['Nacos', 'Apollo', 'Consul'],
   },
   {
     key: 'gateway',
-    title: '网关组件',
-    subtitle: 'API 网关与服务网格',
-    icon: <ThunderboltOutlined style={{ fontSize: 24, color: '#eb2f96' }} />,
-    iconBg: '#fff0f6',
-    category: 'infra',
-    description: '微服务 API 网关路由管理，支持 Apache APISIX、Envoy 网关动态路由同步。',
+    name: '网关组件',
+    desc: 'API 网关集成，支持 APISIX 等网关配置变更',
+    link: '/v1/system/integration/gateway',
+    icon: <ThunderboltOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
     apiEndpoint: '/api/aslan/system/gateway',
     supportVendors: ['Apache APISIX', 'Traefik', 'Envoy'],
   },
   {
     key: 'monitor',
-    title: '监控系统',
-    subtitle: '可观测性与指标大盘',
-    icon: <DashboardOutlined style={{ fontSize: 24, color: '#faad14' }} />,
-    iconBg: '#fffbe6',
-    category: 'infra',
-    description: '服务可观测性与链路追踪监控集成，支持 Prometheus、Grafana 与 SkyWalking。',
+    name: '监控系统',
+    desc: '服务可观测性集成，支持 Grafana 等',
+    link: '/v1/system/integration/monitor',
+    icon: <DashboardOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
     apiEndpoint: '/api/aslan/system/monitor',
     supportVendors: ['Prometheus', 'Grafana', 'SkyWalking'],
   },
   {
     key: 'cloudService',
-    title: '云服务',
-    subtitle: '云厂商 Serverless 与 PaaS',
-    icon: <CloudOutlined style={{ fontSize: 24, color: '#0958d9' }} />,
-    iconBg: '#e6f4ff',
-    category: 'infra',
-    description: '云厂商 SaaS/PaaS API 深度调用，支持阿里云 SAE、DMS 及腾讯云微服务平台。',
+    name: '云服务',
+    desc: '云厂商 SaaS 调用，支持阿里云 SAE、DMS 等',
+    link: '/v1/system/integration/cloudService',
+    icon: <CloudOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
     apiEndpoint: '/api/aslan/system/cloudService',
     supportVendors: ['阿里云 SAE', '阿里云 DMS', '腾讯云 TKE'],
   },
   {
     key: 'external',
-    title: '其他系统',
-    subtitle: '自定义扩展 Webhook',
-    icon: <ApiOutlined style={{ fontSize: 24, color: '#389e0d' }} />,
-    iconBg: '#f6ffed',
-    category: 'infra',
-    description: '自定义外部 API 接口与通用 Webhook 集成，支持在流水线生命周期中回调第三方系统。',
+    name: '其他系统',
+    desc: '自定义外部 API 集成，支持工作流调用任意第三方系统接口',
+    link: '/v1/system/integration/external',
+    icon: <ApiOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
     apiEndpoint: '/api/aslan/system/external',
     supportVendors: ['通用 Webhook', 'RESTful API', '自定义脚本'],
   },
 ];
 
 export const SystemIntegrationPage: React.FC = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const { category: routeCategory } = useParams<{ category?: string }>();
   const navigate = useNavigate();
 
-  // Active integration category if in detail view
-  const activeTab = searchParams.get('tab') || routeCategory || '';
+  // Active integration key: e.g. 'account', 'git', 'ai'
+  const activeKey = routeCategory || searchParams.get('tab') || '';
+  const currentCategory = INTEGRATION_LIST.find((c) => c.key === activeKey);
 
-  const [searchText, setSearchText] = useState<string>('');
-  const [filterType, setFilterType] = useState<string>('all');
   const [loading, setLoading] = useState<boolean>(false);
-  const [categoryItems, setCategoryItems] = useState<IntegrationItem[]>([]);
+  const [items, setItems] = useState<IntegrationItem[]>([]);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [testingConnection, setTestingConnection] = useState<boolean>(false);
   const [form] = Form.useForm();
 
-  const currentCategory = INTEGRATION_CATEGORIES.find((c) => c.key === activeTab);
-
-  // Fetch configured items for the active category
-  const fetchCategoryItems = useCallback(async (cat: IntegrationCategory) => {
+  const fetchItems = useCallback(async (cat: IntegrationMeta) => {
     setLoading(true);
     try {
       const res = await http.get<IntegrationItem[] | { list: IntegrationItem[] }>(
@@ -230,13 +197,12 @@ export const SystemIntegrationPage: React.FC = () => {
       );
       const list = Array.isArray(res) ? res : res?.list || [];
       if (list.length > 0) {
-        setCategoryItems(list);
+        setItems(list);
       } else {
-        // Fallback default sample for display
-        setCategoryItems(getDefaultSampleItems(cat.key));
+        setItems(getDefaultSampleItems(cat.key));
       }
     } catch {
-      setCategoryItems(getDefaultSampleItems(cat.key));
+      setItems(getDefaultSampleItems(cat.key));
     } finally {
       setLoading(false);
     }
@@ -244,19 +210,16 @@ export const SystemIntegrationPage: React.FC = () => {
 
   useEffect(() => {
     if (currentCategory) {
-      fetchCategoryItems(currentCategory);
+      fetchItems(currentCategory);
     }
-  }, [currentCategory, fetchCategoryItems]);
+  }, [currentCategory, fetchItems]);
 
-  const handleSelectCategory = (key: string) => {
-    setSearchParams({ tab: key });
+  const handleGoToDetail = (link: string) => {
+    navigate(link);
   };
 
-  const handleBackToGrid = () => {
-    setSearchParams({});
-    if (routeCategory) {
-      navigate('/v1/system/integration');
-    }
+  const handleBack = () => {
+    navigate('/v1/system/integration');
   };
 
   const handleTestConnection = async () => {
@@ -266,22 +229,22 @@ export const SystemIntegrationPage: React.FC = () => {
       setTimeout(() => {
         setTestingConnection(false);
         feedback.message.success('连通性测试通过！服务响应状态 HTTP 200 OK');
-      }, 1200);
+      }, 1000);
     } catch {
-      // Form validation
+      // Validation error
     }
   };
 
   const handleSaveIntegration = async () => {
     try {
       const values = await form.validateFields();
-      feedback.message.loading('正在保存并建立集成连接...', 1.0);
+      feedback.message.loading('正在保存配置...', 1);
       setTimeout(() => {
-        feedback.message.success(`[${values.name}] 集成配置已生效！`);
+        feedback.message.success(`[${values.name}] 集成配置保存成功！`);
         setModalVisible(false);
         form.resetFields();
         if (currentCategory) {
-          setCategoryItems((prev) => [
+          setItems((prev) => [
             ...prev,
             {
               id: `item-${Date.now()}`,
@@ -302,20 +265,9 @@ export const SystemIntegrationPage: React.FC = () => {
   };
 
   const handleDeleteItem = (id: string) => {
-    setCategoryItems((prev) => prev.filter((i) => i.id !== id));
+    setItems((prev) => prev.filter((i) => i.id !== id));
     feedback.message.success('集成配置已移除');
   };
-
-  // Filter integration cards on the catalog view
-  const filteredCategories = INTEGRATION_CATEGORIES.filter((c) => {
-    const matchesSearch =
-      c.title.toLowerCase().includes(searchText.toLowerCase()) ||
-      c.subtitle.toLowerCase().includes(searchText.toLowerCase()) ||
-      c.description.toLowerCase().includes(searchText.toLowerCase()) ||
-      c.supportVendors.some((v) => v.toLowerCase().includes(searchText.toLowerCase()));
-    const matchesFilter = filterType === 'all' || c.category === filterType;
-    return matchesSearch && matchesFilter;
-  });
 
   const columns: ColumnsType<IntegrationItem> = [
     {
@@ -339,7 +291,7 @@ export const SystemIntegrationPage: React.FC = () => {
       ),
     },
     {
-      title: '服务地址 / 端点',
+      title: '服务访问地址',
       dataIndex: 'url',
       key: 'url',
       render: (url) => (
@@ -352,7 +304,7 @@ export const SystemIntegrationPage: React.FC = () => {
       ),
     },
     {
-      title: '连接状态',
+      title: '状态',
       key: 'status',
       width: 140,
       render: (_, record) => {
@@ -396,8 +348,7 @@ export const SystemIntegrationPage: React.FC = () => {
             检测
           </Button>
           <Popconfirm
-            title="确认解绑并删除该集成？"
-            description="删除后关联的工作流任务可能无法正常调用该服务。"
+            title="确认删除该集成配置？"
             onConfirm={() => handleDeleteItem(record.id)}
             okText="删除"
             cancelText="取消"
@@ -412,390 +363,334 @@ export const SystemIntegrationPage: React.FC = () => {
     },
   ];
 
+  // 1. Detail Management View
+  if (currentCategory) {
+    return (
+      <div style={{ position: 'relative', flex: 1, minHeight: '100%', padding: '24px 30px', background: '#fff' }}>
+        {/* Top Header matching live Zadig */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 20,
+            paddingBottom: 16,
+            borderBottom: '1px solid #ebeef5',
+          }}
+        >
+          <Space size="middle">
+            <Button icon={<ArrowLeftOutlined />} onClick={handleBack}>
+              返回系统集成
+            </Button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {currentCategory.icon}
+              <div>
+                <Title level={4} style={{ margin: 0, fontSize: 18, color: '#303133' }}>
+                  {currentCategory.name}
+                </Title>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {currentCategory.desc}
+                </Text>
+              </div>
+            </div>
+          </Space>
+
+          <Space size="middle">
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={() => fetchItems(currentCategory)}
+              loading={loading}
+            >
+              刷新
+            </Button>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                form.resetFields();
+                setModalVisible(true);
+              }}
+            >
+              添加集成
+            </Button>
+          </Space>
+        </div>
+
+        {/* Integrated Items Table */}
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={items}
+          loading={loading}
+          pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 项配置` }}
+        />
+
+        {/* Add / Edit Integration Modal */}
+        <Modal
+          title={`添加 ${currentCategory.name} 配置`}
+          open={modalVisible}
+          onOk={handleSaveIntegration}
+          onCancel={() => setModalVisible(false)}
+          width={600}
+          footer={[
+            <Button key="test" loading={testingConnection} onClick={handleTestConnection}>
+              测试连接
+            </Button>,
+            <Button key="cancel" onClick={() => setModalVisible(false)}>
+              取消
+            </Button>,
+            <Button key="submit" type="primary" onClick={handleSaveIntegration}>
+              保存并启用
+            </Button>,
+          ]}
+        >
+          <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+            <Form.Item
+              name="name"
+              label="集成标识名称"
+              rules={[{ required: true, message: '请输入集成标识名称' }]}
+            >
+              <Input placeholder={`例如：my-${currentCategory.key}-server`} />
+            </Form.Item>
+
+            <Form.Item
+              name="vendor"
+              label="类型 / 服务商"
+              initialValue={currentCategory.supportVendors[0]}
+              rules={[{ required: true }]}
+            >
+              <Select>
+                {currentCategory.supportVendors.map((v) => (
+                  <Option key={v} value={v}>
+                    {v}
+                  </Option>
+                ))}
+              </Select>
+            </Form.Item>
+
+            <Form.Item
+              name="url"
+              label="服务地址 (Server URL)"
+              rules={[{ required: true, message: '请输入服务访问地址' }]}
+            >
+              <Input placeholder="https://..." />
+            </Form.Item>
+
+            {currentCategory.key === 'ai' ? (
+              <>
+                <Form.Item
+                  name="apiKey"
+                  label="API Key / 访问凭证"
+                  rules={[{ required: true, message: '请输入 API Key' }]}
+                >
+                  <Input.Password placeholder="sk-..." />
+                </Form.Item>
+                <Form.Item name="modelName" label="默认模型" initialValue="gpt-4o">
+                  <Input placeholder="例如：gpt-4o, qwen-max, deepseek-chat" />
+                </Form.Item>
+              </>
+            ) : (
+              <Form.Item
+                name="token"
+                label="API Token / 密码"
+                rules={[{ required: true, message: '请输入鉴权凭据' }]}
+              >
+                <Input.Password placeholder="请输入 Token 或 Secret" />
+              </Form.Item>
+            )}
+
+            <Form.Item name="description" label="描述">
+              <TextArea rows={2} placeholder="可备注该集成的使用范围与配额" />
+            </Form.Item>
+          </Form>
+        </Modal>
+      </div>
+    );
+  }
+
+  // 2. Integration Home List View strictly matching live Zadig (.integration-home & .integration-list)
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Detail Management Panel if a category is selected */}
-      {currentCategory ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Header Bar with Back Button */}
-          <Card variant="borderless" styles={{ body: { padding: '16px 24px' } }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Space size="middle">
-                <Button icon={<ArrowLeftOutlined />} onClick={handleBackToGrid}>
-                  返回系统集成大盘
-                </Button>
+    <div
+      style={{
+        position: 'relative',
+        flex: 1,
+        height: '100%',
+        minHeight: '100%',
+        padding: 30,
+        overflow: 'auto',
+        backgroundColor: '#ffffff',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: '100%',
+          width: '100%',
+        }}
+      >
+        {INTEGRATION_LIST.map((item) => (
+          <div
+            key={item.key}
+            onClick={() => handleGoToDetail(item.link)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 10,
+              padding: '20px 30px',
+              backgroundColor: '#ffffff',
+              boxShadow: '0 2px 5px 3px rgba(0, 0, 0, 0.05)',
+              cursor: 'pointer',
+              borderRadius: 4,
+              transition: 'transform 0.15s ease-in-out',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateX(5px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateX(0)';
+            }}
+          >
+            {/* Left Info: Icon + Name & Desc */}
+            <div
+              style={{
+                display: 'flex',
+                flexGrow: 1,
+                alignItems: 'center',
+                marginRight: 10,
+              }}
+            >
+              <div
+                style={{
+                  marginRight: 30,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 36,
+                  height: 36,
+                  flexShrink: 0,
+                }}
+              >
+                {item.icon}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <div
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 40,
-                    height: 40,
-                    borderRadius: 8,
-                    background: currentCategory.iconBg,
+                    marginBottom: 5,
+                    color: '#4a4a4a',
+                    fontWeight: 400,
+                    fontSize: 15,
                   }}
                 >
-                  {currentCategory.icon}
+                  {item.name}
                 </div>
-                <div>
-                  <Title level={4} style={{ margin: 0 }}>
-                    {currentCategory.title}
-                  </Title>
-                  <Text type="secondary" style={{ fontSize: 13 }}>
-                    {currentCategory.description}
-                  </Text>
+                <div style={{ color: '#969799', fontSize: 12 }}>
+                  {item.desc}
                 </div>
-              </Space>
-
-              <Space size="middle">
-                <Button
-                  icon={<ReloadOutlined />}
-                  onClick={() => fetchCategoryItems(currentCategory)}
-                  loading={loading}
-                >
-                  刷新
-                </Button>
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={() => {
-                    form.resetFields();
-                    setModalVisible(true);
-                  }}
-                >
-                  添加集成
-                </Button>
-              </Space>
-            </div>
-          </Card>
-
-          {/* Table of configured integrations */}
-          <Card variant="borderless" styles={{ body: { padding: '20px 24px' } }}>
-            <Table
-              rowKey="id"
-              columns={columns}
-              dataSource={categoryItems}
-              loading={loading}
-              pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 个集成配置` }}
-            />
-          </Card>
-
-          {/* Add / Edit Integration Modal */}
-          <Modal
-            title={`添加 ${currentCategory.title} 配置`}
-            open={modalVisible}
-            onOk={handleSaveIntegration}
-            onCancel={() => setModalVisible(false)}
-            width={620}
-            footer={[
-              <Button key="test" loading={testingConnection} onClick={handleTestConnection}>
-                测试连接
-              </Button>,
-              <Button key="cancel" onClick={() => setModalVisible(false)}>
-                取消
-              </Button>,
-              <Button key="submit" type="primary" onClick={handleSaveIntegration}>
-                保存并启用
-              </Button>,
-            ]}
-          >
-            <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
-              <Form.Item
-                name="name"
-                label="集成标识名称"
-                rules={[{ required: true, message: '请输入集成标识名称' }]}
-              >
-                <Input placeholder={`例如：company-${currentCategory.key}-server`} />
-              </Form.Item>
-
-              <Form.Item
-                name="vendor"
-                label="服务商 / 类型"
-                initialValue={currentCategory.supportVendors[0]}
-                rules={[{ required: true }]}
-              >
-                <Select>
-                  {currentCategory.supportVendors.map((v) => (
-                    <Option key={v} value={v}>
-                      {v}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-
-              <Form.Item
-                name="url"
-                label="服务访问地址 (Server URL)"
-                rules={[{ required: true, message: '请输入服务访问地址' }]}
-              >
-                <Input placeholder="https://..." />
-              </Form.Item>
-
-              {currentCategory.key === 'ai' && (
-                <>
-                  <Form.Item
-                    name="apiKey"
-                    label="API Key / 访问令牌"
-                    rules={[{ required: true, message: '请输入 API 鉴权令牌' }]}
-                  >
-                    <Input.Password placeholder="sk-..." />
-                  </Form.Item>
-                  <Form.Item name="modelName" label="默认调用模型" initialValue="gpt-4o">
-                    <Input placeholder="例如：gpt-4o, qwen-turbo, deepseek-coder" />
-                  </Form.Item>
-                </>
-              )}
-
-              {currentCategory.key !== 'ai' && (
-                <Form.Item
-                  name="token"
-                  label="API Token / 访问密钥"
-                  rules={[{ required: true, message: '请输入鉴权凭据' }]}
-                >
-                  <Input.Password placeholder="输入访问密钥或 Token" />
-                </Form.Item>
-              )}
-
-              <Form.Item name="description" label="备注说明">
-                <TextArea rows={2} placeholder="可记录该集成的调用团队、配额说明或环境范围" />
-              </Form.Item>
-            </Form>
-          </Modal>
-        </div>
-      ) : (
-        /* Integration Hub Grid View */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {/* Header Banner */}
-          <Card
-            variant="borderless"
-            styles={{ body: { padding: '24px 32px' } }}
-            style={{
-              background: 'linear-gradient(135deg, #f0f7ff 0%, #ffffff 100%)',
-              boxShadow: '0 1px 4px rgba(0, 0, 0, 0.04)',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: 16,
-              }}
-            >
-              <div>
-                <Title level={4} style={{ margin: 0, color: '#1677ff' }}>
-                  系统集成 (System Integrations)
-                </Title>
-                <Paragraph type="secondary" style={{ margin: '8px 0 0', maxWidth: 720 }}>
-                  连接并调度企业既有的研发全链路工具链，统一纳管代码仓库、统一身份、敏捷项目、自动化审查、大模型服务与云基础设施。
-                </Paragraph>
               </div>
-
-              <Space size="middle">
-                <Input
-                  placeholder="搜索集成组件或服务商..."
-                  prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  style={{ width: 280 }}
-                  allowClear
-                />
-              </Space>
             </div>
 
-            {/* Filter Categories Tabs */}
-            <div style={{ marginTop: 20 }}>
-              <Space size={8}>
-                <Button
-                  type={filterType === 'all' ? 'primary' : 'default'}
-                  onClick={() => setFilterType('all')}
-                >
-                  全部 ({INTEGRATION_CATEGORIES.length})
-                </Button>
-                <Button
-                  type={filterType === 'code' ? 'primary' : 'default'}
-                  onClick={() => setFilterType('code')}
-                >
-                  代码与质量 (3)
-                </Button>
-                <Button
-                  type={filterType === 'collab' ? 'primary' : 'default'}
-                  onClick={() => setFilterType('collab')}
-                >
-                  协作与项目 (3)
-                </Button>
-                <Button
-                  type={filterType === 'ai' ? 'primary' : 'default'}
-                  onClick={() => setFilterType('ai')}
-                >
-                  AI 与模型 (1)
-                </Button>
-                <Button
-                  type={filterType === 'infra' ? 'primary' : 'default'}
-                  onClick={() => setFilterType('infra')}
-                >
-                  运维与基础设施 (5)
-                </Button>
-              </Space>
+            {/* Right Configure Button strictly matching .configure-btn */}
+            <div>
+              <button
+                type="button"
+                style={{
+                  padding: '8px 36px',
+                  color: '#0066ff',
+                  border: '1px solid #0066ff',
+                  backgroundColor: 'transparent',
+                  borderRadius: 4,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  outline: 'none',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#0066ff';
+                  e.currentTarget.style.color = '#ffffff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#0066ff';
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleGoToDetail(item.link);
+                }}
+              >
+                配置
+              </button>
             </div>
-          </Card>
-
-          {/* Cards Grid */}
-          <Row gutter={[20, 20]}>
-            {filteredCategories.map((cat) => (
-              <Col key={cat.key} xs={24} sm={12} md={8} lg={6}>
-                <Card
-                  hoverable
-                  variant="borderless"
-                  styles={{
-                    body: {
-                      padding: 20,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      height: '100%',
-                      minHeight: 220,
-                    },
-                  }}
-                  style={{
-                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
-                    transition: 'all 0.25s ease',
-                    borderRadius: 8,
-                  }}
-                  onClick={() => handleSelectCategory(cat.key)}
-                >
-                  <div>
-                    {/* Icon & Title */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: 44,
-                          height: 44,
-                          borderRadius: 10,
-                          background: cat.iconBg,
-                          flexShrink: 0,
-                        }}
-                      >
-                        {cat.icon}
-                      </div>
-                      <div style={{ overflow: 'hidden' }}>
-                        <Text strong style={{ fontSize: 16, display: 'block' }}>
-                          {cat.title}
-                        </Text>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          {cat.subtitle}
-                        </Text>
-                      </div>
-                    </div>
-
-                    {/* Description */}
-                    <Paragraph
-                      type="secondary"
-                      ellipsis={{ rows: 2 }}
-                      style={{ fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}
-                    >
-                      {cat.description}
-                    </Paragraph>
-
-                    {/* Supported Vendor Tags */}
-                    <Space size={[4, 4]} wrap style={{ marginBottom: 16 }}>
-                      {cat.supportVendors.slice(0, 3).map((v) => (
-                        <Tag key={v} style={{ fontSize: 11, margin: 0 }}>
-                          {v}
-                        </Tag>
-                      ))}
-                      {cat.supportVendors.length > 3 && (
-                        <Tag style={{ fontSize: 11, margin: 0 }}>
-                          +{cat.supportVendors.length - 3}
-                        </Tag>
-                      )}
-                    </Space>
-                  </div>
-
-                  {/* Action Button */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      borderTop: '1px solid #f0f0f0',
-                      paddingTop: 12,
-                    }}
-                  >
-                    <Badge status="success" text={<Text type="secondary" style={{ fontSize: 12 }}>支持集成</Text>} />
-                    <Button
-                      type="link"
-                      size="small"
-                      style={{ padding: 0, fontWeight: 500 }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSelectCategory(cat.key);
-                      }}
-                    >
-                      配置 / 管理 →
-                    </Button>
-                  </div>
-                </Card>
-              </Col>
-            ))}
-          </Row>
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
 
-// Helper to provide realistic sample items for initial display if backend is pristine
 function getDefaultSampleItems(categoryKey: string): IntegrationItem[] {
   switch (categoryKey) {
+    case 'account':
+      return [
+        {
+          id: 'acc-1',
+          name: '企业统一 LDAP / Active Directory',
+          type: 'LDAP / AD',
+          url: 'ldap://ldap.internal.corp:389',
+          status: 'connected',
+          updated_at: '2026-09-18 11:20',
+          updated_by: 'admin',
+          description: '企业全员组织架构与凭据同步',
+        },
+      ];
     case 'git':
       return [
         {
           id: 'git-1',
-          name: '公司内部 GitLab 主实例',
+          name: '内部生产 GitLab 主集群',
           type: 'GitLab',
           url: 'https://gitlab.example.com',
           status: 'connected',
           updated_at: '2026-09-18 10:20',
           updated_by: 'admin',
-          description: '用于管理微服务代码仓库与 MR Webhook',
+          description: '微服务核心代码仓库与 Webhook 触发',
         },
         {
           id: 'git-2',
-          name: '公共 GitHub 依赖源',
+          name: '公网 GitHub 依赖仓库',
           type: 'GitHub',
           url: 'https://github.com',
           status: 'connected',
           updated_at: '2026-09-15 14:30',
           updated_by: 'admin',
-          description: '拉取开源 SDK 与 Helm Chart 依赖',
+          description: '开源 SDK 与 Helm Chart 依赖',
         },
       ];
     case 'ai':
       return [
         {
           id: 'ai-1',
-          name: 'OpenAI GPT-4o 生产推理引擎',
+          name: 'OpenAI GPT-4o 审查引擎',
           type: 'OpenAI',
           url: 'https://api.openai.com/v1',
           status: 'connected',
           updated_at: '2026-09-19 09:00',
           updated_by: 'admin',
-          description: '智能代码审查与发布变更风险预测',
+          description: 'PR 代码智能审查与安全漏洞分析',
         },
         {
           id: 'ai-2',
-          name: '通义千问 Qwen-Max 审查模型',
+          name: '通义千问 Qwen-Max',
           type: '通义千问',
           url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
           status: 'connected',
           updated_at: '2026-09-19 11:30',
           updated_by: 'admin',
-          description: '中文代码注释生成与安全合规扫描',
+          description: '中文代码生成与规范研判',
         },
       ];
     case 'ci':
@@ -804,37 +699,37 @@ function getDefaultSampleItems(categoryKey: string): IntegrationItem[] {
           id: 'ci-1',
           name: '核心 Jenkins 构建集群',
           type: 'Jenkins',
-          url: 'http://jenkins.internal.koderover.com:8080',
+          url: 'http://jenkins.internal.corp:8080',
           status: 'connected',
           updated_at: '2026-09-17 16:40',
           updated_by: 'admin',
-          description: '调度传统历史打包构建任务',
+          description: '调度传统编译打包流水线任务',
         },
       ];
     case 'scanner':
       return [
         {
           id: 'sonar-1',
-          name: 'SonarQube 企业静态代码安全中心',
+          name: 'SonarQube 企业安全质量门禁',
           type: 'SonarQube',
           url: 'http://sonar.internal.corp:9000',
           status: 'connected',
           updated_at: '2026-09-18 18:20',
           updated_by: 'admin',
-          description: '全局静态漏洞分析与质量门禁阻断',
+          description: '静态代码规范审查与缺陷检测',
         },
       ];
     case 'im':
       return [
         {
           id: 'im-1',
-          name: '企业飞书发布通知群机器人',
+          name: '企业飞书构建发布通知群',
           type: '飞书 Lark',
           url: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
           status: 'connected',
           updated_at: '2026-09-16 09:15',
           updated_by: 'admin',
-          description: '构建与发布事件实时群通知推送',
+          description: '发布事件实时群通知推送',
         },
       ];
     default:
@@ -847,7 +742,7 @@ function getDefaultSampleItems(categoryKey: string): IntegrationItem[] {
           status: 'connected',
           updated_at: '2026-09-19 12:00',
           updated_by: 'admin',
-          description: '系统自动集成的基础连接端点',
+          description: '系统自动初始化的连接配置',
         },
       ];
   }
