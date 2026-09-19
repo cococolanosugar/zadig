@@ -27,6 +27,11 @@ import CodeHostsPage from '../pages/Settings/CodeHosts';
 import RegistriesPage from '../pages/Settings/Registries';
 import StoragePage from '../pages/Settings/Storage';
 import UsersPage from '../pages/Settings/Users';
+import { SystemConfigPage } from '../pages/Settings/Config';
+import SprintsPage from '../pages/Projects/Sprints';
+import BuildsPage from '../pages/Projects/Builds';
+import ScannersPage from '../pages/Projects/Scanners';
+import ProjectWizardPage from '../pages/Projects/Wizard';
 
 export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -62,8 +67,11 @@ export const AppRouter: React.FC = () => {
           <Route path="status" element={<DashboardPage />} />
           <Route path="" element={<Navigate to="dashboard" replace />} />
 
-          {/* Global Projects Overview */}
+          {/* Global Projects Overview & Creation Wizard */}
           <Route path="projects" element={<ProjectsPage />} />
+          <Route path="projects/create" element={<ProjectWizardPage />} />
+          <Route path="projects/create/:projectName/k8s/info" element={<ProjectWizardPage />} />
+          <Route path="projects/create/:projectName/k8s/:step" element={<ProjectWizardPage />} />
 
           {/* Project-Scoped Workspace with Secondary Sub-Navigation */}
           <Route path="projects/detail/:projectName" element={<ProjectDetailLayout />}>
@@ -73,10 +81,10 @@ export const AppRouter: React.FC = () => {
             <Route path="pipelines/:name/task/:taskId" element={<PipelineExecutionPage />} />
             <Route path="envs" element={<EnvironmentsPage />} />
             <Route path="services" element={<ServicesPage />} />
-            <Route path="sprints" element={<PipelinesPage />} />
-            <Route path="builds" element={<PipelinesPage />} />
+            <Route path="sprints" element={<SprintsPage />} />
+            <Route path="builds" element={<BuildsPage />} />
             <Route path="test" element={<QualityCenterPage />} />
-            <Route path="scanner" element={<PipelinesPage />} />
+            <Route path="scanner" element={<ScannersPage />} />
             <Route path="version" element={<DeliveryPage />} />
           </Route>
 
@@ -123,7 +131,7 @@ export const AppRouter: React.FC = () => {
           <Route path="system/registries" element={<RegistriesPage />} />
           <Route path="system/storage" element={<StoragePage />} />
           <Route path="system/users" element={<UsersPage />} />
-          <Route path="system/config" element={<ClustersPage />} />
+          <Route path="system/config" element={<SystemConfigPage />} />
 
           <Route
             path="*"
