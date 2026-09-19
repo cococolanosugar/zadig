@@ -112,34 +112,42 @@ export const settingsApi = {
   },
 
   // --- Registries ---
-  async getRegistries(): Promise<RegistryItem[]> {
+  async getRegistries(projectName = ''): Promise<RegistryItem[]> {
     try {
       const publicKey = await authApi.getRSAPublicKey();
       const aesKey = generateAesKey(32);
       const encryptedKey = rsaEncrypt(aesKey, publicKey);
 
       const res = await http.get<RegistryItem[]>(
-        `/api/aslan/system/registry/namespaces?encryptedKey=${encryptedKey}`
+        `/api/aslan/system/registry/namespaces?encryptedKey=${encryptedKey}`,
+        { skipErrorHandler: true }
       );
-      if (!Array.isArray(res)) return [];
-
-      return res.map((reg) => {
-        let decryptedSecret = reg.secret_key;
-        if (reg.secret_key) {
-          try {
-            decryptedSecret = aesDecrypt(reg.secret_key, aesKey);
-          } catch {
-            // Keep original if not encrypted
+      if (Array.isArray(res)) {
+        return res.map((reg) => {
+          let decryptedSecret = reg.secret_key;
+          if (reg.secret_key) {
+            try {
+              decryptedSecret = aesDecrypt(reg.secret_key, aesKey);
+            } catch {
+              // Keep original
+            }
           }
-        }
-        return {
-          ...reg,
-          decrypted_secret_key: decryptedSecret,
-        };
-      });
+          return { ...reg, decrypted_secret_key: decryptedSecret };
+        });
+      }
     } catch {
-      return [];
+      // Fallback to project registry endpoint
+      try {
+        const fallbackRes = await http.get<RegistryItem[]>(
+          `/api/aslan/system/registry/project?projectName=${projectName}`,
+          { skipErrorHandler: true }
+        );
+        if (Array.isArray(fallbackRes)) return fallbackRes;
+      } catch {
+        // Return empty
+      }
     }
+    return [];
   },
 
   async createRegistry(payload: Partial<RegistryItem>): Promise<unknown> {
@@ -151,34 +159,42 @@ export const settingsApi = {
   },
 
   // --- Storage (S3 / OSS) ---
-  async getStorages(): Promise<StorageItem[]> {
+  async getStorages(projectName = 'demo-k8s'): Promise<StorageItem[]> {
     try {
       const publicKey = await authApi.getRSAPublicKey();
       const aesKey = generateAesKey(32);
       const encryptedKey = rsaEncrypt(aesKey, publicKey);
 
       const res = await http.get<StorageItem[]>(
-        `/api/aslan/system/s3storage?encryptedKey=${encryptedKey}`
+        `/api/aslan/system/s3storage?encryptedKey=${encryptedKey}`,
+        { skipErrorHandler: true }
       );
-      if (!Array.isArray(res)) return [];
-
-      return res.map((st) => {
-        let decryptedSk = st.sk;
-        if (st.sk) {
-          try {
-            decryptedSk = aesDecrypt(st.sk, aesKey);
-          } catch {
-            // fallback
+      if (Array.isArray(res)) {
+        return res.map((st) => {
+          let decryptedSk = st.sk;
+          if (st.sk) {
+            try {
+              decryptedSk = aesDecrypt(st.sk, aesKey);
+            } catch {
+              // fallback
+            }
           }
-        }
-        return {
-          ...st,
-          decrypted_sk: decryptedSk,
-        };
-      });
+          return { ...st, decrypted_sk: decryptedSk };
+        });
+      }
     } catch {
-      return [];
+      // Fallback to project s3storage endpoint
+      try {
+        const fallbackRes = await http.get<StorageItem[]>(
+          `/api/aslan/system/s3storage/project?projectName=${projectName || 'demo-k8s'}`,
+          { skipErrorHandler: true }
+        );
+        if (Array.isArray(fallbackRes)) return fallbackRes;
+      } catch {
+        // Return empty
+      }
     }
+    return [];
   },
 
   async createStorage(payload: Partial<StorageItem>): Promise<unknown> {

@@ -11,6 +11,7 @@ import {
   SafetyCertificateOutlined,
   HistoryOutlined,
   ScheduleOutlined,
+  ProjectOutlined,
 } from '@ant-design/icons';
 import { feedback } from '../utils/feedback';
 
@@ -24,6 +25,14 @@ export const ProjectDetailLayout: React.FC = () => {
   const currentTab = pathSegments[5] || 'pipelines';
 
   const tabItems = [
+    {
+      key: 'detail',
+      label: (
+        <span>
+          <ProjectOutlined /> 项目概览
+        </span>
+      ),
+    },
     {
       key: 'sprints',
       label: (
