@@ -28,7 +28,18 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use(
   (config) => {
-    const token = useAuthStore.getState().token;
+    let token = useAuthStore.getState().token;
+    if (!token) {
+      try {
+        const stored = localStorage.getItem('zadig_auth_store');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          token = parsed?.state?.token;
+        }
+      } catch {
+        // Ignore
+      }
+    }
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -55,13 +66,17 @@ apiClient.interceptors.response.use(
 
     const status = error.response?.status;
     const responseData = error.response?.data;
+    const requestUrl = error.config?.url || '';
 
-    // Handle 401 Unauthorized
-    if (status === 401) {
-      useAuthStore.getState().logout();
-      if (!window.location.pathname.startsWith('/login')) {
-        const redirect = encodeURIComponent(window.location.pathname + window.location.search);
-        window.location.href = `/login?redirect=${redirect}`;
+    // Handle 401 Unauthorized only for authenticated requests outside login/public key
+    if (status === 401 && !requestUrl.includes('/rsaKey/') && !requestUrl.includes('/login')) {
+      const hadToken = Boolean(error.config?.headers?.Authorization);
+      if (hadToken) {
+        useAuthStore.getState().logout();
+        if (!window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/signin')) {
+          const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+          window.location.href = `/login?redirect=${redirect}`;
+        }
       }
       return Promise.reject(error);
     }

@@ -120,8 +120,17 @@ export const LoginPage: React.FC = () => {
 
         feedback.message.success('登录成功，欢迎使用 Zadig！');
 
-        const redirect = searchParams.get('redirect');
-        navigate(redirect ? decodeURIComponent(redirect) : '/v1/dashboard', { replace: true });
+        let target = searchParams.get('redirect') ? decodeURIComponent(searchParams.get('redirect')!) : '/v1/dashboard';
+        while (target.startsWith('/login') || target.startsWith('/signin')) {
+          const match = target.match(/[?&]redirect=([^&]+)/);
+          if (match) {
+            target = decodeURIComponent(match[1]);
+          } else {
+            target = '/v1/dashboard';
+            break;
+          }
+        }
+        navigate(target, { replace: true });
       }
     } catch (err: unknown) {
       const error = err as { response?: { data?: { errorMsg?: string; message?: string; description?: string } } };

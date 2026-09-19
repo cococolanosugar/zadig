@@ -10,24 +10,62 @@ export const projectApi = {
   /**
    * Get list of projects
    */
-  async getProjects(params?: { ungrouped?: boolean; page_num?: number; page_size?: number; filter?: string }): Promise<ProjectItem[]> {
-    const ungrouped = params?.ungrouped !== undefined ? params.ungrouped : true;
-    const res = await http.get<ProjectListResponse | ProjectItem[]>('/api/aslan/project/projects', {
-      params: {
-        ungrouped,
-        page_num: params?.page_num || 1,
-        page_size: params?.page_size || 50,
-        filter: params?.filter || '',
-      },
-    });
+  async getProjects(params?: {
+    ungrouped?: boolean;
+    page_num?: number;
+    page_size?: number;
+    filter?: string;
+    group_name?: string;
+  }): Promise<ProjectItem[]> {
+    try {
+      const res = await http.get<ProjectListResponse>('/api/v1/picket/projects', {
+        params: {
+          verbosity: 'detailed',
+          page_num: params?.page_num || 1,
+          page_size: params?.page_size || 50,
+          filter: params?.filter || '',
+          group_name: params?.group_name || '',
+          ungrouped: params?.ungrouped !== undefined ? params.ungrouped : false,
+        },
+      });
 
-    if (res && 'projects' in res && Array.isArray(res.projects)) {
-      return res.projects;
-    }
-    if (Array.isArray(res)) {
-      return res;
+      if (res && res.projects && Array.isArray(res.projects)) {
+        return res.projects;
+      }
+    } catch {
+      try {
+        const fallbackRes = await http.get<ProjectListResponse | ProjectItem[]>('/api/aslan/project/projects', {
+          params: {
+            ungrouped: params?.ungrouped !== undefined ? params.ungrouped : true,
+            page_num: params?.page_num || 1,
+            page_size: params?.page_size || 50,
+            filter: params?.filter || '',
+          },
+        });
+
+        if (fallbackRes && 'projects' in fallbackRes && Array.isArray(fallbackRes.projects)) {
+          return fallbackRes.projects;
+        }
+        if (Array.isArray(fallbackRes)) {
+          return fallbackRes;
+        }
+      } catch {
+        // Return empty
+      }
     }
     return [];
+  },
+
+  /**
+   * Get project groups
+   */
+  async getProjectGroups(): Promise<Array<{ id: string; name: string }>> {
+    try {
+      const res = await http.get<Array<{ id: string; name: string }>>('/api/aslan/project/group');
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
   },
 
   /**
