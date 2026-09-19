@@ -240,7 +240,13 @@ export const BasicLayout: React.FC = () => {
       key: 'system-settings',
       icon: <SettingOutlined />,
       label: '系统设置',
-      onClick: () => navigate('/v1/system/clusters'),
+      onClick: () => navigate('/v1/system/integration'),
+    },
+    {
+      key: 'system-integration',
+      icon: <ApiOutlined />,
+      label: '系统集成',
+      onClick: () => navigate('/v1/system/integration'),
     },
     {
       key: 'enterprise',
@@ -359,6 +365,16 @@ export const BasicLayout: React.FC = () => {
           items={[
             { title: <span style={{ color: '#606266' }}>发布管理</span> },
             { title: <span style={{ color: '#303133', fontWeight: 600 }}>工作流</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/system/integration')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>系统设置</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>系统集成</span> },
           ]}
         />
       );
@@ -482,7 +498,7 @@ export const BasicLayout: React.FC = () => {
             }}
           >
             <div
-              onClick={() => navigate('/v1/system/clusters')}
+              onClick={() => navigate('/v1/system/integration')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
