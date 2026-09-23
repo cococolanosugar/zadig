@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
-import { Card, Tabs, Typography, Form, Input, Button, Descriptions, Tag, Alert, Space } from 'antd';
+import { Card, Tabs, Typography, Form, Input, Button, Descriptions, Tag, Alert, Space, Switch, Select } from 'antd';
 import {
   ApiOutlined,
   UserOutlined,
   SafetyCertificateOutlined,
   KeyOutlined,
   ReloadOutlined,
+  SettingOutlined,
+  SaveOutlined,
 } from '@ant-design/icons';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth';
 import { feedback } from '../../utils/feedback';
 import http from '../../api/client';
@@ -15,7 +18,22 @@ const { Title, Text, Paragraph } = Typography;
 
 export const UserProfilePage: React.FC = () => {
   const { userInfo, roles, token: userJwtToken } = useAuthStore();
-  const [activeTab, setActiveTab] = useState('mcp');
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const getActiveTab = () => {
+    const path = location.pathname;
+    if (path.endsWith('/info')) return 'info';
+    if (path.endsWith('/security')) return 'security';
+    if (path.endsWith('/preference')) return 'preference';
+    return 'mcp';
+  };
+
+  const activeTab = getActiveTab();
+
+  const handleTabChange = (key: string) => {
+    navigate(`/v1/profile/${key}`);
+  };
 
   // MCP Token state
   const [apiToken, setApiToken] = useState<string>(userInfo?.token || userJwtToken || 'zadig_mcp_sec_live_token');
@@ -24,6 +42,17 @@ export const UserProfilePage: React.FC = () => {
   // Password update form state
   const [passwordForm] = Form.useForm();
   const [updatingPassword, setUpdatingPassword] = useState<boolean>(false);
+
+  // Preferences state
+  const savedPref = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('zadig_user_preferences') || '{}');
+    } catch {
+      return {};
+    }
+  })();
+  const [prefForm] = Form.useForm();
+  const [savingPref, setSavingPref] = useState<boolean>(false);
 
   const handleRotateToken = async () => {
     if (!userInfo?.uid) {
@@ -69,6 +98,19 @@ export const UserProfilePage: React.FC = () => {
     }
   };
 
+  const handleSavePreferences = async () => {
+    setSavingPref(true);
+    try {
+      const values = await prefForm.validateFields();
+      localStorage.setItem('zadig_user_preferences', JSON.stringify(values));
+      feedback.message.success('用户个人偏好设置已成功保存！');
+    } catch {
+      // Form validation error
+    } finally {
+      setSavingPref(false);
+    }
+  };
+
   const tabItems = [
     {
       key: 'mcp',
@@ -94,6 +136,14 @@ export const UserProfilePage: React.FC = () => {
         </span>
       ),
     },
+    {
+      key: 'preference',
+      label: (
+        <span>
+          <SettingOutlined /> 偏好设置
+        </span>
+      ),
+    },
   ];
 
   return (
@@ -103,7 +153,7 @@ export const UserProfilePage: React.FC = () => {
           个人中心与配置
         </Title>
         <Text type="secondary" style={{ fontSize: 13 }}>
-          管理当前个人账户资料、安全鉴权凭据以及 AI 编程助手 MCP 协议端点
+          管理当前个人账户资料、安全鉴权凭据、个性化偏好以及 AI 编程助手 MCP 协议端点
         </Text>
       </div>
 
@@ -115,7 +165,7 @@ export const UserProfilePage: React.FC = () => {
         <Tabs
           activeKey={activeTab}
           items={tabItems}
-          onChange={(k) => setActiveTab(k)}
+          onChange={handleTabChange}
           tabBarStyle={{ marginBottom: 24 }}
         />
 
@@ -208,19 +258,24 @@ export const UserProfilePage: React.FC = () => {
               column={1}
               size="middle"
               styles={{ label: { width: 160, fontWeight: 500, backgroundColor: '#fafafa' } }}
-            >
-              <Descriptions.Item label="账号名称">{userInfo?.account || 'admin@qq.com'}</Descriptions.Item>
-              <Descriptions.Item label="电子邮箱">{userInfo?.email || 'admin@qq.com'}</Descriptions.Item>
-              <Descriptions.Item label="显示昵称">{userInfo?.name || '超级管理员'}</Descriptions.Item>
-              <Descriptions.Item label="系统权限">
-                <Tag color="magenta">
-                  {roles.includes('admin') ? '超级管理员 (System Admin)' : '普通研发人员'}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="账号源">内置系统用户 (system)</Descriptions.Item>
-            </Descriptions>
+              items={[
+                { key: 'account', label: '账号名称', children: userInfo?.account || '-' },
+                { key: 'email', label: '电子邮箱', children: userInfo?.email || '-' },
+                { key: 'name', label: '显示昵称', children: userInfo?.name || '超级管理员' },
+                {
+                  key: 'roles',
+                  label: '系统权限',
+                  children: (
+                    <Tag color="magenta">
+                      {roles.includes('admin') ? '超级管理员 (System Admin)' : '普通研发人员'}
+                    </Tag>
+                  ),
+                },
+                { key: 'source', label: '账号源', children: '内置系统用户 (system)' },
+              ]}
+            />
           </div>
-        ) : (
+        ) : activeTab === 'security' ? (
           <div style={{ maxWidth: 520 }}>
             <Title level={5} style={{ marginBottom: 16 }}>
               修改个人登录密码
@@ -257,6 +312,76 @@ export const UserProfilePage: React.FC = () => {
                 onClick={handleUpdatePassword}
               >
                 更新密码
+              </Button>
+            </Form>
+          </div>
+        ) : (
+          <div style={{ maxWidth: 640 }}>
+            <Title level={5} style={{ marginBottom: 16 }}>
+              个性化偏好设置
+            </Title>
+            <Form
+              form={prefForm}
+              layout="vertical"
+              initialValues={{
+                language: savedPref.language || 'zh-CN',
+                defaultHome: savedPref.defaultHome || '/v1/dashboard',
+                enableNotification: savedPref.enableNotification !== false,
+                editorTheme: savedPref.editorTheme || 'vs-dark',
+                keybinding: savedPref.keybinding || 'default',
+              }}
+            >
+              <Form.Item name="language" label="系统界面语言">
+                <Select
+                  options={[
+                    { label: '简体中文 (zh-CN)', value: 'zh-CN' },
+                    { label: 'English (en-US)', value: 'en-US' },
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item name="defaultHome" label="登录默认跳转首页">
+                <Select
+                  options={[
+                    { label: '工作台 (Dashboard)', value: '/v1/dashboard' },
+                    { label: '运行状态 (Status)', value: '/v1/status' },
+                    { label: '项目列表 (Projects)', value: '/v1/projects' },
+                    { label: '发布计划 (Release Plan)', value: '/v1/releasePlan' },
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item
+                name="enableNotification"
+                label="浏览器桌面推送通知"
+                valuePropName="checked"
+                extra="当工作流任务完成、审批驳回或环境异常时弹出桌面通知。"
+              >
+                <Switch />
+              </Form.Item>
+              <Form.Item name="editorTheme" label="Monaco YAML 编辑器主题">
+                <Select
+                  options={[
+                    { label: '暗黑模式 (VS-Dark)', value: 'vs-dark' },
+                    { label: '明亮模式 (VS-Light)', value: 'vs' },
+                    { label: '高对比度 (HC-Black)', value: 'hc-black' },
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item name="keybinding" label="代码编辑快捷键模式">
+                <Select
+                  options={[
+                    { label: '标准模式 (Default / VSCode)', value: 'default' },
+                    { label: 'Vim 键位映射', value: 'vim' },
+                    { label: 'Emacs 键位映射', value: 'emacs' },
+                  ]}
+                />
+              </Form.Item>
+              <Button
+                type="primary"
+                icon={<SaveOutlined />}
+                loading={savingPref}
+                onClick={handleSavePreferences}
+              >
+                保存偏好设置
               </Button>
             </Form>
           </div>

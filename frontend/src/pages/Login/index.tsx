@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Row, Col, Form, Input, Button, Typography, Space, Alert, Carousel } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Row, Col, Form, Input, Button, Typography, Space, Alert, Carousel, Modal } from 'antd';
 import {
   UserOutlined,
   LockOutlined,
@@ -60,16 +60,91 @@ const CAROUSEL_SLIDES = [
 
 export const LoginPage: React.FC = () => {
   const [form] = Form.useForm<LoginFormValues>();
+  const [resetForm] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showCaptcha, setShowCaptcha] = useState(false);
   const [captchaId, setCaptchaId] = useState<string | null>(null);
   const [captchaImage, setCaptchaImage] = useState<string | null>(null);
+  const [resetMode, setResetMode] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [retrieveModalOpen, setRetrieveModalOpen] = useState(false);
+  const [retrieving, setRetrieving] = useState(false);
+  const [retrieveAccount, setRetrieveAccount] = useState('');
+  const [retrieveResult, setRetrieveResult] = useState<string | null>(null);
+  const [connectors, setConnectors] = useState<Array<{ id: string; name: string }>>([]);
+
+  // 第三方登录连接器（Dex）：有启用的连接器时展示入口
+  useEffect(() => {
+    if (resetMode) return;
+    fetch('/api/v1/connectors')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((list) => {
+        if (Array.isArray(list) && list.length > 0) {
+          setConnectors(list.filter((c: { id?: string }) => c.id).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
+        }
+      })
+      .catch(() => setConnectors([]));
+  }, [resetMode]);
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const setAuth = useAuthStore((state) => state.setAuth);
   const setRoles = useAuthStore((state) => state.setRoles);
+  const idToken = searchParams.get('idtoken') || '';
+
+  // /signin?idtoken=<jwt> — password-reset link from the retrieve email
+  React.useEffect(() => {
+    if (idToken) {
+      setResetMode(true);
+    }
+  }, [idToken]);
+
+  const handleRetrievePassword = async (account: string) => {
+    setRetrieving(true);
+    setRetrieveResult(null);
+    try {
+      const res = await fetch(`/api/v1/retrieve?account=${encodeURIComponent(account)}`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setRetrieveResult(
+          `重置链接已发送至 ${data.email || '您的邮箱'}，请在 5 分钟内查收邮件并按提示重置密码。`
+        );
+      } else {
+        setRetrieveResult(data?.errorMsg || data?.description || data?.message || '发送失败，请确认账号或联系管理员配置 SMTP');
+      }
+    } catch {
+      setRetrieveResult('网络异常，请稍后重试');
+    } finally {
+      setRetrieving(false);
+    }
+  };
+
+  const handleResetPassword = async (values: { password: string }) => {
+    setResetting(true);
+    try {
+      const res = await fetch('/api/v1/reset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ password: values.password }),
+      });
+      if (res.ok) {
+        feedback.message.success('密码重置成功，请使用新密码登录');
+        setResetMode(false);
+        navigate('/signin', { replace: true });
+      } else {
+        setErrorMessage('密码重置失败，链接可能已过期（有效期 5 分钟），请重新申请找回密码');
+        setResetMode(false);
+      }
+    } catch {
+      setErrorMessage('网络异常，密码重置失败，请稍后重试');
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const fetchCaptcha = async (accountName?: string) => {
     try {
@@ -259,6 +334,72 @@ export const LoginPage: React.FC = () => {
             />
           )}
 
+          {resetMode ? (
+            <Form
+              form={resetForm}
+              name="resetPasswordForm"
+              layout="vertical"
+              size="large"
+              onFinish={handleResetPassword}
+              requiredMark={false}
+            >
+              <Alert
+                title="重置登录密码"
+                description="密码必须包含大小写字母和数字，且长度不小于 8 位。"
+                type="info"
+                showIcon
+                style={{ marginBottom: 24, borderRadius: 6 }}
+              />
+              <Form.Item
+                name="password"
+                label={<span style={{ color: '#e2e8f0', fontSize: 14 }}>新密码</span>}
+                rules={[
+                  { required: true, message: '请输入新密码' },
+                  {
+                    pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/,
+                    message: '密码必须包含大小写字母和数字，且长度不小于 8 位',
+                  },
+                ]}
+              >
+                <Input.Password
+                  prefix={<LockOutlined style={{ color: '#94a3b8' }} />}
+                  placeholder="请输入新密码"
+                  style={{ height: 42, borderRadius: 6, backgroundColor: '#ffffff' }}
+                />
+              </Form.Item>
+              <Form.Item
+                name="confirm"
+                label={<span style={{ color: '#e2e8f0', fontSize: 14 }}>确认新密码</span>}
+                dependencies={['password']}
+                rules={[
+                  { required: true, message: '请再次输入新密码' },
+                  ({ getFieldValue }) => ({
+                    validator: (_, v) =>
+                      !v || getFieldValue('password') === v
+                        ? Promise.resolve()
+                        : Promise.reject(new Error('两次输入的密码不一致')),
+                  }),
+                ]}
+              >
+                <Input.Password
+                  prefix={<LockOutlined style={{ color: '#94a3b8' }} />}
+                  placeholder="请再次输入新密码"
+                  style={{ height: 42, borderRadius: 6, backgroundColor: '#ffffff' }}
+                />
+              </Form.Item>
+              <Form.Item style={{ marginBottom: 12, marginTop: 24 }}>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  loading={resetting}
+                  block
+                  style={{ height: 42, fontSize: 15, fontWeight: 500, borderRadius: 6, backgroundColor: '#0066ff' }}
+                >
+                  重置密码
+                </Button>
+              </Form.Item>
+            </Form>
+          ) : (
           <Form
             form={form}
             name="loginForm"
@@ -346,13 +487,96 @@ export const LoginPage: React.FC = () => {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
               <a
-                onClick={() => feedback.message.info('请联系管理员重置密码')}
+                onClick={() => {
+                  setRetrieveResult(null);
+                  setRetrieveModalOpen(true);
+                }}
                 style={{ fontSize: 13, color: '#38bdf8' }}
               >
                 找回密码
               </a>
             </div>
+
+            {connectors.length > 0 && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                  <div style={{ flex: 1, height: 1, background: 'rgba(148,163,184,0.4)' }} />
+                  <Text style={{ fontSize: 12, color: '#94a3b8' }}>第三方账号登录</Text>
+                  <div style={{ flex: 1, height: 1, background: 'rgba(148,163,184,0.4)' }} />
+                </div>
+                <Space orientation="horizontal" wrap style={{ justifyContent: 'center', marginBottom: 16 }}>
+                  {connectors.map((c) => (
+                    <Button
+                      key={c.id}
+                      style={{ borderRadius: 6 }}
+                      onClick={() => {
+                        window.location.href = '/api/v1/login';
+                      }}
+                    >
+                      {c.name}
+                    </Button>
+                  ))}
+                </Space>
+              </>
+            )}
           </Form>
+          )}
+
+          {/* Retrieve Password Modal */}
+          <Modal
+            title="找回密码"
+            open={retrieveModalOpen}
+            onCancel={() => setRetrieveModalOpen(false)}
+            footer={null}
+            width={420}
+          >
+            <div style={{ padding: '8px 0 16px' }}>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                输入注册的用户名，系统将向绑定邮箱发送重置链接（需管理员已配置 SMTP 邮箱服务器）。
+              </Text>
+              <Input
+                prefix={<UserOutlined style={{ color: '#94a3b8' }} />}
+                placeholder="请输入用户名"
+                style={{ height: 40, borderRadius: 6 }}
+                value={retrieveAccount}
+                onChange={(e) => {
+                  setRetrieveAccount(e.target.value);
+                  if (retrieveResult) setRetrieveResult(null);
+                }}
+                onPressEnter={() => {
+                  if (!retrieveAccount.trim()) {
+                    setRetrieveResult('请输入用户名');
+                    return;
+                  }
+                  handleRetrievePassword(retrieveAccount.trim());
+                }}
+                autoFocus
+              />
+              <Button
+                type="primary"
+                block
+                loading={retrieving}
+                style={{ marginTop: 12, height: 40, borderRadius: 6 }}
+                onClick={() => {
+                  if (!retrieveAccount.trim()) {
+                    setRetrieveResult('请输入用户名');
+                    return;
+                  }
+                  handleRetrievePassword(retrieveAccount.trim());
+                }}
+              >
+                发送重置链接
+              </Button>
+              {retrieveResult && (
+                <Alert
+                  title={retrieveResult}
+                  type={retrieveResult.includes('已发送') ? 'success' : 'warning'}
+                  showIcon
+                  style={{ marginTop: 12, borderRadius: 6 }}
+                />
+              )}
+            </div>
+          </Modal>
 
           {/* Bottom Copyright */}
           <div style={{ textAlign: 'center', marginTop: 48 }}>

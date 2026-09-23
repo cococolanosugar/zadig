@@ -75,7 +75,7 @@ apiClient.interceptors.response.use(
         useAuthStore.getState().logout();
         if (!window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/signin')) {
           const redirect = encodeURIComponent(window.location.pathname + window.location.search);
-          window.location.href = `/login?redirect=${redirect}`;
+          window.location.href = `/signin?redirect=${redirect}`;
         }
       }
       return Promise.reject(error);

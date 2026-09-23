@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   Steps,
@@ -29,18 +29,50 @@ import { feedback } from '../../utils/feedback';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
-const { Option } = Select;
 
 export const ProjectWizardPage: React.FC = () => {
-  const { projectName: initialProjectName } = useParams<{ projectName?: string }>();
+  const {
+    projectName: initialProjectName,
+    deployType: routeDeployType,
+    step: routeStep,
+  } = useParams<{
+    projectName?: string;
+    deployType?: string;
+    step?: string;
+  }>();
   const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState<number>(0);
+
+  const getInitialStep = () => {
+    if (!routeStep) return 0;
+    if (routeStep === 'info') return 0;
+    if (routeStep === 'service' || routeStep === 'config') return 1;
+    if (routeStep === 'runtime' || routeStep === 'deploy') return 2;
+    if (routeStep === 'delivery' || routeStep === 'release') return 3;
+    const num = parseInt(routeStep, 10);
+    return isNaN(num) ? 0 : Math.min(Math.max(num, 0), 3);
+  };
+
+  const [currentStep, setCurrentStep] = useState<number>(getInitialStep);
   const [loading, setLoading] = useState<boolean>(false);
   const [form] = Form.useForm();
 
   const [projectName, setProjectName] = useState<string>(initialProjectName || '');
   const [projectKey, setProjectKey] = useState<string>('');
-  const [deployType, setDeployType] = useState<string>('k8s');
+  const [deployType, setDeployType] = useState<string>(
+    routeDeployType && ['k8s', 'helm', 'host', 'pm'].includes(routeDeployType)
+      ? routeDeployType
+      : 'k8s'
+  );
+
+  // Step 2: service config (受控)
+  const [serviceName, setServiceName] = useState<string>('');
+  const [servicePort, setServicePort] = useState<string>('8080');
+  const [serviceImage, setServiceImage] = useState<string>('');
+
+  // Step 3: environment config (受控 + 真实集群)
+  const [clusters, setClusters] = useState<Array<{ id: string; name: string }>>([]);
+  const [clusterId, setClusterId] = useState<string>('local');
+  const [selectedEnvs, setSelectedEnvs] = useState<string[]>(['dev', 'qa']);
 
   const stepItems = [
     {
@@ -65,6 +97,157 @@ export const ProjectWizardPage: React.FC = () => {
     },
   ];
 
+  const projectCreatedRef = React.useRef(false);
+
+  // 进入环境设置步骤时加载真实集群列表
+  useEffect(() => {
+    if (currentStep === 2) {
+      http
+        .get<Array<{ id: string; name: string }>>('/api/aslan/cluster/clusters', { skipErrorHandler: true })
+        .then((res) => {
+          const list = Array.isArray(res) ? res : [];
+          setClusters(list.map((c) => ({ id: c.id, name: c.name })));
+        })
+        .catch(() => setClusters([]));
+    }
+  }, [currentStep]);
+
+  const buildDefaultServiceYaml = () => {
+    const name = serviceName || `${projectName || 'demo'}-backend`;
+    const image = serviceImage || 'nginx:alpine';
+    const port = Number(servicePort) || 8080;
+    return `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${name}
+  labels:
+    app.kubernetes.io/name: ${name}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ${name}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ${name}
+    spec:
+      containers:
+        - name: ${name}
+          image: ${image}
+          ports:
+            - containerPort: ${port}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${name}
+spec:
+  selector:
+    app.kubernetes.io/name: ${name}
+  ports:
+    - protocol: TCP
+      port: ${port}
+      targetPort: ${port}
+`;
+  };
+
+  const createProjectResources = async (): Promise<{ ok: boolean; failures: string[] }> => {
+    const failures: string[] = [];
+    const targetProject = projectName || projectKey;
+
+    // 1. 创建服务
+    if (serviceName.trim()) {
+      try {
+        await http.post(
+          `/api/aslan/service/services?production=false`,
+          {
+            product_name: targetProject,
+            service_name: serviceName.trim(),
+            source: 'spock',
+            type: 'k8s',
+            visibility: 'private',
+            yaml: buildDefaultServiceYaml(),
+          },
+          { skipErrorHandler: true }
+        );
+        feedback.message.success(`服务 [${serviceName.trim()}] 创建成功`);
+      } catch (err: any) {
+        failures.push(`服务 ${serviceName.trim()}: ${err?.response?.data?.message || err?.message || '创建失败'}`);
+      }
+    }
+
+    // 2. 创建环境
+    for (const envName of selectedEnvs) {
+      try {
+        await http.post(
+          `/api/aslan/environment/environments?projectName=${targetProject}`,
+          [
+            {
+              product_name: targetProject,
+              env_name: envName,
+              alias: envName,
+              namespace: `${targetProject}-${envName}`,
+              cluster_id: clusterId,
+              production: envName === 'prod',
+              services: serviceName.trim()
+                ? [[{ service_name: serviceName.trim(), type: 'k8s' }]]
+                : [],
+            },
+          ],
+          { skipErrorHandler: true }
+        );
+        feedback.message.success(`环境 [${envName}] 创建成功`);
+      } catch (err: any) {
+        failures.push(`环境 ${envName}: ${err?.response?.data?.message || err?.message || '创建失败'}`);
+      }
+    }
+
+    // 3. 创建交付工作流（构建 → 部署）
+    if (serviceName.trim() && selectedEnvs.length > 0) {
+      try {
+        await http.post(
+          `/api/aslan/workflow/v4`,
+          {
+            name: `${targetProject}-delivery`,
+            project: targetProject,
+            description: '项目向导生成的构建-部署交付流水线',
+            stages: [
+              {
+                name: '构建',
+                parallel: false,
+                jobs: [
+                  {
+                    name: 'build',
+                    type: 'zadig-build',
+                    spec: { service_name: serviceName.trim() },
+                  },
+                ],
+              },
+              {
+                name: '部署',
+                parallel: false,
+                jobs: [
+                  {
+                    name: 'deploy',
+                    type: 'zadig-deploy',
+                    spec: { service_name: serviceName.trim(), env: selectedEnvs[0] },
+                  },
+                ],
+              },
+            ],
+          },
+          { skipErrorHandler: true }
+        );
+        feedback.message.success(`工作流 [${targetProject}-delivery] 创建成功`);
+      } catch (err: any) {
+        failures.push(`工作流: ${err?.response?.data?.message || err?.message || '创建失败'}`);
+      }
+    }
+
+    return { ok: failures.length === 0, failures };
+  };
+
   const handleNext = async () => {
     try {
       if (currentStep === 0) {
@@ -86,8 +269,14 @@ export const ProjectWizardPage: React.FC = () => {
             },
             { skipErrorHandler: true }
           );
-        } catch {
-          // If project exists or local mock, continue
+          projectCreatedRef.current = true;
+        } catch (err: any) {
+          // Project may already exist — allow continuing only in that case
+          const msg = String(err?.response?.data?.message || err?.message || '');
+          if (!/exist|重复|已存在/i.test(msg)) {
+            feedback.message.error(`项目创建失败: ${msg || '请检查网络与权限后重试'}`);
+            return;
+          }
         } finally {
           setLoading(false);
         }
@@ -96,9 +285,19 @@ export const ProjectWizardPage: React.FC = () => {
       if (currentStep < 3) {
         setCurrentStep((prev) => prev + 1);
       } else {
-        // Complete wizard
-        feedback.message.success(`项目 [${projectKey || projectName || '新建项目'}] 创建成功并已初始化交付流水线！`);
-        navigate(`/v1/projects/detail/${projectName || 'default'}/detail`);
+        // 完成向导：批量创建服务/环境/工作流
+        setLoading(true);
+        const { ok, failures } = await createProjectResources();
+        setLoading(false);
+        const target = projectName || projectKey || 'default';
+        if (ok) {
+          feedback.message.success(`项目 [${projectKey || projectName}] 初始化完成！`);
+          navigate(`/v1/projects/detail/${target}/detail`);
+        } else {
+          feedback.message.error(`部分资源创建失败: ${failures.join('；')}`);
+          // 仍进入项目页以便用户继续手动补齐
+          navigate(`/v1/projects/detail/${target}/detail`);
+        }
       }
     } catch {
       // Form validation error
@@ -112,9 +311,8 @@ export const ProjectWizardPage: React.FC = () => {
   };
 
   const handleSkip = () => {
-    const target = projectName || initialProjectName || 'demo-service';
-    feedback.message.info('已跳过项目向导，进入工作空间');
-    navigate(`/v1/projects/detail/${target}/detail`);
+    feedback.message.info('已跳过项目向导，返回项目列表');
+    navigate('/v1/projects');
   };
 
   return (
@@ -260,34 +458,35 @@ export const ProjectWizardPage: React.FC = () => {
         {currentStep === 1 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <Alert
-              title="自动生成微服务骨架"
-              description="系统已为您自动推导声明式基础服务清单，您也可以在后续“服务配置”页面中通过 Monaco YAML 深度定制。"
+              title="创建首个微服务组件"
+              description="向导将按以下配置生成声明式 K8s YAML 并创建服务；完成后可在「服务配置」页面用 Monaco YAML 深度定制。"
               type="info"
               showIcon
             />
 
             <Form layout="vertical">
-              <Form.Item label="首批接入微服务组件">
-                <Space.Compact style={{ width: '100%' }}>
-                  <Input
-                    style={{ width: '70%' }}
-                    defaultValue={`${projectName || 'demo'}-backend`}
-                    placeholder="服务名"
-                  />
-                  <Input
-                    style={{ width: '30%' }}
-                    defaultValue="8080"
-                    placeholder="暴露端口"
-                  />
-                </Space.Compact>
+              <Form.Item label="服务名称" required>
+                <Input
+                  value={serviceName}
+                  onChange={(e) => setServiceName(e.target.value)}
+                  placeholder={`${projectName || 'demo'}-backend`}
+                />
               </Form.Item>
 
-              <Form.Item label="容器镜像源">
-                <Input defaultValue="koderover.tencentcloudcr.com/koderover-public/demo:latest" />
+              <Form.Item label="容器镜像">
+                <Input
+                  value={serviceImage}
+                  onChange={(e) => setServiceImage(e.target.value)}
+                  placeholder="nginx:alpine（后续可在构建任务中替换为构建产物）"
+                />
               </Form.Item>
 
-              <Form.Item label="健康检查路径 (Liveness Probe)">
-                <Input defaultValue="/healthz" />
+              <Form.Item label="暴露端口">
+                <Input
+                  value={servicePort}
+                  onChange={(e) => setServicePort(e.target.value)}
+                  placeholder="8080"
+                />
               </Form.Item>
             </Form>
           </div>
@@ -297,27 +496,39 @@ export const ProjectWizardPage: React.FC = () => {
         {currentStep === 2 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <Alert
-              title="多环境初始纳管"
-              description="向导将自动为该项目在本地集成集群中拉起独立的开发 (dev) 与测试 (qa) 环境命名空间。"
-              type="success"
+              title="初始化环境"
+              description="为项目在所选集群中创建初始环境；标记为生产的集群创建的环境会走生产配置通道。"
+              type="info"
               showIcon
             />
 
             <Form layout="vertical">
               <Form.Item label="目标部署 Kubernetes 集群" required>
-                <Select defaultValue="local">
-                  <Option value="local">内置标准 Kubernetes 集群 (local - v1.28.2)</Option>
-                  <Option value="prod-cluster">生产业务专用集群 (prod-hk-cluster)</Option>
-                </Select>
+                <Select
+                  value={clusterId}
+                  onChange={setClusterId}
+                  options={[
+                    ...(clusters.length > 0
+                      ? clusters.map((c) => ({ label: c.name, value: c.id }))
+                      : [{ label: '本地集群 (local)', value: 'local' }]),
+                  ]}
+                  notFoundContent="未获取到集群列表，默认使用本地集群"
+                />
               </Form.Item>
 
-              <Form.Item label="初始创建环境">
-                <Select mode="multiple" defaultValue={['dev', 'qa']}>
-                  <Option value="dev">开发联调环境 (dev)</Option>
-                  <Option value="qa">测试验收环境 (qa)</Option>
-                  <Option value="staging">预发验证环境 (staging)</Option>
-                  <Option value="prod">生产生产环境 (prod)</Option>
-                </Select>
+              <Form.Item label="初始创建环境" required>
+                <Select
+                  mode="multiple"
+                  value={selectedEnvs}
+                  onChange={setSelectedEnvs}
+                  options={[
+                    { label: '开发联调环境 (dev)', value: 'dev' },
+                    { label: '测试验收环境 (qa)', value: 'qa' },
+                    { label: '预发验证环境 (staging)', value: 'staging' },
+                    { label: '生产环境 (prod)', value: 'prod' },
+                  ]}
+                  placeholder="选择要创建的环境"
+                />
               </Form.Item>
             </Form>
           </div>
@@ -327,19 +538,22 @@ export const ProjectWizardPage: React.FC = () => {
         {currentStep === 3 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <Alert
-              title="就绪！将为您生成标准企业级交付工作流"
-              description="包含代码拉取、自动化镜像构建、SonarQube 质量门禁扫描及多环境并行部署的端到端流水线。"
+              title="确认后向导将依次创建以下资源"
+              description="每一步的结果都会如实反馈；失败项可稍后在对应页面手动补齐。"
               type="info"
               showIcon
             />
 
             <Card variant="borderless" style={{ background: '#f5f5f5' }}>
               <Space orientation="vertical" size={8}>
-                <Text strong>已配置流水线任务阶段：</Text>
-                <Text>1. 源码检出 (Git Clone)</Text>
-                <Text>2. 容器镜像构建与安全审查 (Docker Build & Scan)</Text>
-                <Text>3. 自动化部署至开发环境 (Deploy to Dev Namespace)</Text>
-                <Text>4. 服务探活与健康验收 (Service Healthcheck)</Text>
+                <Text strong>1. 服务: {serviceName.trim() || '(未填写，跳过)'}</Text>
+                <Text>
+                  2. 环境: {selectedEnvs.length > 0 ? selectedEnvs.join('、') : '(未选择，跳过)'}
+                  {clusterId ? ` @ 集群 ${clusterId}` : ''}
+                </Text>
+                <Text>
+                  3. 工作流: {serviceName.trim() && selectedEnvs.length > 0 ? `${projectName || projectKey}-delivery (构建 → 部署至 ${selectedEnvs[0]})` : '(前置条件不满足，跳过)'}
+                </Text>
               </Space>
             </Card>
           </div>

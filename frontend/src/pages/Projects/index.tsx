@@ -233,7 +233,7 @@ export const ProjectsPage: React.FC = () => {
             {filteredProjects.map((project) => {
               const name = project.name || project.product_name || '';
               const alias = project.alias || '';
-              const updatedBy = project.updatedBy || 'admin@qq.com';
+              const updatedBy = project.updatedBy || '-';
               const updateTime = project.updatedAt
                 ? dayjs(project.updatedAt * 1000).format('YYYY-MM-DD HH:mm')
                 : dayjs().format('YYYY-MM-DD HH:mm');
@@ -399,7 +399,7 @@ export const ProjectsPage: React.FC = () => {
                         {record.alias || '-'}
                       </td>
                       <td style={{ padding: '16px 20px', color: '#595959' }}>
-                        {record.updatedBy || 'admin@qq.com'}
+                        {record.updatedBy || '-'}
                       </td>
                       <td style={{ padding: '16px 20px', color: '#8c8c8c' }}>
                         {updateTime}

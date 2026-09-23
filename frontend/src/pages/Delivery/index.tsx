@@ -16,6 +16,7 @@ import {
   Form,
   Select,
   Badge,
+  Spin,
 } from 'antd';
 import {
   HistoryOutlined,
@@ -28,7 +29,7 @@ import {
   ClusterOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
@@ -43,6 +44,7 @@ interface ArtifactItem {
   name: string;
   image?: string;
   image_tag?: string;
+  image_digest?: string;
   project_name?: string;
   workflow_name?: string;
   size?: string;
@@ -56,19 +58,36 @@ interface ReleaseVersionItem {
   id?: string;
   version: string;
   product_name: string;
+  created_at?: string;
+  create_by?: string;
   desc?: string;
   status?: string;
-  create_by?: string;
-  create_time?: number | string;
   services?: Array<{ service_name: string; image?: string }>;
 }
 
 export const DeliveryPage: React.FC = () => {
   const { tab } = useParams<{ tab?: string }>();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = tab || searchParams.get('tab') || 'artifacts';
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const isVersionPath = location.pathname.includes('/version');
+  const initialTab = tab || (isVersionPath ? 'version' : 'artifacts') || searchParams.get('tab') || 'artifacts';
   const [activeTab, setActiveTab] = useState(initialTab);
   const { projects } = useProjectStore();
+
+  useEffect(() => {
+    if (location.pathname.includes('/version')) {
+      setActiveTab('version');
+    } else if (location.pathname.includes('/artifacts')) {
+      setActiveTab('artifacts');
+    }
+  }, [location.pathname]);
+
+  const handleTabChange = (k: string) => {
+    setActiveTab(k);
+    navigate(`/v1/delivery/${k}`);
+  };
 
   const [loading, setLoading] = useState(false);
   const [artifacts, setArtifacts] = useState<ArtifactItem[]>([]);
@@ -78,6 +97,81 @@ export const DeliveryPage: React.FC = () => {
   // Lineage Drawer state
   const [lineageDrawerVisible, setLineageDrawerVisible] = useState(false);
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactItem | null>(null);
+
+  // Service image list modal state
+  const [serviceImagesOpen, setServiceImagesOpen] = useState(false);
+  const [serviceImages, setServiceImages] = useState<Array<{ service: string; image: string }>>([]);
+  const [serviceImagesLoading, setServiceImagesLoading] = useState(false);
+  const [selectedReleaseVersion, setSelectedReleaseVersion] = useState<string>('');
+
+  const handleShowServiceImages = async (record: ReleaseVersionItem) => {
+    setSelectedReleaseVersion(record.version);
+    setServiceImagesOpen(true);
+    setServiceImagesLoading(true);
+    setServiceImages([]);
+    try {
+      const res = await http.get<{
+        productEnvInfo?: { services?: Array<Array<{ service_name: string; containers?: Array<{ image?: string; name?: string }> }>> };
+      }>(`/api/aslan/delivery/releases/${record.id}?projectName=${encodeURIComponent(record.product_name)}`, {
+        skipErrorHandler: true,
+      });
+      const list: Array<{ service: string; image: string }> = [];
+      (res?.productEnvInfo?.services || []).forEach((group) =>
+        (group || []).forEach((svc) => {
+          const image = svc.containers?.[0]?.image || '';
+          list.push({ service: svc.service_name, image });
+        })
+      );
+      setServiceImages(list);
+    } catch {
+      setServiceImages([]);
+    } finally {
+      setServiceImagesLoading(false);
+    }
+  };
+
+  // Version detail drawer state (GET /api/aslan/delivery/releases/:id?projectName=)
+  const [versionDetailOpen, setVersionDetailOpen] = useState(false);
+  const [versionDetailLoading, setVersionDetailLoading] = useState(false);
+  const [versionDetail, setVersionDetail] = useState<Record<string, unknown> | null>(null);
+  const [versionDetailImages, setVersionDetailImages] = useState<Array<{ service: string; image: string }>>([]);
+
+  const openVersionDetail = async (record: ReleaseVersionItem) => {
+    setVersionDetailOpen(true);
+    setVersionDetailLoading(true);
+    setVersionDetail(null);
+    setVersionDetailImages([]);
+    try {
+      const res = await http.get<{
+        version?: string;
+        productName?: string;
+        workflowName?: string;
+        workflowDisplayName?: string;
+        desc?: string;
+        status?: string;
+        type?: string;
+        taskId?: number;
+        labels?: string[];
+        createdBy?: string;
+        createdAt?: number;
+        productEnvInfo?: { services?: Array<Array<{ service_name: string; containers?: Array<{ image?: string; name?: string }> }>> };
+      }>(`/api/aslan/delivery/releases/${record.id}?projectName=${encodeURIComponent(record.product_name)}`, {
+        skipErrorHandler: true,
+      });
+      setVersionDetail(res || null);
+      const list: Array<{ service: string; image: string }> = [];
+      (res?.productEnvInfo?.services || []).forEach((group) =>
+        (group || []).forEach((svc) => {
+          list.push({ service: svc.service_name, image: svc.containers?.[0]?.image || '' });
+        })
+      );
+      setVersionDetailImages(list);
+    } catch {
+      setVersionDetail(null);
+    } finally {
+      setVersionDetailLoading(false);
+    }
+  };
 
   // Create Release Modal state
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -109,11 +203,6 @@ export const DeliveryPage: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-
-  const handleTabChange = (key: string) => {
-    setActiveTab(key);
-    setSearchParams({ tab: key });
-  };
 
   const handleCreateRelease = async () => {
     try {
@@ -232,7 +321,9 @@ export const DeliveryPage: React.FC = () => {
         <Space orientation="vertical" size={2}>
           <Space size={6}>
             <HistoryOutlined style={{ color: '#52c41a' }} />
-            <Text strong>{v}</Text>
+            <Text strong style={{ cursor: 'pointer' }} onClick={() => openVersionDetail(record)}>
+              {v}
+            </Text>
           </Space>
           {record.desc && (
             <Text type="secondary" style={{ fontSize: 12 }}>
@@ -280,11 +371,7 @@ export const DeliveryPage: React.FC = () => {
       key: 'action',
       width: 140,
       render: (_, record) => (
-        <Button
-          type="link"
-          size="small"
-          onClick={() => feedback.message.info(`版本 [${record.version}] 包含微服务镜像已锁定`)}
-        >
+        <Button type="link" size="small" onClick={() => handleShowServiceImages(record)}>
           服务镜像清单
         </Button>
       ),
@@ -432,14 +519,17 @@ export const DeliveryPage: React.FC = () => {
           <div>
             <Descriptions bordered column={1} size="small" style={{ marginBottom: 28 }}>
               <Descriptions.Item label="交付物名称">{selectedArtifact.name}</Descriptions.Item>
-              <Descriptions.Item label="归属项目">
-                <Tag color="blue">{selectedArtifact.project_name || '默认项目'}</Tag>
+              <Descriptions.Item label="镜像">
+                <Text code style={{ fontSize: 12 }}>{selectedArtifact.image || '-'}</Text>
               </Descriptions.Item>
-              <Descriptions.Item label="构建工作流">
-                {selectedArtifact.workflow_name || 'ci-pipeline'}
+              <Descriptions.Item label="镜像 Digest">
+                <Text code style={{ fontSize: 12 }}>{selectedArtifact.image_digest || '-'}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="归属项目">
+                <Tag color="blue">{selectedArtifact.project_name || '-'}</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="创建时间">
-                {selectedArtifact.created_at || '刚刚'}
+                {selectedArtifact.created_at || '-'}
               </Descriptions.Item>
             </Descriptions>
 
@@ -456,7 +546,7 @@ export const DeliveryPage: React.FC = () => {
                     <div>
                       <Text strong>1. 代码仓库提交 (Git Commit)</Text>
                       <Paragraph type="secondary" style={{ fontSize: 12, margin: '4px 0 0' }}>
-                        分支: {selectedArtifact.branch || 'main'} | 提交人: {selectedArtifact.author || 'dev-engineer'}
+                        分支: {selectedArtifact.branch || '-'} | 提交人: {selectedArtifact.author || '-'}
                       </Paragraph>
                     </div>
                   ),
@@ -500,6 +590,115 @@ export const DeliveryPage: React.FC = () => {
               ]}
             />
           </div>
+        )}
+      </Drawer>
+
+      {/* Service Image List Modal */}
+      <Modal
+        title={`服务镜像清单: ${selectedReleaseVersion}`}
+        open={serviceImagesOpen}
+        onCancel={() => setServiceImagesOpen(false)}
+        footer={null}
+        width={680}
+      >
+        <Table
+          dataSource={serviceImages}
+          rowKey="service"
+          loading={serviceImagesLoading}
+          pagination={false}
+          size="small"
+          columns={[
+            { title: '服务名称', dataIndex: 'service', key: 'service', render: (s) => <Text strong>{s}</Text> },
+            {
+              title: '镜像地址',
+              dataIndex: 'image',
+              key: 'image',
+              render: (img) => <Text code style={{ fontSize: 12 }}>{img || '-'}</Text>,
+            },
+          ]}
+          locale={{
+            emptyText: <Empty description="版本详情中未包含服务镜像信息" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+          }}
+        />
+      </Modal>
+
+      {/* Version Detail Drawer */}
+      <Drawer
+        title={`版本详情: ${String((versionDetail as { version?: string })?.version || '')}`}
+        placement="right"
+        open={versionDetailOpen}
+        onClose={() => {
+          setVersionDetailOpen(false);
+          setVersionDetail(null);
+        }}
+        size="large"
+      >
+        {versionDetailLoading ? (
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <Spin size="large" />
+          </div>
+        ) : versionDetail ? (
+          <div>
+            <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label="版本号">
+                <Text strong>{String(versionDetail.version || '-')}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="归属项目">
+                <Tag color="blue">{String(versionDetail.productName || '-')}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="版本类型">
+                <Tag color="geekblue">{String(versionDetail.type || '-')}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="来源工作流">
+                {String(versionDetail.workflowDisplayName || versionDetail.workflowName || '-')}
+                {versionDetail.taskId ? <Text type="secondary"> (Task #{String(versionDetail.taskId)})</Text> : null}
+              </Descriptions.Item>
+              <Descriptions.Item label="状态">
+                {String(versionDetail.status || '-') === 'success' || String(versionDetail.status || '') === 'passed' ? (
+                  <Tag color="success">{String(versionDetail.status)}</Tag>
+                ) : (
+                  <Tag color="default">{String(versionDetail.status || '-')}</Tag>
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="标签">
+                <Space orientation="horizontal" size={4} wrap>
+                  {(versionDetail.labels as string[])?.length
+                    ? (versionDetail.labels as string[]).map((l) => <Tag key={l} color="orange">{l}</Tag>)
+                    : '-'}
+                </Space>
+              </Descriptions.Item>
+              <Descriptions.Item label="描述">{String(versionDetail.desc || '-')}</Descriptions.Item>
+              <Descriptions.Item label="创建">
+                {versionDetail.createdAt
+                  ? `${new Date(Number(versionDetail.createdAt) * 1000).toLocaleString()} · ${String(versionDetail.createdBy || '-')}`
+                  : '-'}
+              </Descriptions.Item>
+            </Descriptions>
+
+            <Title level={5} style={{ margin: '20px 0 8px' }}>
+              服务镜像清单 ({versionDetailImages.length})
+            </Title>
+            <Table
+              dataSource={versionDetailImages}
+              rowKey="service"
+              pagination={{ pageSize: 8, hideOnSinglePage: true }}
+              size="small"
+              columns={[
+                { title: '服务名称', dataIndex: 'service', key: 'service', render: (s) => <Text strong>{s}</Text> },
+                {
+                  title: '镜像地址',
+                  dataIndex: 'image',
+                  key: 'image',
+                  render: (img) => <Text code style={{ fontSize: 12 }}>{img || '-'}</Text>,
+                },
+              ]}
+              locale={{
+                emptyText: <Empty description="版本未包含服务镜像信息" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+              }}
+            />
+          </div>
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未获取到版本详情" />
         )}
       </Drawer>
 

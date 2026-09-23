@@ -21,6 +21,7 @@ import {
   type RoleItem,
 } from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
+import { useAuthStore } from '../../../stores/auth';
 
 const { Text } = Typography;
 
@@ -28,6 +29,8 @@ export const UsersPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('users');
   const userActionRef = useRef<ActionType>(null);
   const groupActionRef = useRef<ActionType>(null);
+  const userInfo = useAuthStore((state) => state.userInfo);
+  const currentAccount = userInfo?.account || '';
 
   const handleDeleteUser = async (uid: string) => {
     try {
@@ -65,7 +68,7 @@ export const UsersPage: React.FC = () => {
         <Space orientation="horizontal">
           <UserOutlined style={{ color: '#0066ff' }} />
           <Text strong>{record.account || record.name}</Text>
-          {record.account === 'admin@qq.com' && <Tag color="gold">超级管理员</Tag>}
+          {record.account === currentAccount && <Tag color="gold">当前登录</Tag>}
         </Space>
       ),
     },
@@ -94,7 +97,7 @@ export const UsersPage: React.FC = () => {
       valueType: 'option',
       key: 'option',
       render: (_, record) => [
-        record.account !== 'admin@qq.com' ? (
+        record.account !== currentAccount ? (
           <Popconfirm
             key="delete"
             title="确定删除此账号？"
@@ -107,8 +110,8 @@ export const UsersPage: React.FC = () => {
             </Button>
           </Popconfirm>
         ) : (
-          <Text key="super" type="secondary">
-            内置超管
+          <Text key="self" type="secondary">
+            当前登录账号
           </Text>
         ),
       ],

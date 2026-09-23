@@ -36,10 +36,22 @@ import {
   MoreOutlined,
   ApiOutlined,
   UserOutlined,
+  ArrowLeftOutlined,
+  AppstoreAddOutlined,
+  CloudServerOutlined,
+  KeyOutlined,
+  RobotOutlined,
+  NotificationOutlined,
+  FileTextOutlined,
+  BankOutlined,
+  BgColorsOutlined,
+  ControlOutlined,
+  SafetyOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '../stores/auth';
 import { useProjectStore } from '../stores/project';
 import { projectApi } from '../api/project';
+import http from '../api/client';
 import { feedback } from '../utils/feedback';
 import ZadigLogo from '../components/Brand/ZadigLogo';
 
@@ -54,6 +66,18 @@ export const BasicLayout: React.FC = () => {
 
   const [collapsed, setCollapsed] = useState(false);
   const [showBanner, setShowBanner] = useState(true);
+  const [notifications, setNotifications] = useState<Array<{ id?: string; content?: { title?: string; content?: string }; create_time?: number }>>([]);
+
+  // 拉取系统通知公告 (PullNotifyAnnouncement)
+  useEffect(() => {
+    http
+      .get<Array<{ id?: string; content?: { title?: string; content?: string }; create_time?: number }>>(
+        '/api/aslan/system/announcement',
+        { skipErrorHandler: true }
+      )
+      .then((res) => setNotifications(Array.isArray(res) ? res : []))
+      .catch(() => setNotifications([]));
+  }, []);
   const [openKeys, setOpenKeys] = useState<string[]>([
     'product-delivery',
     'release-management',
@@ -84,18 +108,64 @@ export const BasicLayout: React.FC = () => {
       cancelText: '取消',
       onOk: () => {
         logout();
-        navigate('/login');
+        navigate('/signin');
       },
     });
   };
 
+  // Determine current sidebar mode based on route
+  type SidebarMode = 'main' | 'system' | 'enterprise' | 'profile';
+  const sidebarMode: SidebarMode = (() => {
+    const p = location.pathname;
+    if (p.startsWith('/v1/system')) return 'system';
+    if (p.startsWith('/v1/enterprise')) return 'enterprise';
+    if (p.startsWith('/v1/profile')) return 'profile';
+    return 'main';
+  })();
+
   // Determine active menu item key
   const getSelectedKey = () => {
     const path = location.pathname;
+
+    // System mode keys
+    if (sidebarMode === 'system') {
+      if (path.startsWith('/v1/system/integration')) return '/v1/system/integration';
+      if (path.startsWith('/v1/system/workflowTasks')) return '/v1/system/workflowTasks';
+      if (path.startsWith('/v1/system/plugins')) return '/v1/system/plugins';
+      if (path.startsWith('/v1/system/apps')) return '/v1/system/apps';
+      if (path.startsWith('/v1/system/imgs')) return '/v1/system/imgs';
+      if (path.startsWith('/v1/system/secrets')) return '/v1/system/secrets';
+      if (path.startsWith('/v1/system/aiCodeReview')) return '/v1/system/aiCodeReview';
+      if (path.startsWith('/v1/system/config')) return '/v1/system/config';
+      if (path.startsWith('/v1/system/users')) return '/v1/system/users';
+      if (path.startsWith('/v1/system/announcement')) return '/v1/system/announcement';
+      if (path.startsWith('/v1/system/auditlog')) return '/v1/system/auditlog';
+      return '/v1/system/integration';
+    }
+
+    // Enterprise mode keys
+    if (sidebarMode === 'enterprise') {
+      if (path.startsWith('/v1/enterprise/info')) return '/v1/enterprise/info';
+      if (path.startsWith('/v1/enterprise/license')) return '/v1/enterprise/license';
+      if (path.startsWith('/v1/enterprise/theme')) return '/v1/enterprise/theme';
+      if (path.startsWith('/v1/enterprise/language')) return '/v1/enterprise/language';
+      return '/v1/enterprise/info';
+    }
+
+    // Profile mode keys
+    if (sidebarMode === 'profile') {
+      if (path.startsWith('/v1/profile/info')) return '/v1/profile/info';
+      if (path.startsWith('/v1/profile/mcp')) return '/v1/profile/mcp';
+      if (path.startsWith('/v1/profile/security')) return '/v1/profile/security';
+      if (path.startsWith('/v1/profile/preference')) return '/v1/profile/preference';
+      return '/v1/profile/info';
+    }
+
+    // Main mode keys
     if (path.startsWith('/v1/dashboard')) return '/v1/dashboard';
     if (path.startsWith('/v1/status')) return '/v1/status';
     if (path.startsWith('/v1/projects')) return '/v1/projects';
-    if (path.startsWith('/v1/pipelines')) return '/v1/pipelines';
+    if (path.startsWith('/v1/releaseWorkflow') || path.startsWith('/v1/pipelines')) return '/v1/releaseWorkflow';
     if (path.startsWith('/v1/releasePlan')) return '/v1/releasePlan';
     if (path.startsWith('/v1/plutus')) return '/v1/plutus';
     if (path.startsWith('/v1/directory')) return '/v1/directory';
@@ -108,8 +178,8 @@ export const BasicLayout: React.FC = () => {
     return path;
   };
 
-  // Sidebar Menu Items conforming to live Zadig 4-Domain structure
-  const menuItems: MenuProps['items'] = [
+  // Main navigation menu items
+  const mainMenuItems: MenuProps['items'] = [
     {
       key: '/v1/dashboard',
       icon: <DashboardOutlined />,
@@ -136,8 +206,8 @@ export const BasicLayout: React.FC = () => {
       label: '发布管理',
       children: [
         {
-          key: '/v1/pipelines',
-          label: <Link to="/v1/pipelines">工作流</Link>,
+          key: '/v1/releaseWorkflow',
+          label: <Link to="/v1/releaseWorkflow">工作流</Link>,
         },
         {
           key: '/v1/releasePlan',
@@ -160,7 +230,7 @@ export const BasicLayout: React.FC = () => {
         },
         {
           key: '/v1/template',
-          label: <Link to="/v1/template">模板库</Link>,
+          label: <Link to="/v1/template/k8s-yamls">模板库</Link>,
         },
         {
           key: '/v1/tests',
@@ -168,11 +238,11 @@ export const BasicLayout: React.FC = () => {
         },
         {
           key: '/v1/delivery',
-          label: <Link to="/v1/delivery">制品管理</Link>,
+          label: <Link to="/v1/delivery/version">制品管理</Link>,
         },
         {
           key: '/v1/resource',
-          label: <Link to="/v1/resource">资源配置</Link>,
+          label: <Link to="/v1/resource/cluster">资源配置</Link>,
         },
       ],
     },
@@ -187,11 +257,169 @@ export const BasicLayout: React.FC = () => {
         },
         {
           key: '/v1/insight',
-          label: <Link to="/v1/insight">效能洞察</Link>,
+          label: <Link to="/v1/insight/view">效能洞察</Link>,
         },
       ],
     },
   ];
+
+  // System settings secondary menu items
+  const systemMenuItems: MenuProps['items'] = [
+    {
+      key: 'grp-integration',
+      type: 'group',
+      label: '集成管理',
+      children: [
+        {
+          key: '/v1/system/integration',
+          icon: <ApiOutlined />,
+          label: <Link to="/v1/system/integration">系统集成</Link>,
+        },
+        {
+          key: '/v1/system/workflowTasks',
+          icon: <BranchesOutlined />,
+          label: <Link to="/v1/system/workflowTasks">工作流任务</Link>,
+        },
+        {
+          key: '/v1/system/plugins',
+          icon: <AppstoreAddOutlined />,
+          label: <Link to="/v1/system/plugins">插件管理</Link>,
+        },
+      ],
+    },
+    {
+      key: 'grp-resources',
+      type: 'group',
+      label: '公共资源',
+      children: [
+        {
+          key: '/v1/system/apps',
+          icon: <AppstoreOutlined />,
+          label: <Link to="/v1/system/apps">软件包管理</Link>,
+        },
+        {
+          key: '/v1/system/imgs',
+          icon: <CloudServerOutlined />,
+          label: <Link to="/v1/system/imgs">自定义镜像</Link>,
+        },
+        {
+          key: '/v1/system/secrets',
+          icon: <KeyOutlined />,
+          label: <Link to="/v1/system/secrets">共享变量</Link>,
+        },
+      ],
+    },
+    {
+      key: 'grp-ai',
+      type: 'group',
+      label: 'AI 能力',
+      children: [
+        {
+          key: '/v1/system/aiCodeReview',
+          icon: <RobotOutlined />,
+          label: <Link to="/v1/system/aiCodeReview">AI 代码审查</Link>,
+        },
+      ],
+    },
+    {
+      key: 'grp-system',
+      type: 'group',
+      label: '系统管理',
+      children: [
+        {
+          key: '/v1/system/config',
+          icon: <SettingOutlined />,
+          label: <Link to="/v1/system/config">系统配置</Link>,
+        },
+        {
+          key: '/v1/system/users',
+          icon: <TeamOutlined />,
+          label: <Link to="/v1/system/users">用户管理</Link>,
+        },
+        {
+          key: '/v1/system/announcement',
+          icon: <NotificationOutlined />,
+          label: <Link to="/v1/system/announcement">公告管理</Link>,
+        },
+        {
+          key: '/v1/system/auditlog',
+          icon: <FileTextOutlined />,
+          label: <Link to="/v1/system/auditlog">操作日志</Link>,
+        },
+      ],
+    },
+  ];
+
+  // Enterprise management secondary menu items
+  const enterpriseMenuItems: MenuProps['items'] = [
+    {
+      key: 'grp-enterprise',
+      type: 'group',
+      label: '企业管理',
+      children: [
+        {
+          key: '/v1/enterprise/info',
+          icon: <BankOutlined />,
+          label: <Link to="/v1/enterprise/info">企业信息</Link>,
+        },
+        {
+          key: '/v1/enterprise/license',
+          icon: <SafetyCertificateOutlined />,
+          label: <Link to="/v1/enterprise/license">许可证</Link>,
+        },
+        {
+          key: '/v1/enterprise/theme',
+          icon: <BgColorsOutlined />,
+          label: <Link to="/v1/enterprise/theme">主题设置</Link>,
+        },
+        {
+          key: '/v1/enterprise/language',
+          icon: <GlobalOutlined />,
+          label: <Link to="/v1/enterprise/language">系统语言</Link>,
+        },
+      ],
+    },
+  ];
+
+  // User profile secondary menu items
+  const profileMenuItems: MenuProps['items'] = [
+    {
+      key: 'grp-profile',
+      type: 'group',
+      label: '账号设置',
+      children: [
+        {
+          key: '/v1/profile/info',
+          icon: <UserOutlined />,
+          label: <Link to="/v1/profile/info">账号设置</Link>,
+        },
+        {
+          key: '/v1/profile/mcp',
+          icon: <ApiOutlined />,
+          label: <Link to="/v1/profile/mcp">配置 MCP</Link>,
+        },
+        {
+          key: '/v1/profile/security',
+          icon: <SafetyOutlined />,
+          label: <Link to="/v1/profile/security">安全设置</Link>,
+        },
+        {
+          key: '/v1/profile/preference',
+          icon: <ControlOutlined />,
+          label: <Link to="/v1/profile/preference">偏好设置</Link>,
+        },
+      ],
+    },
+  ];
+
+  const currentMenuItems =
+    sidebarMode === 'system'
+      ? systemMenuItems
+      : sidebarMode === 'enterprise'
+      ? enterpriseMenuItems
+      : sidebarMode === 'profile'
+      ? profileMenuItems
+      : mainMenuItems;
 
   // Quick Action menu items for "+ 添加" button
   const quickActionItems: MenuProps['items'] = [
@@ -205,13 +433,13 @@ export const BasicLayout: React.FC = () => {
       key: 'new-pipeline',
       icon: <BranchesOutlined />,
       label: '新建工作流',
-      onClick: () => navigate('/v1/pipelines'),
+      onClick: () => navigate('/v1/releaseWorkflow'),
     },
     {
       key: 'new-cluster',
       icon: <SettingOutlined />,
       label: '接入 Kubernetes 集群',
-      onClick: () => navigate('/v1/system/clusters'),
+      onClick: () => navigate('/v1/resource/cluster'),
     },
   ];
 
@@ -243,16 +471,10 @@ export const BasicLayout: React.FC = () => {
       onClick: () => navigate('/v1/system/integration'),
     },
     {
-      key: 'system-integration',
-      icon: <ApiOutlined />,
-      label: '系统集成',
-      onClick: () => navigate('/v1/system/integration'),
-    },
-    {
       key: 'enterprise',
       icon: <SafetyCertificateOutlined />,
       label: '企业管理',
-      onClick: () => navigate('/v1/enterprise'),
+      onClick: () => navigate('/v1/enterprise/info'),
     },
     {
       key: 'mcp-config',
@@ -359,7 +581,7 @@ export const BasicLayout: React.FC = () => {
         />
       );
     }
-    if (path.startsWith('/v1/pipelines')) {
+    if (path.startsWith('/v1/releaseWorkflow') || path.startsWith('/v1/pipelines')) {
       return (
         <Breadcrumb
           items={[
@@ -369,6 +591,98 @@ export const BasicLayout: React.FC = () => {
         />
       );
     }
+    if (path.startsWith('/v1/releasePlan')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>发布管理</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>发布计划</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/plutus')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>发布管理</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>客户交付</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/directory')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>资产管理</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>业务目录</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/template')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>资产管理</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>模板库</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/tests')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>资产管理</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>质量中心</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/delivery')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>资产管理</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>制品管理</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/resource')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>资产管理</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>资源配置</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/statistics')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>数据视图</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>数据概览</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/insight')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>数据视图</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>效能洞察</span> },
+          ]}
+        />
+      );
+    }
+
+    // System Settings breadcrumbs
     if (path.startsWith('/v1/system/integration')) {
       return (
         <Breadcrumb
@@ -379,15 +693,198 @@ export const BasicLayout: React.FC = () => {
         />
       );
     }
-    if (path.startsWith('/v1/system')) {
+    if (path.startsWith('/v1/system/workflowTasks')) {
       return (
         <Breadcrumb
           items={[
             { title: <span style={{ color: '#606266' }}>系统设置</span> },
-            { title: <span style={{ color: '#303133', fontWeight: 600 }}>基础设施</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>工作流任务</span> },
           ]}
         />
       );
+    }
+    if (path.startsWith('/v1/system/plugins')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>系统设置</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>插件管理</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/system/apps')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>系统设置</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>软件包管理</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/system/imgs')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>系统设置</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>自定义镜像</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/system/secrets')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>系统设置</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>共享变量</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/system/aiCodeReview')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>系统设置</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>AI 代码审查</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/system/config')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>系统设置</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>系统配置</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/system/users')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>系统设置</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>用户管理</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/system/announcement')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>系统设置</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>公告管理</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/system/auditlog')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>系统设置</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>操作日志</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/system')) {
+      return <Breadcrumb items={[{ title: <span style={{ color: '#303133', fontWeight: 600 }}>系统设置</span> }]} />;
+    }
+
+    // Enterprise breadcrumbs
+    if (path.startsWith('/v1/enterprise/info')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>企业管理</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>企业信息</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/enterprise/license')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>企业管理</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>许可证</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/enterprise/theme')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>企业管理</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>主题设置</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/enterprise/language')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>企业管理</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>系统语言</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/enterprise')) {
+      return <Breadcrumb items={[{ title: <span style={{ color: '#303133', fontWeight: 600 }}>企业管理</span> }]} />;
+    }
+
+    // Profile breadcrumbs
+    if (path.startsWith('/v1/profile/info')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>账号设置</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>账号设置</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/profile/mcp')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>账号设置</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>配置 MCP</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/profile/security')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>账号设置</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>安全设置</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/profile/preference')) {
+      return (
+        <Breadcrumb
+          items={[
+            { title: <span style={{ color: '#606266' }}>账号设置</span> },
+            { title: <span style={{ color: '#303133', fontWeight: 600 }}>偏好设置</span> },
+          ]}
+        />
+      );
+    }
+    if (path.startsWith('/v1/profile')) {
+      return <Breadcrumb items={[{ title: <span style={{ color: '#303133', fontWeight: 600 }}>账号设置</span> }]} />;
     }
 
     return <Breadcrumb items={[{ title: <span style={{ color: '#303133', fontWeight: 600 }}>Zadig 持续交付平台</span> }]} />;
@@ -416,7 +913,7 @@ export const BasicLayout: React.FC = () => {
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-          {/* Sider Brand & Quick Action Header */}
+          {/* Sider Brand & Quick Action Header OR Secondary Return Header */}
           <div
             style={{
               padding: collapsed ? '16px 8px 12px' : '16px 16px 12px',
@@ -426,117 +923,157 @@ export const BasicLayout: React.FC = () => {
               alignItems: collapsed ? 'center' : 'flex-start',
             }}
           >
-            <div
-              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-              onClick={() => navigate('/v1/dashboard')}
-            >
-              {collapsed ? (
+            {sidebarMode === 'main' ? (
+              <>
                 <div
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 6,
-                    backgroundColor: '#fd2968',
-                    color: '#ffffff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 800,
-                    fontSize: 16,
-                  }}
+                  style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  onClick={() => navigate('/v1/dashboard')}
                 >
-                  Z
+                  {collapsed ? (
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 6,
+                        backgroundColor: '#fd2968',
+                        color: '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 800,
+                        fontSize: 16,
+                      }}
+                    >
+                      Z
+                    </div>
+                  ) : (
+                    <ZadigLogo height={28} mode="light" />
+                  )}
                 </div>
-              ) : (
-                <ZadigLogo height={28} mode="light" />
-              )}
-            </div>
 
-            {/* Quick "+ 添加" Button */}
-            <Dropdown menu={{ items: quickActionItems }} trigger={['click']} placement="bottomLeft">
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
+                {/* Quick "+ 添加" Button */}
+                <Dropdown menu={{ items: quickActionItems }} trigger={['click']} placement="bottomLeft">
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    style={{
+                      width: '100%',
+                      height: 36,
+                      marginTop: 12,
+                      borderRadius: 6,
+                      backgroundColor: '#0066ff',
+                      fontWeight: 500,
+                      fontSize: 14,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {!collapsed && '添加'}
+                  </Button>
+                </Dropdown>
+              </>
+            ) : (
+              <div
+                onClick={() => navigate('/v1/dashboard')}
                 style={{
-                  width: '100%',
-                  height: 36,
-                  marginTop: 12,
-                  borderRadius: 6,
-                  backgroundColor: '#0066ff',
-                  fontWeight: 500,
-                  fontSize: 14,
+                  cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
+                  gap: 8,
+                  padding: collapsed ? '8px 4px' : '8px 10px',
+                  borderRadius: 6,
+                  backgroundColor: '#f5f7fa',
+                  color: '#303133',
+                  fontWeight: 600,
+                  fontSize: 14,
+                  width: '100%',
+                  justifyContent: collapsed ? 'center' : 'flex-start',
+                  transition: 'all 0.2s',
                 }}
+                className="hover:bg-blue-50"
+                title="返回工作台"
               >
-                {!collapsed && '添加'}
-              </Button>
-            </Dropdown>
+                <ArrowLeftOutlined style={{ fontSize: 14, color: '#0066ff' }} />
+                {!collapsed && (
+                  <span>
+                    {sidebarMode === 'system'
+                      ? '系统设置'
+                      : sidebarMode === 'enterprise'
+                      ? '企业管理'
+                      : '账号设置'}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Sider 4-Domain Accordion Menu */}
+          {/* Sider Menu */}
           <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', scrollbarWidth: 'none' }}>
             <Menu
               mode="inline"
               selectedKeys={[getSelectedKey()]}
-              openKeys={collapsed ? [] : openKeys}
-              onOpenChange={(keys) => setOpenKeys(keys as string[])}
-              items={menuItems}
+              openKeys={collapsed || sidebarMode !== 'main' ? [] : openKeys}
+              onOpenChange={(keys) => {
+                if (sidebarMode === 'main') setOpenKeys(keys as string[]);
+              }}
+              items={currentMenuItems}
               style={{ borderRight: 'none' }}
             />
           </div>
 
-          {/* Sider Pinned Bottom Entries: 系统设置 & 企业管理 */}
-          <div
-            style={{
-              borderTop: '1px solid #f0f0f0',
-              padding: '6px 0',
-              display: 'flex',
-              flexDirection: 'column',
-              backgroundColor: '#ffffff',
-            }}
-          >
+          {/* Sider Pinned Bottom Entries: shown in main mode */}
+          {sidebarMode === 'main' && (
             <div
-              onClick={() => navigate('/v1/system/integration')}
               style={{
+                borderTop: '1px solid #f0f0f0',
+                padding: '6px 0',
                 display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: collapsed ? '10px 0' : '10px 16px',
-                justifyContent: collapsed ? 'center' : 'flex-start',
-                cursor: 'pointer',
-                color: location.pathname.startsWith('/v1/system') ? '#0066ff' : '#4a5568',
-                fontWeight: location.pathname.startsWith('/v1/system') ? 600 : 400,
-                fontSize: 14,
-                transition: 'background 0.2s',
+                flexDirection: 'column',
+                backgroundColor: '#ffffff',
               }}
-              className="hover:bg-gray-50"
             >
-              <SettingOutlined style={{ fontSize: 16 }} />
-              {!collapsed && <span>系统设置</span>}
-            </div>
+              <div
+                onClick={() => navigate('/v1/system/integration')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: collapsed ? '10px 0' : '10px 16px',
+                  justifyContent: collapsed ? 'center' : 'flex-start',
+                  cursor: 'pointer',
+                  color: '#4a5568',
+                  fontWeight: 400,
+                  fontSize: 14,
+                  transition: 'background 0.2s',
+                }}
+                className="hover:bg-gray-50"
+              >
+                <SettingOutlined style={{ fontSize: 16 }} />
+                {!collapsed && <span>系统设置</span>}
+              </div>
 
-            <div
-              onClick={() => navigate('/v1/enterprise')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: collapsed ? '10px 0' : '10px 16px',
-                justifyContent: collapsed ? 'center' : 'flex-start',
-                cursor: 'pointer',
-                color: location.pathname.startsWith('/v1/enterprise') ? '#0066ff' : '#4a5568',
-                fontWeight: location.pathname.startsWith('/v1/enterprise') ? 600 : 400,
-                fontSize: 14,
-                transition: 'background 0.2s',
-              }}
-              className="hover:bg-gray-50"
-            >
-              <SafetyCertificateOutlined style={{ fontSize: 16 }} />
-              {!collapsed && <span>企业管理</span>}
+              <div
+                onClick={() => navigate('/v1/enterprise/info')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: collapsed ? '10px 0' : '10px 16px',
+                  justifyContent: collapsed ? 'center' : 'flex-start',
+                  cursor: 'pointer',
+                  color: '#4a5568',
+                  fontWeight: 400,
+                  fontSize: 14,
+                  transition: 'background 0.2s',
+                }}
+                className="hover:bg-gray-50"
+              >
+                <SafetyCertificateOutlined style={{ fontSize: 16 }} />
+                {!collapsed && <span>企业管理</span>}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </Sider>
 
@@ -700,14 +1237,39 @@ export const BasicLayout: React.FC = () => {
               <BookOutlined style={{ fontSize: 16, color: '#606266', cursor: 'pointer' }} />
             </Popover>
 
-            {/* 5. Notifications */}
-            <Badge dot offset={[-2, 2]}>
-              <BellOutlined
-                style={{ fontSize: 16, color: '#606266', cursor: 'pointer' }}
-                onClick={() => feedback.message.info('暂无新系统通知')}
-                title="系统通知"
-              />
-            </Badge>
+            {/* 5. Notifications (real announcements via PullNotifyAnnouncement) */}
+            <Popover
+              title="系统通知"
+              trigger="click"
+              content={
+                <div style={{ width: 280 }}>
+                  {notifications.length > 0 ? (
+                    notifications.map((n) => (
+                      <div key={n.id} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                        <Text strong style={{ fontSize: 13 }}>{n.content?.title || '通知'}</Text>
+                        <div>
+                          <Text type="secondary" style={{ fontSize: 12 }}>{n.content?.content || ''}</Text>
+                        </div>
+                        <div>
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            {n.create_time ? new Date(n.create_time * 1000).toLocaleString() : ''}
+                          </Text>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <Text type="secondary">暂无新系统通知</Text>
+                  )}
+                </div>
+              }
+            >
+              <Badge dot={notifications.length > 0} offset={[-2, 2]}>
+                <BellOutlined
+                  style={{ fontSize: 16, color: '#606266', cursor: 'pointer' }}
+                  title="系统通知"
+                />
+              </Badge>
+            </Popover>
 
             {/* 6. User Avatar & Menu */}
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">

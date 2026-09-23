@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Table, Typography, Button, Space, Tag, Empty, Spin } from 'antd';
+import { Card, Table, Typography, Button, Space, Tag, Empty, Spin, Tooltip } from 'antd';
 import {
   ShopOutlined,
   PlusOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
 import http from '../../api/client';
-import { feedback } from '../../utils/feedback';
 
 const { Title, Text } = Typography;
 
@@ -51,14 +50,11 @@ export const PlutusDeliveryPage: React.FC = () => {
         </div>
 
         <Space orientation="horizontal" size={12}>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            style={{ borderRadius: 4 }}
-            onClick={() => feedback.message.info('新建交付项目向导')}
-          >
-            新建交付项目
-          </Button>
+          <Tooltip title="客户交付管理依赖企业版 Plutus 组件，请联系管理员确认部署情况">
+            <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 4 }} disabled>
+              新建交付项目
+            </Button>
+          </Tooltip>
         </Space>
       </div>
 

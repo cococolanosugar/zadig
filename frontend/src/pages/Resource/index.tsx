@@ -1,31 +1,49 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Tabs, Typography } from 'antd';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   HddOutlined,
   BranchesOutlined,
   ContainerOutlined,
   CloudUploadOutlined,
+  DesktopOutlined,
+  AppstoreOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons';
 import ClustersPage from '../Settings/Clusters';
 import CodeHostsPage from '../Settings/CodeHosts';
 import RegistriesPage from '../Settings/Registries';
 import StoragePage from '../Settings/Storage';
+import VMsPage from '../Settings/VMs';
+import ChartReposPage from '../Settings/ChartRepos';
+import DBInstancesPage from '../Settings/DBInstances';
 
 const { Title, Text } = Typography;
 
 export const ResourcePage: React.FC = () => {
   const { tab } = useParams<{ tab?: string }>();
   const [searchParams] = useSearchParams();
-  const initialTab = tab || searchParams.get('tab') || 'cluster';
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Extract tab from URL path (e.g. /v1/resource/cluster) or params
+  const pathSegment = location.pathname.split('/')[3];
+  const initialTab = tab || pathSegment || searchParams.get('tab') || 'cluster';
   const [activeTab, setActiveTab] = useState(initialTab);
 
   useEffect(() => {
-    if (tab || searchParams.get('tab')) {
-      setActiveTab(tab || searchParams.get('tab') || 'cluster');
+    const current = tab || pathSegment || searchParams.get('tab');
+    if (current) {
+      setActiveTab(current);
     }
-  }, [tab, searchParams]);
+  }, [tab, pathSegment, searchParams]);
 
+  const handleTabChange = (k: string) => {
+    setActiveTab(k);
+    navigate(`/v1/resource/${k}`);
+  };
+
+  // Order conforming strictly to live Zadig 6-resource tabs
   const tabItems = [
     {
       key: 'cluster',
@@ -37,13 +55,13 @@ export const ResourcePage: React.FC = () => {
       children: <ClustersPage />,
     },
     {
-      key: 'codehost',
+      key: 'host',
       label: (
         <span>
-          <BranchesOutlined /> 代码源集成
+          <DesktopOutlined /> 主机管理
         </span>
       ),
-      children: <CodeHostsPage />,
+      children: <VMsPage />,
     },
     {
       key: 'registry',
@@ -55,6 +73,15 @@ export const ResourcePage: React.FC = () => {
       children: <RegistriesPage />,
     },
     {
+      key: 'helmChartRepo',
+      label: (
+        <span>
+          <AppstoreOutlined /> Chart 仓库
+        </span>
+      ),
+      children: <ChartReposPage />,
+    },
+    {
       key: 'storage',
       label: (
         <span>
@@ -62,6 +89,24 @@ export const ResourcePage: React.FC = () => {
         </span>
       ),
       children: <StoragePage />,
+    },
+    {
+      key: 'database',
+      label: (
+        <span>
+          <DatabaseOutlined /> 数据库
+        </span>
+      ),
+      children: <DBInstancesPage />,
+    },
+    {
+      key: 'codehost',
+      label: (
+        <span>
+          <BranchesOutlined /> 代码源集成
+        </span>
+      ),
+      children: <CodeHostsPage />,
     },
   ];
 
@@ -72,7 +117,7 @@ export const ResourcePage: React.FC = () => {
           资源配置
         </Title>
         <Text type="secondary" style={{ fontSize: 13 }}>
-          统一纳管与调度计算集群、代码托管平台、容器镜像仓库以及文件/制品存储
+          统一纳管与调度计算集群、主机节点、容器镜像仓库、Chart 仓库以及对象存储与数据库
         </Text>
       </div>
 
@@ -84,7 +129,7 @@ export const ResourcePage: React.FC = () => {
         <Tabs
           activeKey={activeTab}
           items={tabItems}
-          onChange={(k) => setActiveTab(k)}
+          onChange={handleTabChange}
           tabBarStyle={{ marginBottom: 20 }}
         />
       </Card>
