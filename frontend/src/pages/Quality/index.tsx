@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Card, Table, Typography, Button, Space, Input, Tag, Row, Col, Statistic, Empty, Spin, Modal, Form, Select } from 'antd';
+import { Card, Table, Typography, Button, Space, Input, Tag, Row, Col, Statistic, Empty, Spin, Modal, Form, Select, Drawer, Descriptions } from 'antd';
 import {
   CheckCircleOutlined,
   PlayCircleOutlined,
@@ -10,6 +10,8 @@ import {
 } from '@ant-design/icons';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
+
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 const { Title, Text } = Typography;
 
@@ -23,6 +25,15 @@ export interface TestItem {
 }
 
 export const QualityCenterPage: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { projectName } = useParams<{ projectName?: string }>();
+
+  // Extract test name and task id from routes
+  const match = location.pathname.match(/\/test\/(?:detail\/)?(?:function\/)?([^/]+)(?:\/([^/]+))?/);
+  const routeTestName = match?.[1];
+  const routeTaskId = match?.[2];
+
   const [loading, setLoading] = useState(false);
   const [tests, setTests] = useState<TestItem[]>([]);
   const [searchText, setSearchText] = useState('');
@@ -36,6 +47,38 @@ export const QualityCenterPage: React.FC = () => {
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form] = Form.useForm();
+
+  // 测试详情抽屉（配置 + 任务历史）
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailTest, setDetailTest] = useState<TestItem | null>(null);
+  const [testTasks, setTestTasks] = useState<Array<Record<string, unknown>>>([]);
+
+  const openTestDetail = useCallback(async (test: TestItem) => {
+    setDetailOpen(true);
+    setDetailLoading(true);
+    setDetailTest(test);
+    setTestTasks([]);
+    try {
+      const res = await http.get<TestItem>(`/api/aslan/testing/test/${encodeURIComponent(test.name)}`, {
+        skipErrorHandler: true,
+      });
+      if (res) setDetailTest({ ...test, ...res });
+    } catch {
+      // 保留列表数据
+    }
+    try {
+      const res = await http.get<Array<Record<string, unknown>>>(
+        `/api/aslan/testing/testtask?projectName=${encodeURIComponent(test.product_name || '')}&testName=${encodeURIComponent(test.name)}&pageSize=10&pageNum=1`,
+        { skipErrorHandler: true }
+      );
+      setTestTasks(Array.isArray(res) ? res : []);
+    } catch {
+      setTestTasks([]);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -64,6 +107,17 @@ export const QualityCenterPage: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (routeTestName && tests.length > 0) {
+      const found = tests.find((t) => t.name === routeTestName);
+      if (found) {
+        openTestDetail(found);
+      } else {
+        openTestDetail({ name: routeTestName, product_name: projectName });
+      }
+    }
+  }, [routeTestName, tests, openTestDetail, projectName]);
 
   const handleRunTest = async (record: TestItem) => {
     feedback.message.loading(`正在对 [${record.name}] 触发自动化测试任务...`, 1);
@@ -210,8 +264,12 @@ export const QualityCenterPage: React.FC = () => {
                 title: '测试名称',
                 dataIndex: 'name',
                 key: 'name',
-                render: (name) => (
-                  <Button type="link" style={{ padding: 0, fontWeight: 600 }}>
+                render: (name, record) => (
+                  <Button
+                    type="link"
+                    style={{ padding: 0, fontWeight: 600 }}
+                    onClick={() => openTestDetail(record)}
+                  >
                     {name}
                   </Button>
                 ),
@@ -238,7 +296,7 @@ export const QualityCenterPage: React.FC = () => {
                 title: '最近修改人',
                 dataIndex: 'updated_by',
                 key: 'updated_by',
-                render: (u) => u || 'admin@qq.com',
+                render: (u) => u || '-',
               },
               {
                 title: '操作',
@@ -315,6 +373,105 @@ export const QualityCenterPage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* Test Detail Drawer: 配置 + 任务历史 (test/function/:test_name 对齐) */}
+      <Drawer
+        title={`测试详情: ${detailTest?.name || ''}`}
+        placement="right"
+        open={detailOpen}
+        onClose={() => {
+          setDetailOpen(false);
+          setDetailTest(null);
+          if (routeTestName) {
+            navigate(projectName ? `/v1/projects/detail/${projectName}/test` : '/v1/tests');
+          }
+        }}
+        size="large"
+      >
+        {detailLoading ? (
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <Spin size="large" />
+          </div>
+        ) : detailTest ? (
+          <div>
+            <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label="测试类型">
+                <Tag color="geekblue">{detailTest.test_type || '功能测试'}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="归属项目">
+                <Tag color="blue">{detailTest.product_name || '-'}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="描述">{detailTest.desc || '-'}</Descriptions.Item>
+              <Descriptions.Item label="最后更新">
+                {detailTest.update_time
+                  ? `${new Date(detailTest.update_time * 1000).toLocaleString()} · ${detailTest.updated_by || '-'}`
+                  : '-'}
+              </Descriptions.Item>
+            </Descriptions>
+
+            <Title level={5} style={{ margin: '20px 0 8px' }}>
+              测试任务历史
+            </Title>
+            <Table
+              dataSource={testTasks}
+              rowKey={(r) => String(r.task_id || r.id || Math.random())}
+              rowClassName={(record) => (routeTaskId && String(record.task_id ?? record.id) === routeTaskId ? 'ant-table-row-selected' : '')}
+              pagination={{ pageSize: 8, hideOnSinglePage: true }}
+              size="small"
+              columns={[
+                {
+                  title: '任务 ID',
+                  key: 'task_id',
+                  render: (_, r) => <Text code>{String(r.task_id ?? r.id ?? '-')}</Text>,
+                },
+                {
+                  title: '状态',
+                  dataIndex: 'status',
+                  key: 'status',
+                  render: (s) => {
+                    const map: Record<string, 'success' | 'processing' | 'error' | 'default'> = {
+                      passed: 'success',
+                      failed: 'error',
+                      running: 'processing',
+                      timeout: 'error',
+                    };
+                    return <Tag color={map[String(s)] === 'success' ? 'success' : map[String(s)] === 'error' ? 'error' : map[String(s)] === 'processing' ? 'processing' : 'default'}>{String(s || '未知')}</Tag>;
+                  },
+                },
+                {
+                  title: '触发人',
+                  dataIndex: 'task_creator',
+                  key: 'task_creator',
+                  render: (c) => <Text type="secondary">{String(c || '-')}</Text>,
+                },
+                {
+                  title: '创建时间',
+                  dataIndex: 'create_time',
+                  key: 'create_time',
+                  render: (t) => (t ? new Date(t * 1000).toLocaleString() : '-'),
+                },
+                {
+                  title: '耗时',
+                  dataIndex: 'duration',
+                  key: 'duration',
+                  render: (_, r) => {
+                    const start = r.start_time as number | undefined;
+                    const end = r.end_time as number | undefined;
+                    if (start && end) return `${end - start}s`;
+                    const d = r.duration as number | undefined;
+                    return d ? `${d}s` : '-';
+                  },
+                },
+              ]}
+              locale={{
+                emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无测试任务记录" />,
+              }}
+            />
+          </div>
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未获取到测试详情" />
+        )}
+      </Drawer>
     </div>
   );
 };

@@ -52,10 +52,9 @@ export const PipelinesPage: React.FC = () => {
   const [newWorkflowDesc, setNewWorkflowDesc] = useState('');
 
   const loadWorkflows = useCallback(async () => {
-    if (!activeProject) return;
     setLoading(true);
     try {
-      const list = await workflowApi.getWorkflows(activeProject);
+      const list = await workflowApi.getWorkflows(activeProject || '');
       setWorkflows(list);
       setActiveWorkflow(list.length > 0 ? list[0] : null);
     } catch {
@@ -105,12 +104,12 @@ export const PipelinesPage: React.FC = () => {
       description: newWorkflowDesc.trim() || '自定义 V4 流水线',
       stages: [
         {
-          name: 'Stage-1: 构建',
+          name: 'Stage-1',
           jobs: [
             {
               name: 'build-job',
               type: 'zadig-build',
-              spec: { service_name: 'demo-service', branch: 'main' },
+              spec: {},
             },
           ],
         },

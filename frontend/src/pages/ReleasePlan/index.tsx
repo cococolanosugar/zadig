@@ -26,6 +26,7 @@ import {
   CalendarOutlined,
   InfoCircleOutlined,
 } from '@ant-design/icons';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
 import { releasePlanApi, type ReleasePlanItem } from '../../api/releasePlan';
 import { feedback } from '../../utils/feedback';
@@ -37,6 +38,10 @@ const { RangePicker } = DatePicker;
 
 export const ReleasePlanPage: React.FC = () => {
   const { userInfo } = useAuthStore();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const targetId = searchParams.get('id') || searchParams.get('name');
+
   const [plans, setPlans] = useState<ReleasePlanItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [searchText, setSearchText] = useState<string>('');
@@ -66,6 +71,16 @@ export const ReleasePlanPage: React.FC = () => {
   useEffect(() => {
     fetchPlans();
   }, [fetchPlans]);
+
+  useEffect(() => {
+    if (targetId && plans.length > 0) {
+      const found = plans.find((p) => p.id === targetId || p.name === targetId);
+      if (found) {
+        setActivePlan(found);
+        setDetailDrawerVisible(true);
+      }
+    }
+  }, [targetId, plans]);
 
   const handleCreatePlan = async () => {
     try {
@@ -336,7 +351,13 @@ export const ReleasePlanPage: React.FC = () => {
           </Space>
         }
         open={detailDrawerVisible}
-        onClose={() => setDetailDrawerVisible(false)}
+        onClose={() => {
+          setDetailDrawerVisible(false);
+          setActivePlan(null);
+          if (targetId) {
+            navigate('/v1/releasePlan');
+          }
+        }}
         size="large"
       >
         {activePlan && (

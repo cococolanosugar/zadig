@@ -11,29 +11,52 @@ import {
   PlusOutlined,
   RocketOutlined,
 } from '@ant-design/icons';
-import { useParams, useSearchParams } from 'react-router-dom';
-import templateApi, { type WorkflowTemplateItem, type WorkflowTemplateI18n } from '../../api/template';
+import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import templateApi, {
+  type WorkflowTemplateItem,
+  type WorkflowTemplateI18n,
+  type YamlTemplateItem,
+  type DockerfileTemplateItem,
+  type ChartTemplateItem,
+  type BuildTemplateItem,
+  type ScannerTemplateItem,
+} from '../../api/template';
 
 const { Title, Text, Paragraph } = Typography;
 
 export const TemplateCenterPage: React.FC = () => {
   const { tab } = useParams<{ tab?: string }>();
   const [searchParams] = useSearchParams();
-  const initialTab = tab || searchParams.get('tab') || 'workflows';
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const pathSegment = location.pathname.split('/')[3];
+  const initialTab = tab || pathSegment || searchParams.get('tab') || 'workflows';
   const [activeTab, setActiveTab] = useState(initialTab);
 
   useEffect(() => {
-    if (tab || searchParams.get('tab')) {
-      setActiveTab(tab || searchParams.get('tab') || 'workflows');
+    const current = tab || pathSegment || searchParams.get('tab');
+    if (current) {
+      setActiveTab(current);
     }
-  }, [tab, searchParams]);
+  }, [tab, pathSegment, searchParams]);
+
+  const handleTabChange = (k: string) => {
+    setActiveTab(k);
+    navigate(`/v1/template/${k}`);
+  };
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
 
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplateItem[]>([]);
   const [i18nMap, setI18nMap] = useState<Record<string, WorkflowTemplateI18n>>({});
-  const [yamlTemplates, setYamlTemplates] = useState<unknown[]>([]);
+  const [yamlTemplates, setYamlTemplates] = useState<YamlTemplateItem[]>([]);
+  const [dockerfileTemplates, setDockerfileTemplates] = useState<DockerfileTemplateItem[]>([]);
+  const [chartTemplates, setChartTemplates] = useState<ChartTemplateItem[]>([]);
+  const [buildTemplates, setBuildTemplates] = useState<BuildTemplateItem[]>([]);
+  const [scannerTemplates, setScannerTemplates] = useState<ScannerTemplateItem[]>([]);
 
+  // Load workflow + yaml templates once (workflow list is also used for search header)
   useEffect(() => {
     const fetchTemplates = async () => {
       setLoading(true);
@@ -62,6 +85,19 @@ export const TemplateCenterPage: React.FC = () => {
 
     fetchTemplates();
   }, []);
+
+  // Lazily load the active tab's template list
+  useEffect(() => {
+    if (activeTab === 'dockerfiles') {
+      templateApi.getDockerfileTemplates().then((res) => setDockerfileTemplates(res.dockerfile_template || []));
+    } else if (activeTab === 'charts') {
+      templateApi.getChartTemplates().then((res) => setChartTemplates(res.chartTemplates || []));
+    } else if (activeTab === 'builds') {
+      templateApi.getBuildTemplates().then((res) => setBuildTemplates(res.build_templates || []));
+    } else if (activeTab === 'scanners') {
+      templateApi.getScannerTemplates().then((res) => setScannerTemplates(res.scanning_templates || []));
+    }
+  }, [activeTab]);
 
   const filteredWorkflows = workflowTemplates.filter((item) => {
     const i18n = i18nMap[item.template_name];
@@ -172,7 +208,7 @@ export const TemplateCenterPage: React.FC = () => {
         <Tabs
           activeKey={activeTab}
           items={tabItems}
-          onChange={(k) => setActiveTab(k)}
+          onChange={handleTabChange}
           tabBarStyle={{ marginBottom: 20 }}
         />
 
@@ -261,17 +297,166 @@ export const TemplateCenterPage: React.FC = () => {
               })}
             </Row>
           </div>
-        ) : (
+        ) : activeTab === 'k8s-yamls' ? (
           <Table
             dataSource={yamlTemplates}
+            rowKey={(r) => r.id || r.name}
             columns={[
               { title: '模板标识', dataIndex: 'name', key: 'name' },
-              { title: '变量定义', dataIndex: 'variables', key: 'variables', render: () => '-' },
-              { title: '更新时间', dataIndex: 'update_time', key: 'update_time', render: () => '-' },
+              { title: '变量定义', dataIndex: 'variables', key: 'variables', render: (_, r) => <Text type="secondary">{r.variables?.length || 0} 个变量</Text> },
+              {
+                title: '更新时间',
+                dataIndex: 'update_time',
+                key: 'update_time',
+                render: (t: number | undefined) => (t ? new Date(t * 1000).toLocaleString() : '-'),
+              },
               { title: '操作', key: 'action', render: () => <Button type="link">查看内容</Button> },
             ]}
             locale={{
               emptyText: <Empty description="暂无该分类模板数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+            }}
+          />
+        ) : activeTab === 'dockerfiles' ? (
+          <Table
+            dataSource={dockerfileTemplates}
+            rowKey={(r) => r.id || r.name}
+            columns={[
+              {
+                title: '模板名称',
+                dataIndex: 'name',
+                key: 'name',
+                render: (name) => (
+                  <Space orientation="horizontal">
+                    <ContainerOutlined style={{ color: '#0066ff' }} />
+                    <Text strong>{name}</Text>
+                  </Space>
+                ),
+              },
+              {
+                title: '内容预览',
+                dataIndex: 'content',
+                key: 'content',
+                ellipsis: true,
+                render: (content: string | undefined) => (
+                  <Text code style={{ fontSize: 12 }}>{String(content || '').slice(0, 120) || '-'}</Text>
+                ),
+              },
+              {
+                title: '更新时间',
+                dataIndex: 'update_time',
+                key: 'update_time',
+                render: (t: number | undefined) => (t ? new Date(t * 1000).toLocaleString() : '-'),
+              },
+              { title: '操作', key: 'action', render: () => <Button type="link">查看内容</Button> },
+            ]}
+            locale={{
+              emptyText: <Empty description="暂无 Dockerfile 模板" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+            }}
+          />
+        ) : activeTab === 'charts' ? (
+          <Table
+            dataSource={chartTemplates}
+            rowKey={(r) => `${r.repo_name || ''}-${r.name || r.chart_name || ''}`}
+            columns={[
+              {
+                title: 'Chart 名称',
+                key: 'name',
+                render: (_, r) => (
+                  <Space orientation="horizontal">
+                    <AppstoreOutlined style={{ color: '#0066ff' }} />
+                    <Text strong>{r.name || r.chart_name || '-'}</Text>
+                  </Space>
+                ),
+              },
+              { title: '所属仓库', dataIndex: 'repo_name', key: 'repo_name', render: (t) => <Tag color="geekblue">{String(t || '-')}</Tag> },
+              { title: '版本', dataIndex: 'version', key: 'version', render: (t) => <Tag color="blue">{String(t || '-')}</Tag> },
+              {
+                title: '描述',
+                dataIndex: 'description',
+                key: 'description',
+                ellipsis: true,
+                render: (t) => <Text type="secondary">{String(t || '-')}</Text>,
+              },
+            ]}
+            locale={{
+              emptyText: <Empty description="暂无 Helm Chart 模板，请先在资源配置中接入 Chart 仓库" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+            }}
+          />
+        ) : activeTab === 'builds' ? (
+          <Table
+            dataSource={buildTemplates}
+            rowKey={(r) => r.id || r.name}
+            columns={[
+              {
+                title: '模板名称',
+                dataIndex: 'name',
+                key: 'name',
+                render: (name) => (
+                  <Space orientation="horizontal">
+                    <ToolOutlined style={{ color: '#0066ff' }} />
+                    <Text strong>{name}</Text>
+                  </Space>
+                ),
+              },
+              {
+                title: '构建脚本预览',
+                dataIndex: 'scripts',
+                key: 'scripts',
+                ellipsis: true,
+                render: (scripts: string | undefined) => (
+                  <Text code style={{ fontSize: 12 }}>{String(scripts || '').slice(0, 120) || '-'}</Text>
+                ),
+              },
+              {
+                title: '更新时间',
+                dataIndex: 'update_time',
+                key: 'update_time',
+                render: (t: number | undefined) => (t ? new Date(t * 1000).toLocaleString() : '-'),
+              },
+            ]}
+            locale={{
+              emptyText: <Empty description="暂无构建模板" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+            }}
+          />
+        ) : (
+          <Table
+            dataSource={scannerTemplates}
+            rowKey={(r) => r.id || r.name}
+            columns={[
+              {
+                title: '模板名称',
+                dataIndex: 'name',
+                key: 'name',
+                render: (name) => (
+                  <Space orientation="horizontal">
+                    <SafetyCertificateOutlined style={{ color: '#0066ff' }} />
+                    <Text strong>{name}</Text>
+                  </Space>
+                ),
+              },
+              {
+                title: '描述',
+                dataIndex: 'description',
+                key: 'description',
+                ellipsis: true,
+                render: (t) => <Text type="secondary">{String(t || '-')}</Text>,
+              },
+              {
+                title: '启用状态',
+                dataIndex: 'enable',
+                key: 'enable',
+                render: (enabled: boolean | undefined) =>
+                  enabled === false ? <Tag color="default">停用</Tag> : <Tag color="success">启用</Tag>,
+              },
+              {
+                title: '更新时间',
+                dataIndex: 'update_time',
+                key: 'update_time',
+                render: (t: number | undefined) => (t ? new Date(t * 1000).toLocaleString() : '-'),
+              },
+            ]}
+            locale={{
+              emptyText: <Empty description="暂无代码扫描模板" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
             }}
           />
         )}

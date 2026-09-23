@@ -16,6 +16,9 @@ import {
   Popconfirm,
   Tooltip,
   Empty,
+  Drawer,
+  Descriptions,
+  Spin,
 } from 'antd';
 import {
   PlusOutlined,
@@ -29,14 +32,14 @@ import {
   CheckCircleOutlined,
   CloudUploadOutlined,
 } from '@ant-design/icons';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import type { ColumnsType } from 'antd/es/table';
 import http from '../../api/client';
 import workflowApi from '../../api/workflow';
 import { feedback } from '../../utils/feedback';
 
-const { Text } = Typography;
+const { Text, Title } = Typography;
 const { TextArea } = Input;
 const { Option } = Select;
 
@@ -68,7 +71,9 @@ export interface BuildItem {
 }
 
 export const BuildsPage: React.FC = () => {
-  const { projectName } = useParams<{ projectName: string }>();
+  const { projectName, buildName: routeBuildName } = useParams<{ projectName: string; buildName?: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState<boolean>(false);
   const [builds, setBuilds] = useState<BuildItem[]>([]);
   const [services, setServices] = useState<string[]>([]);
@@ -78,6 +83,28 @@ export const BuildsPage: React.FC = () => {
   const [editingBuild, setEditingBuild] = useState<BuildItem | null>(null);
   const [form] = Form.useForm();
   const [execForm] = Form.useForm();
+
+  // 路由 /builds/create → 自动打开新建弹窗
+  useEffect(() => {
+    if (location.pathname.endsWith('/create')) {
+      setEditingBuild(null);
+      form.resetFields();
+      setModalVisible(true);
+    }
+  }, [location.pathname, form]);
+
+  const handleCloseModal = () => {
+    setModalVisible(false);
+    setEditingBuild(null);
+    if (location.pathname.endsWith('/create')) {
+      navigate(`/v1/projects/detail/${projectName}/builds`);
+    }
+  };
+
+  // 构建详情抽屉
+  const [detailOpen, setDetailOpen] = useState<boolean>(false);
+  const [detailLoading, setDetailLoading] = useState<boolean>(false);
+  const [detailBuild, setDetailBuild] = useState<Record<string, unknown> | null>(null);
 
   const [triggering, setTriggering] = useState<boolean>(false);
 
@@ -113,6 +140,29 @@ export const BuildsPage: React.FC = () => {
   useEffect(() => {
     fetchBuilds();
   }, [fetchBuilds]);
+
+  const openBuildDetail = useCallback(async (name: string) => {
+    setDetailOpen(true);
+    setDetailLoading(true);
+    try {
+      const res = await http.get<Record<string, unknown>>(
+        `/api/aslan/build/build/${encodeURIComponent(name)}?projectName=${projectName}`,
+        { skipErrorHandler: true }
+      );
+      setDetailBuild(res || null);
+    } catch {
+      setDetailBuild(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, [projectName]);
+
+  // 路由 /builds/detail/:buildName → 自动打开详情
+  useEffect(() => {
+    if (routeBuildName) {
+      openBuildDetail(routeBuildName);
+    }
+  }, [routeBuildName, openBuildDetail]);
 
   const handleSaveBuild = async () => {
     try {
@@ -229,7 +279,11 @@ export const BuildsPage: React.FC = () => {
         <Space orientation="vertical" size={2}>
           <Space orientation="horizontal" size={8}>
             <ToolOutlined style={{ color: '#0066ff' }} />
-            <Text strong style={{ fontSize: 14 }}>
+            <Text
+              strong
+              style={{ fontSize: 14, cursor: 'pointer' }}
+              onClick={() => openBuildDetail(text)}
+            >
               {text}
             </Text>
           </Space>
@@ -468,10 +522,7 @@ export const BuildsPage: React.FC = () => {
         title={editingBuild ? '编辑构建模块配置' : '新建构建模块'}
         open={modalVisible}
         onOk={handleSaveBuild}
-        onCancel={() => {
-          setModalVisible(false);
-          setEditingBuild(null);
-        }}
+        onCancel={handleCloseModal}
         width={680}
       >
         <Form
@@ -563,6 +614,78 @@ export const BuildsPage: React.FC = () => {
           </Text>
         </Form>
       </Modal>
+
+      {/* Build Detail Drawer (GET /api/aslan/build/build/:name?projectName=) */}
+      <Drawer
+        title={`构建详情: ${String((detailBuild as { name?: string })?.name || routeBuildName || '')}`}
+        placement="right"
+        open={detailOpen}
+        onClose={() => {
+          setDetailOpen(false);
+          setDetailBuild(null);
+          if (routeBuildName) {
+            navigate(`/v1/projects/detail/${projectName}/builds`);
+          }
+        }}
+        size="large"
+      >
+        {detailLoading ? (
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <Spin size="large" />
+          </div>
+        ) : detailBuild ? (
+          <div>
+            <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label="构建名称">
+                <Text strong>{String(detailBuild.name || '-')}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="描述">{String(detailBuild.desc || '-')}</Descriptions.Item>
+              <Descriptions.Item label="超时时间 (分钟)">{String(detailBuild.timeout ?? '-')}</Descriptions.Item>
+              <Descriptions.Item label="构建基础镜像">
+                {String((detailBuild.pre_build as { image_id?: string })?.image_id || '-')}
+              </Descriptions.Item>
+              <Descriptions.Item label="最后更新">
+                {detailBuild.update_time
+                  ? `${dayjs(Number(detailBuild.update_time) * 1000).format('YYYY-MM-DD HH:mm')} · ${String(detailBuild.update_by || '-')}`
+                  : '-'}
+              </Descriptions.Item>
+            </Descriptions>
+
+            <Title level={5} style={{ margin: '20px 0 8px' }}>
+              构建目标 (服务模块)
+            </Title>
+            <Table
+              dataSource={(detailBuild.targets as Array<{ service_name?: string; service_module?: string }>) || []}
+              rowKey={(r) => `${r.service_name}-${r.service_module}`}
+              pagination={false}
+              size="small"
+              columns={[
+                { title: '服务', dataIndex: 'service_name', key: 'service_name', render: (s) => <Text strong>{String(s || '-')}</Text> },
+                { title: '模块', dataIndex: 'service_module', key: 'service_module', render: (m) => <Text code>{String(m || '-')}</Text> },
+              ]}
+              locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无构建目标" /> }}
+            />
+
+            <Title level={5} style={{ margin: '20px 0 8px' }}>
+              代码仓库
+            </Title>
+            <Table
+              dataSource={(detailBuild.repos as BuildRepo[]) || []}
+              rowKey={(r, i) => `${r.repo_name}-${i}`}
+              pagination={false}
+              size="small"
+              columns={[
+                { title: '代码源', dataIndex: 'codehost_id', key: 'codehost_id', render: (id) => <Tag color="geekblue">#{String(id ?? '-')}</Tag> },
+                { title: '仓库', key: 'repo', render: (_, r) => <Text code style={{ fontSize: 12 }}>{`${r.repo_owner || '-'}/${r.repo_name || '-'}`}</Text> },
+                { title: '默认分支', dataIndex: 'branch', key: 'branch', render: (b) => <Tag color="blue">{String(b || '-')}</Tag> },
+              ]}
+              locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无代码仓库配置" /> }}
+            />
+          </div>
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未获取到构建详情" />
+        )}
+      </Drawer>
     </div>
   );
 };

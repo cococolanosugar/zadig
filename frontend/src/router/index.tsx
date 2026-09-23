@@ -10,9 +10,11 @@ import ProjectOverviewPage from '../pages/Projects/Overview';
 import ServicesPage from '../pages/Services';
 import EnvironmentsPage from '../pages/Environments';
 import EnvironmentWizardPage from '../pages/Environments/Wizard';
+import ServiceDetailPage from '../pages/Environments/ServiceDetail';
 import PipelinesPage from '../pages/Pipelines';
 import PipelineExecutionPage from '../pages/Pipelines/Execution';
 import InsightsPage from '../pages/Insights';
+import InsightDetailPage from '../pages/Insights/Detail';
 import StatisticsPage from '../pages/Statistics';
 import TemplateCenterPage from '../pages/Templates';
 import DeliveryPage from '../pages/Delivery';
@@ -29,10 +31,12 @@ import RegistriesPage from '../pages/Settings/Registries';
 import StoragePage from '../pages/Settings/Storage';
 import UsersPage from '../pages/Settings/Users';
 import { SystemConfigPage } from '../pages/Settings/Config';
+import KeyVaultPage from '../pages/Settings/KeyVault';
 import SprintsPage from '../pages/Projects/Sprints';
 import BuildsPage from '../pages/Projects/Builds';
 import ScannersPage from '../pages/Projects/Scanners';
 import ProjectWizardPage from '../pages/Projects/Wizard';
+import VarsGroupPage from '../pages/Projects/VarsGroup';
 import SystemIntegrationPage from '../pages/Settings/Integration';
 
 export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -55,6 +59,11 @@ export const AppRouter: React.FC = () => {
         <Route path="/signin" element={<LoginPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/login/password" element={<LoginPage />} />
+        <Route path="/mfa-enroll" element={<LoginPage />} />
+
+        {/* Installation & Initial Setup Routes */}
+        <Route path="/v1/installation/signup" element={<LoginPage />} />
+        <Route path="/v1/installation/version" element={<LoginPage />} />
 
         <Route
           path="/v1"
@@ -69,11 +78,16 @@ export const AppRouter: React.FC = () => {
           <Route path="status" element={<DashboardPage />} />
           <Route path="" element={<Navigate to="dashboard" replace />} />
 
-          {/* Global Projects Overview & Creation Wizard */}
+          {/* Global Projects Overview & Creation / Edit Wizard */}
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/create" element={<ProjectWizardPage />} />
+          <Route path="projects/create/:projectName" element={<ProjectWizardPage />} />
           <Route path="projects/create/:projectName/k8s/info" element={<ProjectWizardPage />} />
           <Route path="projects/create/:projectName/k8s/:step" element={<ProjectWizardPage />} />
+          <Route path="projects/create/:projectName/:deployType/:step" element={<ProjectWizardPage />} />
+          <Route path="projects/create/:projectName/*" element={<ProjectWizardPage />} />
+          <Route path="projects/edit/:projectName" element={<ProjectOverviewPage />} />
+          <Route path="projects/initialize/:projectName" element={<ProjectOverviewPage />} />
 
           {/* Project-Scoped Workspace with Secondary Sub-Navigation */}
           <Route path="projects/detail/:projectName" element={<ProjectDetailLayout />}>
@@ -89,11 +103,20 @@ export const AppRouter: React.FC = () => {
             <Route path="pipelines/custom/testcase/*" element={<PipelineExecutionPage />} />
             <Route path="envs" element={<EnvironmentsPage />} />
             <Route path="envs/create" element={<EnvironmentWizardPage />} />
+            <Route path="envs/detail" element={<EnvironmentsPage />} />
+            <Route path="envs/detail/:serviceName" element={<ServiceDetailPage />} />
+            <Route path="envs/detail/:serviceName/*" element={<ServiceDetailPage />} />
+            <Route path="envs/production/create" element={<EnvironmentWizardPage />} />
+            <Route path="envs/production/host/create" element={<EnvironmentWizardPage />} />
+            <Route path="envs/sae/create" element={<EnvironmentWizardPage />} />
+            <Route path="envs/sae/production/create" element={<EnvironmentWizardPage />} />
+            <Route path="envs/sae/config" element={<EnvironmentsPage />} />
             <Route path="envs/:envName" element={<EnvironmentsPage />} />
-            <Route path="envs/:envName/k8s/:serviceName" element={<EnvironmentsPage />} />
-            <Route path="envs/:envName/helm/:serviceName" element={<EnvironmentsPage />} />
-            <Route path="envs/:envName/pm/:serviceName" element={<EnvironmentsPage />} />
+            <Route path="envs/:envName/k8s/:serviceName" element={<ServiceDetailPage />} />
+            <Route path="envs/:envName/helm/:serviceName" element={<ServiceDetailPage />} />
+            <Route path="envs/:envName/pm/:serviceName" element={<ServiceDetailPage />} />
             <Route path="envs/:envName/log" element={<EnvironmentsPage />} />
+            <Route path="envs/:envName/*" element={<EnvironmentsPage />} />
             <Route path="services" element={<ServicesPage />} />
             <Route path="services/production" element={<ServicesPage />} />
             <Route path="sprints" element={<SprintsPage />} />
@@ -115,17 +138,26 @@ export const AppRouter: React.FC = () => {
             <Route path="version/k8s/create" element={<DeliveryPage />} />
             <Route path="version/detail/:id" element={<DeliveryPage />} />
             <Route path="version/*" element={<DeliveryPage />} />
-            <Route path="secrets" element={<StoragePage />} />
+
+            {/* Project Config & Secondary Navigation */}
+            <Route path="group" element={<VarsGroupPage />} />
+            <Route path="group/create" element={<VarsGroupPage />} />
+            <Route path="secrets" element={<KeyVaultPage />} />
             <Route path="rbac" element={<UsersPage />} />
-            <Route path="integration/*" element={<SystemIntegrationPage />} />
+            <Route path="integration" element={<SystemIntegrationPage />} />
+            <Route path="integration/:category" element={<SystemIntegrationPage />} />
           </Route>
 
           {/* Global Release & Pipelines */}
-          <Route path="pipelines" element={<PipelinesPage />} />
+          <Route path="pipelines" element={<Navigate to="/v1/releaseWorkflow" replace />} />
           <Route path="releaseWorkflow" element={<PipelinesPage />} />
           <Route path="pipelines/:name/task/:taskId" element={<PipelineExecutionPage />} />
           <Route path="releasePlan" element={<ReleasePlanPage />} />
+          <Route path="releasePlan/index" element={<ReleasePlanPage />} />
+          <Route path="releasePlan/detail" element={<ReleasePlanPage />} />
+          <Route path="releasePlan/*" element={<ReleasePlanPage />} />
           <Route path="plutus" element={<PlutusDeliveryPage />} />
+          <Route path="plutus/*" element={<PlutusDeliveryPage />} />
 
           {/* Standalone Fallbacks for Services & Envs */}
           <Route path="services" element={<ServicesPage />} />
@@ -134,34 +166,62 @@ export const AppRouter: React.FC = () => {
 
           {/* Asset Management Routes */}
           <Route path="directory" element={<DirectoryPage />} />
-          <Route path="template" element={<TemplateCenterPage />} />
+          <Route path="directory/detail/:id" element={<DirectoryPage />} />
+          <Route path="directory/*" element={<DirectoryPage />} />
+          <Route path="template" element={<Navigate to="k8s-yamls" replace />} />
+          <Route path="template/charts" element={<TemplateCenterPage />} />
+          <Route path="template/dockerfiles" element={<TemplateCenterPage />} />
+          <Route path="template/k8s-yamls" element={<TemplateCenterPage />} />
+          <Route path="template/builds" element={<TemplateCenterPage />} />
+          <Route path="template/scanners" element={<TemplateCenterPage />} />
+          <Route path="template/workflows" element={<TemplateCenterPage />} />
+          <Route path="template/workflows/config" element={<TemplateCenterPage />} />
+          <Route path="template/releasePlan" element={<TemplateCenterPage />} />
           <Route path="template/:tab" element={<TemplateCenterPage />} />
           <Route path="tests" element={<QualityCenterPage />} />
-          <Route path="delivery" element={<DeliveryPage />} />
+          <Route path="tests/*" element={<QualityCenterPage />} />
+          <Route path="delivery" element={<Navigate to="version" replace />} />
+          <Route path="delivery/version" element={<DeliveryPage />} />
+          <Route path="delivery/version/detail/:projectName/:id" element={<DeliveryPage />} />
+          <Route path="delivery/artifacts" element={<DeliveryPage />} />
+          <Route path="delivery/artifacts/detail/:id" element={<DeliveryPage />} />
           <Route path="delivery/:tab" element={<DeliveryPage />} />
-          <Route path="resource" element={<ResourcePage />} />
+          <Route path="resource" element={<Navigate to="cluster" replace />} />
+          <Route path="resource/cluster" element={<ResourcePage />} />
+          <Route path="resource/host" element={<ResourcePage />} />
+          <Route path="resource/registry" element={<ResourcePage />} />
+          <Route path="resource/helmChartRepo" element={<ResourcePage />} />
+          <Route path="resource/storage" element={<ResourcePage />} />
+          <Route path="resource/database" element={<ResourcePage />} />
           <Route path="resource/:tab" element={<ResourcePage />} />
 
           {/* Insights & Statistics */}
           <Route path="statistics" element={<StatisticsPage />} />
-          <Route path="insight" element={<InsightsPage />} />
+          <Route path="insight" element={<Navigate to="view" replace />} />
+          <Route path="insight/view" element={<InsightsPage />} />
+          <Route path="insight/config" element={<InsightsPage />} />
+          <Route path="insight/detail" element={<Navigate to="overview" replace />} />
+          <Route path="insight/detail/:dimension" element={<InsightDetailPage />} />
           <Route path="insights" element={<InsightsPage />} />
 
           {/* User Profile & MCP Configuration */}
-          <Route path="profile" element={<UserProfilePage />} />
+          <Route path="profile" element={<Navigate to="info" replace />} />
           <Route path="profile/info" element={<UserProfilePage />} />
           <Route path="profile/mcp" element={<UserProfilePage />} />
           <Route path="profile/security" element={<UserProfilePage />} />
           <Route path="profile/preference" element={<UserProfilePage />} />
+          <Route path="profile/*" element={<UserProfilePage />} />
 
           {/* Enterprise Management */}
-          <Route path="enterprise" element={<EnterprisePage />} />
+          <Route path="enterprise" element={<Navigate to="info" replace />} />
           <Route path="enterprise/info" element={<EnterprisePage />} />
           <Route path="enterprise/license" element={<EnterprisePage />} />
           <Route path="enterprise/theme" element={<EnterprisePage />} />
           <Route path="enterprise/language" element={<EnterprisePage />} />
+          <Route path="enterprise/*" element={<EnterprisePage />} />
 
           {/* System Settings Routes */}
+          <Route path="system" element={<Navigate to="integration" replace />} />
           <Route path="system/clusters" element={<ClustersPage />} />
           <Route path="system/codehosts" element={<CodeHostsPage />} />
           <Route path="system/registries" element={<RegistriesPage />} />
@@ -172,11 +232,24 @@ export const AppRouter: React.FC = () => {
           <Route path="system/imgs" element={<SystemConfigPage />} />
           <Route path="system/workflowTasks" element={<SystemConfigPage />} />
           <Route path="system/plugins" element={<SystemConfigPage />} />
-          <Route path="system/secrets" element={<StoragePage />} />
+          <Route path="system/secrets" element={<KeyVaultPage />} />
+          <Route path="system/aiCodeReview" element={<SystemConfigPage />} />
           <Route path="system/announcement" element={<SystemConfigPage />} />
           <Route path="system/auditlog" element={<SystemConfigPage />} />
           <Route path="system/integration" element={<SystemIntegrationPage />} />
           <Route path="system/integration/:category" element={<SystemIntegrationPage />} />
+          <Route path="system/*" element={<Navigate to="integration" replace />} />
+
+          {/* Plugin Extension Container */}
+          <Route
+            path="plugin/*"
+            element={
+              <div style={{ padding: 32, background: '#fff', borderRadius: 8, textAlign: 'center' }}>
+                <h3>第三方扩展插件</h3>
+                <p style={{ color: '#8c8c8c' }}>已启用插件容器与协议代理。</p>
+              </div>
+            }
+          />
 
           <Route
             path="*"
@@ -189,6 +262,20 @@ export const AppRouter: React.FC = () => {
           />
         </Route>
 
+        {/* Mobile Route Compatibility (Redirects to Desktop Portal Equivalents) */}
+        <Route path="/mobile" element={<Navigate to="/v1/dashboard" replace />} />
+        <Route path="/mobile/status" element={<Navigate to="/v1/status" replace />} />
+        <Route path="/mobile/profile" element={<Navigate to="/v1/profile/info" replace />} />
+        <Route path="/mobile/projects" element={<Navigate to="/v1/projects" replace />} />
+        <Route path="/mobile/projects/detail/:projectName" element={<Navigate to="/v1/projects/detail/:projectName/detail" replace />} />
+        <Route path="/mobile/*" element={<Navigate to="/v1/dashboard" replace />} />
+
+        <Route path="/404" element={
+          <div style={{ padding: 60, textAlign: 'center' }}>
+            <h2>404 Not Found</h2>
+            <p>请求的页面不存在。</p>
+          </div>
+        } />
         <Route path="/" element={<Navigate to="/v1/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/v1/dashboard" replace />} />
       </Routes>

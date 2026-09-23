@@ -9,6 +9,7 @@ import {
   Radio,
   Empty,
   Button,
+  Select,
 } from 'antd';
 import {
   LineChartOutlined,
@@ -20,8 +21,8 @@ import {
 } from '@ant-design/icons';
 import { Line, Pie, Column } from '@ant-design/plots';
 import http from '../../api/client';
+import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/project';
-import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 
@@ -36,40 +37,48 @@ interface SuccessRateItem {
   value: number;
 }
 
-interface DurationItem {
-  service: string;
-  duration: number;
-  stage: string;
+interface DailyCountItem {
+  date: string;
+  count: number;
+  category: string;
+}
+
+interface DashboardStatResp {
+  total?: number;
+  success?: number;
+  data?: Array<{ date: string; success: number; failure: number; total: number; rollback?: number; timeout?: number }>;
 }
 
 export const InsightsPage: React.FC = () => {
   const { currentProject } = useProjectStore();
+  const navigate = useNavigate();
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('7d');
   const [loading, setLoading] = useState<boolean>(false);
 
   const [kpiMetrics, setKpiMetrics] = useState({
-    successRate: 98.2,
-    avgDuration: 42,
-    totalDeploys: 36,
-    activeServices: 4,
+    successRate: 0,
+    buildTotal: 0,
+    totalDeploys: 0,
+    activeServices: 0,
   });
 
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
   const [successRateData, setSuccessRateData] = useState<SuccessRateItem[]>([]);
-  const [durationData, setDurationData] = useState<DurationItem[]>([]);
+  const [durationData, setDurationData] = useState<DailyCountItem[]>([]);
 
   const fetchInsightData = useCallback(async () => {
     setLoading(true);
     try {
       const daysCount = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
-      const projectParam = currentProject ? `&projectName=${currentProject}` : '';
+      // Backend reads startDate/endDate (unix seconds), not a days count
+      const endDate = Math.floor(Date.now() / 1000);
+      const startDate = endDate - daysCount * 86400;
 
-      // Query stat endpoints or workflows
-      const [_buildRes, _deployRes, svcRes] = await Promise.allSettled([
-        http.get<any>(`/api/stat/dashboard/build?days=${daysCount}${projectParam}`, {
+      const [buildRes, deployRes, svcRes] = await Promise.allSettled([
+        http.get<DashboardStatResp>(`/api/aslan/stat/dashboard/build?startDate=${startDate}&endDate=${endDate}`, {
           skipErrorHandler: true,
         }),
-        http.get<any>(`/api/stat/dashboard/deploy?days=${daysCount}${projectParam}`, {
+        http.get<DashboardStatResp>(`/api/aslan/stat/dashboard/deploy?startDate=${startDate}&endDate=${endDate}`, {
           skipErrorHandler: true,
         }),
         currentProject
@@ -79,68 +88,56 @@ export const InsightsPage: React.FC = () => {
           : Promise.resolve([]),
       ]);
 
+      const buildData: DashboardStatResp =
+        buildRes.status === 'fulfilled' && buildRes.value ? buildRes.value : {};
+      const deployData: DashboardStatResp =
+        deployRes.status === 'fulfilled' && deployRes.value ? deployRes.value : {};
       const serviceList =
         svcRes.status === 'fulfilled' && Array.isArray(svcRes.value) ? svcRes.value : [];
-      const serviceCount = Math.max(serviceList.length, 3);
 
-      // Generate dynamic date range trend points
+      // Trend points from real daily stats
+      // 注意: build daily 含 total; deploy daily 无 total，由 success+rollback+failed+timeout 求和
+      const dailyCount = (d: { total?: number; success?: number; failure?: number; rollback?: number; timeout?: number }) =>
+        d.total ?? (d.success || 0) + (d.failure || 0) + (d.rollback || 0) + (d.timeout || 0);
+
       const points: TrendPoint[] = [];
-      const step = daysCount === 90 ? 7 : daysCount === 30 ? 3 : 1;
-      const today = dayjs();
-
-      let buildSum = 0;
-      let deploySum = 0;
-
-      for (let i = daysCount; i >= 0; i -= step) {
-        const d = today.subtract(i, 'day').format('MM-DD');
-        const bCount = Math.max(1, Math.floor(Math.sin(i) * 6 + 12));
-        const dCount = Math.max(1, Math.floor(Math.cos(i) * 5 + 9));
-        buildSum += bCount;
-        deploySum += dCount;
-
-        points.push({ date: d, count: bCount, category: '构建任务' });
-        points.push({ date: d, count: dCount, category: '部署发布' });
-      }
-
+      (buildData.data || []).forEach((d) => {
+        points.push({ date: (d.date || '').slice(5), count: dailyCount(d), category: '构建任务' });
+      });
+      (deployData.data || []).forEach((d) => {
+        points.push({ date: (d.date || '').slice(5), count: dailyCount(d), category: '部署发布' });
+      });
       setTrendData(points);
 
-      // Generate success breakdown
-      const totalExecs = buildSum + deploySum;
-      const successCount = Math.floor(totalExecs * 0.96);
-      const failCount = Math.max(1, totalExecs - successCount);
-
-      setSuccessRateData([
-        { type: '构建成功', value: Math.floor(buildSum * 0.97) },
-        { type: '部署成功', value: Math.floor(deploySum * 0.95) },
-        { type: '测试通过', value: Math.floor(buildSum * 0.88) },
-        { type: '执行异常', value: failCount },
-      ]);
-
-      // Service duration breakdown
-      const sampleNames = serviceList.slice(0, 4).map((s: any) => s.service_name || s.name);
-      const activeNames = sampleNames.length > 0 ? sampleNames : ['frontend', 'backend-api', 'auth-svc', 'gateway'];
-      const durations: DurationItem[] = [];
-
-      activeNames.forEach((name, idx) => {
-        durations.push({
-          service: name,
-          duration: Math.floor(25 + idx * 8 + (timeRange === '90d' ? 5 : 0)),
-          stage: '编译构建',
-        });
-        durations.push({
-          service: name,
-          duration: Math.floor(15 + idx * 5),
-          stage: '容器部署',
-        });
+      // Daily totals for the column chart
+      const dailyCounts: DailyCountItem[] = [];
+      (buildData.data || []).forEach((d) => {
+        dailyCounts.push({ date: (d.date || '').slice(5), count: dailyCount(d), category: '构建任务' });
       });
+      (deployData.data || []).forEach((d) => {
+        dailyCounts.push({ date: (d.date || '').slice(5), count: dailyCount(d), category: '部署发布' });
+      });
+      setDurationData(dailyCounts);
 
-      setDurationData(durations);
+      // Success/failure breakdown from real counts
+      const buildSuccess = buildData.success || 0;
+      const buildTotal = buildData.total || 0;
+      const deploySuccess = deployData.success || 0;
+      const deployTotal = deployData.total || 0;
+      const breakdown: SuccessRateItem[] = [];
+      if (buildSuccess > 0) breakdown.push({ type: '构建成功', value: buildSuccess });
+      if (buildTotal - buildSuccess > 0) breakdown.push({ type: '构建失败', value: buildTotal - buildSuccess });
+      if (deploySuccess > 0) breakdown.push({ type: '部署成功', value: deploySuccess });
+      if (deployTotal - deploySuccess > 0) breakdown.push({ type: '部署失败', value: deployTotal - deploySuccess });
+      setSuccessRateData(breakdown);
 
+      const totalExecs = buildTotal + deployTotal;
+      const successCount = buildSuccess + deploySuccess;
       setKpiMetrics({
-        successRate: Number(((successCount / totalExecs) * 100).toFixed(1)),
-        avgDuration: Math.floor(38 + (timeRange === '30d' ? 4 : timeRange === '90d' ? 7 : 0)),
-        totalDeploys: deploySum,
-        activeServices: serviceCount,
+        successRate: totalExecs > 0 ? Number(((successCount / totalExecs) * 100).toFixed(1)) : 0,
+        buildTotal,
+        totalDeploys: deployTotal,
+        activeServices: serviceList.length,
       });
     } catch {
       // Handled
@@ -179,9 +176,9 @@ export const InsightsPage: React.FC = () => {
 
   const columnConfig = {
     data: durationData,
-    xField: 'service',
-    yField: 'duration',
-    colorField: 'stage',
+    xField: 'date',
+    yField: 'count',
+    colorField: 'category',
     group: true,
   };
 
@@ -205,6 +202,18 @@ export const InsightsPage: React.FC = () => {
           </Col>
           <Col>
             <Space orientation="horizontal" size={12}>
+              <Select
+                value={undefined}
+                placeholder="维度详情"
+                style={{ width: 140 }}
+                onChange={(v) => navigate(`/v1/insight/detail/${v}`)}
+                options={[
+                  { label: '交付总览', value: 'overview' },
+                  { label: '构建洞察', value: 'build' },
+                  { label: '测试洞察', value: 'test' },
+                  { label: '部署洞察', value: 'deploy' },
+                ]}
+              />
               <Radio.Group
                 value={timeRange}
                 onChange={(e) => setTimeRange(e.target.value)}
@@ -240,10 +249,10 @@ export const InsightsPage: React.FC = () => {
         <Col xs={24} sm={12} md={6}>
           <Card variant="borderless" style={{ borderRadius: 8 }}>
             <Statistic
-              title="任务平均执行耗时"
-              value={kpiMetrics.avgDuration}
+              title="周期构建任务总数"
+              value={kpiMetrics.buildTotal}
               prefix={<ClockCircleOutlined style={{ color: '#faad14' }} />}
-              suffix="秒"
+              suffix="次"
               loading={loading}
             />
           </Card>
@@ -309,12 +318,12 @@ export const InsightsPage: React.FC = () => {
         </Col>
       </Row>
 
-      {/* Stage Duration Breakdown */}
+      {/* Daily Volume Breakdown */}
       <Row gutter={[16, 16]}>
         <Col span={24}>
           <Card
             variant="borderless"
-            title="主要服务构建与部署耗时对比 (秒)"
+            title="每日任务执行总量对比 (构建 vs 部署)"
             style={{ borderRadius: 8 }}
           >
             {durationData.length > 0 ? (
@@ -322,7 +331,7 @@ export const InsightsPage: React.FC = () => {
                 <Column {...columnConfig} />
               </div>
             ) : (
-              <Empty description="暂无耗时分布数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              <Empty description="暂无每日执行数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
             )}
           </Card>
         </Col>

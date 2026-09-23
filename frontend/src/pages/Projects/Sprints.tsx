@@ -16,6 +16,9 @@ import {
   Progress,
   Popconfirm,
   Empty,
+  Drawer,
+  Select,
+  Switch,
 } from 'antd';
 import {
   PlusOutlined,
@@ -27,8 +30,10 @@ import {
   DeleteOutlined,
   EditOutlined,
   ReloadOutlined,
+  SettingOutlined,
+  SaveOutlined,
 } from '@ant-design/icons';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import type { ColumnsType } from 'antd/es/table';
 import http from '../../api/client';
@@ -53,6 +58,8 @@ export interface SprintItem {
 
 export const SprintsPage: React.FC = () => {
   const { projectName } = useParams<{ projectName: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState<boolean>(false);
   const [sprints, setSprints] = useState<SprintItem[]>([]);
   const [searchText, setSearchText] = useState<string>('');
@@ -60,6 +67,38 @@ export const SprintsPage: React.FC = () => {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [editingSprint, setEditingSprint] = useState<SprintItem | null>(null);
   const [form] = Form.useForm();
+
+  // 迭代配置抽屉状态 (对齐 /sprints/config 路由)
+  const [configDrawerOpen, setConfigDrawerOpen] = useState<boolean>(false);
+  const [configForm] = Form.useForm();
+  const [savingConfig, setSavingConfig] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (location.pathname.endsWith('/config')) {
+      setConfigDrawerOpen(true);
+    }
+  }, [location.pathname]);
+
+  const handleCloseConfig = () => {
+    setConfigDrawerOpen(false);
+    if (location.pathname.endsWith('/config')) {
+      navigate(`/v1/projects/detail/${projectName}/sprints`);
+    }
+  };
+
+  const handleSaveConfig = async () => {
+    setSavingConfig(true);
+    try {
+      const values = await configForm.validateFields();
+      localStorage.setItem(`zadig_sprint_config_${projectName}`, JSON.stringify(values));
+      feedback.message.success('迭代管理配置已成功保存！');
+      handleCloseConfig();
+    } catch {
+      // Form validation error
+    } finally {
+      setSavingConfig(false);
+    }
+  };
 
   const fetchSprints = useCallback(async () => {
     if (!projectName) return;
@@ -380,6 +419,12 @@ export const SprintsPage: React.FC = () => {
           </Space>
 
           <Space size="middle">
+            <Button
+              icon={<SettingOutlined />}
+              onClick={() => setConfigDrawerOpen(true)}
+            >
+              迭代配置
+            </Button>
             <Button icon={<ReloadOutlined />} onClick={fetchSprints} loading={loading}>
               刷新
             </Button>
@@ -459,6 +504,81 @@ export const SprintsPage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* Sprint Configuration Drawer (对齐 /sprints/config 路由) */}
+      <Drawer
+        title={
+          <Space>
+            <SettingOutlined style={{ color: '#0066ff' }} />
+            <span>迭代敏捷协同配置 ({projectName})</span>
+          </Space>
+        }
+        placement="right"
+        open={configDrawerOpen}
+        onClose={handleCloseConfig}
+        size="large"
+      >
+        <Form
+          form={configForm}
+          layout="vertical"
+          initialValues={{
+            cycle: 'biweekly',
+            tracker: 'internal',
+            autoArchive: true,
+            syncStatus: true,
+          }}
+        >
+          <Form.Item name="cycle" label="标准迭代周期">
+            <Select
+              options={[
+                { label: '单周冲刺 (1 周)', value: 'weekly' },
+                { label: '双周冲刺 (2 周 - 推荐)', value: 'biweekly' },
+                { label: '月度大版本 (4 周)', value: 'monthly' },
+              ]}
+            />
+          </Form.Item>
+
+          <Form.Item name="tracker" label="关联需求 / 缺陷追踪源">
+            <Select
+              options={[
+                { label: '内置敏捷看板 (Native Board)', value: 'internal' },
+                { label: 'Jira 敏捷项目管理', value: 'jira' },
+                { label: 'TAPD 敏捷协同', value: 'tapd' },
+                { label: '飞书项目 / 敏捷空间', value: 'lark' },
+              ]}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="autoArchive"
+            label="迭代到期后自动流转并归档"
+            valuePropName="checked"
+            extra="当迭代到达截止时间且所有需求已交付上线时，自动将状态切换为「已完成」并归档。"
+          >
+            <Switch />
+          </Form.Item>
+
+          <Form.Item
+            name="syncStatus"
+            label="双向同步工作流交付产物与版本状态"
+            valuePropName="checked"
+            extra="将工作流构建成功的镜像、部署的环境服务与版本 Tag 自动关联到当前迭代卡片。"
+          >
+            <Switch />
+          </Form.Item>
+
+          <div style={{ marginTop: 24 }}>
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              loading={savingConfig}
+              onClick={handleSaveConfig}
+            >
+              保存迭代配置
+            </Button>
+          </div>
+        </Form>
+      </Drawer>
     </div>
   );
 };

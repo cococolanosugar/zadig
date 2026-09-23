@@ -12,10 +12,19 @@ export interface EnterpriseLicenseInfo {
 }
 
 export interface EnterpriseThemeInfo {
-  custom_logo?: string;
-  custom_favicon?: string;
-  custom_title?: string;
-  theme_color?: string;
+  theme_type?: string;
+  custom_theme?: {
+    border_gray?: string;
+    font_gray?: string;
+    font_light_gray?: string;
+    theme_color?: string;
+    theme_border_color?: string;
+    theme_background_color?: string;
+    theme_light_color?: string;
+    background_color?: string;
+    global_background_color?: string;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -42,6 +51,13 @@ export const enterpriseApi = {
     } catch {
       return {};
     }
+  },
+
+  /**
+   * Update system theme (PUT /api/aslan/system/theme)
+   */
+  async updateTheme(payload: EnterpriseThemeInfo): Promise<unknown> {
+    return http.put('/api/aslan/system/theme', payload);
   },
 };
 

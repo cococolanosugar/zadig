@@ -82,6 +82,44 @@ export interface RoleItem {
   type?: string;
 }
 
+// GET /api/vm/vms — aslan core/vm AgentBriefListResp
+export interface VMItem {
+  name: string;
+  label?: string;
+  status: string;
+  error?: string;
+  platform?: string;
+  architecture?: string;
+  ip?: string;
+}
+
+// GET/POST /api/aslan/system/helm — models.HelmRepo
+export interface HelmRepoItem {
+  id: string;
+  repo_name?: string;
+  url: string;
+  username?: string;
+  projects?: string[];
+  enable_proxy?: boolean;
+  update_by?: string;
+  created_at?: number;
+  updated_at?: number;
+}
+
+// GET/POST /api/aslan/system/dbinstance — models.DBInstance
+export interface DBInstanceItem {
+  id: string;
+  type?: string;
+  name: string;
+  projects?: string[];
+  host: string;
+  port?: string;
+  username?: string;
+  update_by?: string;
+  created_at?: number;
+  updated_at?: number;
+}
+
 export const settingsApi = {
   // --- Clusters ---
   async getClusters(projectName = ''): Promise<ClusterItem[]> {
@@ -244,6 +282,58 @@ export const settingsApi = {
     } catch {
       return [];
     }
+  },
+
+  // --- VM Hosts (mounted at /api/vm, not /api/aslan/vm) ---
+  async getVMs(): Promise<VMItem[]> {
+    try {
+      const res = await http.get<VMItem[]>('/api/vm/vms', { skipErrorHandler: true });
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  // --- Helm Chart Repos ---
+  async getHelmRepos(): Promise<HelmRepoItem[]> {
+    try {
+      const res = await http.get<HelmRepoItem[]>('/api/aslan/system/helm', { skipErrorHandler: true });
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  async createHelmRepo(payload: Partial<HelmRepoItem> & { password?: string }): Promise<unknown> {
+    return http.post('/api/aslan/system/helm', payload);
+  },
+
+  async validateHelmRepo(payload: Partial<HelmRepoItem> & { password?: string }): Promise<unknown> {
+    return http.post('/api/aslan/system/helm/validate', payload);
+  },
+
+  async deleteHelmRepo(id: string): Promise<unknown> {
+    return http.delete(`/api/aslan/system/helm/${id}`);
+  },
+
+  // --- DB Instances ---
+  async getDBInstances(): Promise<DBInstanceItem[]> {
+    try {
+      const res = await http.get<DBInstanceItem[]>('/api/aslan/system/dbinstance', { skipErrorHandler: true });
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  async createDBInstance(
+    payload: Partial<DBInstanceItem> & { password?: string }
+  ): Promise<unknown> {
+    return http.post('/api/aslan/system/dbinstance', payload);
+  },
+
+  async deleteDBInstance(id: string): Promise<unknown> {
+    return http.delete(`/api/aslan/system/dbinstance/${id}`);
   },
 };
 

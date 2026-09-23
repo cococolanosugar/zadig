@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Drawer,
   Form,
@@ -7,10 +7,12 @@ import {
   Button,
   Space,
   Typography,
+  InputNumber,
 } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
 import type { WorkflowJob } from '../../api/workflow';
 import YamlEditor from '../Editor/YamlEditor';
+import http from '../../api/client';
 
 const { Title } = Typography;
 
@@ -28,6 +30,9 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
   onSave,
 }) => {
   const [form] = Form.useForm();
+  const [envOptions, setEnvOptions] = useState<Array<{ label: string; value: string }>>([]);
+  const [testOptions, setTestOptions] = useState<Array<{ label: string; value: string }>>([]);
+  const [scanOptions, setScanOptions] = useState<Array<{ label: string; value: string }>>([]);
 
   useEffect(() => {
     if (job) {
@@ -39,9 +44,48 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         branch: job.spec?.branch || 'main',
         dockerfile: job.spec?.dockerfile || 'Dockerfile',
         script: job.spec?.script || '#!/bin/bash\necho "Executing custom task..."\nmake test',
+        test_name: job.spec?.test_name || '',
+        scanning_id: job.spec?.scanning_id || '',
+        target_env: job.spec?.target_env || '',
       });
     }
   }, [job, form]);
+
+  // 按需加载环境/测试/扫描列表
+  useEffect(() => {
+    if (!visible || !job) return;
+    const projectName = job.spec?.project_name as string | undefined;
+    // 环境列表
+    if (job.type === 'zadig-deploy' || job.type === 'zadig-restart') {
+      http
+        .get<Array<{ name: string }>>(`/api/aslan/environment/environments?projectName=${projectName || ''}`, {
+          skipErrorHandler: true,
+        })
+        .then((res) => {
+          const list = Array.isArray(res) ? res : [];
+          setEnvOptions(list.map((e) => ({ label: e.name, value: e.name })));
+        })
+        .catch(() => setEnvOptions([]));
+    }
+    if (job.type === 'zadig-test') {
+      http
+        .get<Array<{ name: string }>>('/api/aslan/testing/test', { skipErrorHandler: true })
+        .then((res) => {
+          const list = Array.isArray(res) ? res : [];
+          setTestOptions(list.map((t) => ({ label: t.name, value: t.name })));
+        })
+        .catch(() => setTestOptions([]));
+    }
+    if (job.type === 'zadig-scanning') {
+      http
+        .get<Array<{ id: string; name: string }>>('/api/aslan/testing/scanning', { skipErrorHandler: true })
+        .then((res) => {
+          const list = Array.isArray(res) ? res : [];
+          setScanOptions(list.map((s) => ({ label: s.name, value: s.id })));
+        })
+        .catch(() => setScanOptions([]));
+    }
+  }, [visible, job]);
 
   const handleFinish = (values: Record<string, unknown>) => {
     if (!job) return;
@@ -55,6 +99,9 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         branch: values.branch as string,
         dockerfile: values.dockerfile as string,
         script: values.script as string,
+        test_name: values.test_name as string,
+        scanning_id: values.scanning_id as string,
+        target_env: values.target_env as string,
       },
     };
     onSave(updated);
@@ -144,6 +191,95 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
               height={280}
             />
           </Form.Item>
+        )}
+
+        {job?.type === 'zadig-test' && (
+          <Form.Item
+            name="test_name"
+            label="关联测试配置"
+            rules={[{ required: true, message: '请选择测试配置' }]}
+            extra="列表来自质量中心的测试配置 (testing/test)"
+          >
+            <Select
+              showSearch={{ optionFilterProp: 'label' }}
+              options={testOptions}
+              placeholder="选择自动化测试配置"
+              notFoundContent="暂无测试配置，请先在质量中心创建"
+            />
+          </Form.Item>
+        )}
+
+        {job?.type === 'zadig-scanning' && (
+          <Form.Item
+            name="scanning_id"
+            label="关联代码扫描"
+            rules={[{ required: true, message: '请选择扫描配置' }]}
+            extra="列表来自代码审查的扫描配置"
+          >
+            <Select
+              showSearch={{ optionFilterProp: 'label' }}
+              options={scanOptions}
+              placeholder="选择扫描配置"
+              notFoundContent="暂无扫描配置，请先在代码审查中创建"
+            />
+          </Form.Item>
+        )}
+
+        {job?.type === 'zadig-distribute-image' && (
+          <>
+            <Form.Item
+              name="target_env"
+              label="镜像分发目标环境"
+              rules={[{ required: true, message: '请选择目标环境' }]}
+            >
+              <Select
+                options={envOptions.length > 0 ? envOptions : [{ label: 'dev', value: 'dev' }, { label: 'qa', value: 'qa' }, { label: 'prod', value: 'prod' }]}
+                placeholder="选择分发目标环境"
+              />
+            </Form.Item>
+            <Form.Item name="service_name" label="目标服务名称">
+              <Input placeholder="例如: backend-api" />
+            </Form.Item>
+          </>
+        )}
+
+        {job?.type === 'zadig-restart' && (
+          <>
+            <Form.Item
+              name="env"
+              label="目标环境"
+              rules={[{ required: true, message: '请选择环境' }]}
+            >
+              <Select
+                showSearch
+                options={envOptions}
+                placeholder="选择要重启服务的环境"
+                notFoundContent="暂无环境"
+              />
+            </Form.Item>
+            <Form.Item name="service_name" label="服务名称" rules={[{ required: true, message: '请输入服务名' }]}>
+              <Input placeholder="例如: backend-api" />
+            </Form.Item>
+          </>
+        )}
+
+        {job?.type === 'approval' && (
+          <>
+            <Form.Item
+              name="description"
+              label="审批说明"
+              rules={[{ required: true, message: '请输入审批说明' }]}
+            >
+              <Input.TextArea rows={3} placeholder="说明本次发布审批的背景与影响范围" />
+            </Form.Item>
+            <Form.Item
+              name="approve_timeout"
+              label="审批超时 (小时，超时自动终止)"
+              initialValue={24}
+            >
+              <InputNumber min={1} max={168} style={{ width: 140 }} />
+            </Form.Item>
+          </>
         )}
       </Form>
     </Drawer>

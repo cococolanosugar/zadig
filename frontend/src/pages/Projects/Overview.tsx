@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Table, Typography, Button, Tag, Space, Empty, Spin } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import {
   ClusterOutlined,
   BranchesOutlined,
@@ -8,20 +9,34 @@ import {
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import workflowApi, { type WorkflowV4Item } from '../../api/workflow';
+import http from '../../api/client';
 import { useProjectStore } from '../../stores/project';
 
 const { Title, Text } = Typography;
 
+interface EnvInfoItem {
+  name: string;
+  cluster_name?: string;
+  cluster_id?: string;
+  namespace?: string;
+  status?: string;
+  update_time?: number;
+  updated_at?: number;
+}
+
 export const ProjectOverviewPage: React.FC = () => {
   const { projectName } = useParams<{ projectName: string }>();
   const navigate = useNavigate();
-  const currentProject = useProjectStore((s) => s.currentProject) || projectName || 'demo-k8s';
+  const currentProject = projectName || useProjectStore((s) => s.currentProject) || '';
 
   const [loading, setLoading] = useState(false);
+  const [envLoading, setEnvLoading] = useState(false);
   const [workflows, setWorkflows] = useState<WorkflowV4Item[]>([]);
+  const [envs, setEnvs] = useState<EnvInfoItem[]>([]);
 
   const fetchData = async () => {
     setLoading(true);
+    setEnvLoading(true);
     try {
       const wfList = await workflowApi.getWorkflows(currentProject);
       setWorkflows(wfList);
@@ -30,13 +45,43 @@ export const ProjectOverviewPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+    try {
+      const res = await http.get<EnvInfoItem[] | { data: EnvInfoItem[] }>(
+        `/api/aslan/environment/environments?projectName=${currentProject}`,
+        { skipErrorHandler: true }
+      );
+      const list = Array.isArray(res) ? res : ('data' in res && Array.isArray(res.data) ? res.data : []);
+      setEnvs(list);
+    } catch {
+      setEnvs([]);
+    } finally {
+      setEnvLoading(false);
+    }
   };
 
   useEffect(() => {
-    fetchData();
+    if (currentProject) {
+      fetchData();
+    }
   }, [currentProject]);
 
-  const envColumns = [
+  const renderEnvStatus = (status?: string) => {
+    switch (status) {
+      case 'running':
+      case 'created':
+        return <Tag color="success">{status}</Tag>;
+      case 'updating':
+      case 'creating':
+        return <Tag color="processing">{status}</Tag>;
+      case 'error':
+      case 'deleting':
+        return <Tag color="error">{status}</Tag>;
+      default:
+        return status ? <Tag color="default">{status}</Tag> : <Tag color="default">unknown</Tag>;
+    }
+  };
+
+  const envColumns: ColumnsType<EnvInfoItem> = [
     {
       title: '名称',
       dataIndex: 'name',
@@ -58,17 +103,29 @@ export const ProjectOverviewPage: React.FC = () => {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      render: () => <Tag color="default">未部署</Tag>,
+      render: (_, record) => renderEnvStatus(record.status),
+    },
+    {
+      title: '集群 / 命名空间',
+      key: 'cluster',
+      render: (_, record) => (
+        <Text type="secondary">
+          {`${record.cluster_name || record.cluster_id || '-'} / ${record.namespace || '-'}`}
+        </Text>
+      ),
     },
     {
       title: '最后修改时间',
       dataIndex: 'update_time',
       key: 'update_time',
-      render: (t: string) => t || '-',
+      render: (_, record) => {
+        const t = record.update_time || record.updated_at;
+        return t ? new Date(Number(t) * 1000).toLocaleString() : '-';
+      },
     },
   ];
 
-  const workflowColumns = [
+  const workflowColumns: ColumnsType<WorkflowV4Item> = [
     {
       title: '名称',
       dataIndex: 'name',
@@ -102,16 +159,11 @@ export const ProjectOverviewPage: React.FC = () => {
         ),
     },
     {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      render: () => <Tag color="success">就绪</Tag>,
-    },
-    {
       title: '最后修改时间',
-      dataIndex: 'update_time',
-      key: 'update_time',
-      render: (t: string) => t || '-',
+      dataIndex: 'updated_at',
+      key: 'updated_at',
+      render: (_, record) =>
+        record.updated_at ? new Date(record.updated_at * 1000).toLocaleString() : '-',
     },
   ];
 
@@ -151,8 +203,10 @@ export const ProjectOverviewPage: React.FC = () => {
         }
       >
         <Table
-          dataSource={[]}
+          dataSource={envs}
           columns={envColumns}
+          rowKey="name"
+          loading={envLoading}
           pagination={false}
           locale={{ emptyText: <Empty description="暂无数据" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
         />

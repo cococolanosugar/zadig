@@ -12,6 +12,7 @@ import {
   Drawer,
   Badge,
   InputNumber,
+  Table,
 } from 'antd';
 import {
   ClusterOutlined,
@@ -20,10 +21,13 @@ import {
   SyncOutlined,
   ControlOutlined,
   PlusOutlined,
+  FileSearchOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import dayjs from 'dayjs';
 import { useProjectStore } from '../../stores/project';
 import PodTerminal from '../../components/Terminal/PodTerminal';
 import LogViewer from '../../components/Terminal/LogViewer';
@@ -52,13 +56,25 @@ interface PodItem {
   age?: string;
 }
 
+interface EnvOperationLogItem {
+  id?: string;
+  username?: string;
+  function?: string;
+  method?: string;
+  status?: number;
+  created_at?: number;
+  detail?: string;
+  request_body?: string;
+}
+
 export const EnvironmentsPage: React.FC = () => {
-  const { projectName } = useParams<{ projectName?: string }>();
+  const { projectName, envName: routeEnvName } = useParams<{ projectName?: string; envName?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentProject } = useProjectStore();
   const activeProject = projectName || currentProject;
   const [environments, setEnvironments] = useState<EnvironmentItem[]>([]);
-  const [currentEnv, setCurrentEnv] = useState<string>('');
+  const [currentEnv, setCurrentEnv] = useState<string>(routeEnvName || '');
   const [pods, setPods] = useState<PodItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -76,6 +92,48 @@ export const EnvironmentsPage: React.FC = () => {
   const [replicas, setReplicas] = useState<number>(1);
   const [scaling, setScaling] = useState(false);
 
+  // Environment Change Log Drawer state
+  const [changeLogOpen, setChangeLogOpen] = useState<boolean>(false);
+  const [changeLogs, setChangeLogs] = useState<EnvOperationLogItem[]>([]);
+  const [changeLogsLoading, setChangeLogsLoading] = useState<boolean>(false);
+  const [changeLogsTotal, setChangeLogsTotal] = useState<number>(0);
+  const [changeLogsPage, setChangeLogsPage] = useState<number>(1);
+
+  const fetchChangeLogs = useCallback(
+    async (page = 1) => {
+      if (!activeProject || !currentEnv) return;
+      setChangeLogsLoading(true);
+      try {
+        const res = await http.get<{ operation_logs?: EnvOperationLogItem[]; total?: number; count?: number } | EnvOperationLogItem[]>(
+          `/api/aslan/environment/operations?projectName=${activeProject}&envName=${currentEnv}&page=${page}&pageSize=15`,
+          { skipErrorHandler: true }
+        );
+        if (Array.isArray(res)) {
+          setChangeLogs(res);
+          setChangeLogsTotal(res.length);
+        } else if (res && typeof res === 'object') {
+          setChangeLogs(res.operation_logs || []);
+          setChangeLogsTotal(res.total || res.count || 0);
+        }
+        setChangeLogsPage(page);
+      } catch {
+        setChangeLogs([]);
+        setChangeLogsTotal(0);
+      } finally {
+        setChangeLogsLoading(false);
+      }
+    },
+    [activeProject, currentEnv]
+  );
+
+  // Check if current route is /log
+  useEffect(() => {
+    if (location.pathname.endsWith('/log')) {
+      setChangeLogOpen(true);
+      fetchChangeLogs();
+    }
+  }, [location.pathname, fetchChangeLogs]);
+
   const loadEnvironments = useCallback(async () => {
     if (!activeProject) {
       setEnvironments([]);
@@ -88,7 +146,11 @@ export const EnvironmentsPage: React.FC = () => {
       );
       const list = Array.isArray(res) ? res : ('data' in res && Array.isArray(res.data) ? res.data : []);
       setEnvironments(list);
-      setCurrentEnv(list.length > 0 ? list[0].name : '');
+      if (routeEnvName) {
+        setCurrentEnv(routeEnvName);
+      } else if (list.length > 0 && !currentEnv) {
+        setCurrentEnv(list[0].name);
+      }
     } catch {
       setEnvironments([]);
       setCurrentEnv('');
@@ -96,7 +158,7 @@ export const EnvironmentsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeProject]);
+  }, [activeProject, routeEnvName, currentEnv]);
 
   useEffect(() => {
     loadEnvironments();
@@ -197,7 +259,7 @@ export const EnvironmentsPage: React.FC = () => {
       title: '所在主机节点',
       dataIndex: 'node_name',
       key: 'node_name',
-      render: (text) => <Text code>{String(text || 'k8s-worker')}</Text>,
+      render: (text) => <Text code>{String(text || '-')}</Text>,
     },
     {
       title: 'Pod IP',
@@ -209,13 +271,25 @@ export const EnvironmentsPage: React.FC = () => {
       title: '存活运行时长',
       dataIndex: 'age',
       key: 'age',
-      render: (text) => <Text type="secondary">{String(text || '1d')}</Text>,
+      render: (text) => <Text type="secondary">{String(text || '-')}</Text>,
     },
     {
       title: '容器操作',
       valueType: 'option',
       key: 'option',
       render: (_, record) => [
+        <Button
+          key="detail"
+          type="link"
+          icon={<FileSearchOutlined />}
+          onClick={() =>
+            navigate(
+              `/v1/projects/detail/${activeProject}/envs/${currentEnv}/k8s/${record.container_name || record.name}?service=${record.name}`
+            )
+          }
+        >
+          服务详情
+        </Button>,
         <Button
           key="terminal"
           type="link"
@@ -277,6 +351,15 @@ export const EnvironmentsPage: React.FC = () => {
                 onClick={() => navigate(`/v1/projects/detail/${activeProject}/envs/create`)}
               >
                 新建环境
+              </Button>
+              <Button
+                icon={<HistoryOutlined />}
+                onClick={() => {
+                  setChangeLogOpen(true);
+                  fetchChangeLogs();
+                }}
+              >
+                变更记录
               </Button>
               <Button
                 icon={<ControlOutlined />}
@@ -350,6 +433,91 @@ export const EnvironmentsPage: React.FC = () => {
         <LogViewer
           streamUrl={streamingLogUrl}
           height="100%"
+        />
+      </Drawer>
+
+      {/* Environment Change Log Drawer */}
+      <Drawer
+        title={
+          <Space orientation="horizontal">
+            <HistoryOutlined style={{ color: '#0066ff' }} />
+            <span>环境变更记录: {activeProject} / {currentEnv}</span>
+          </Space>
+        }
+        placement="right"
+        open={changeLogOpen}
+        onClose={() => {
+          setChangeLogOpen(false);
+          if (location.pathname.endsWith('/log')) {
+            navigate(`/v1/projects/detail/${activeProject}/envs/${currentEnv}`);
+          }
+        }}
+        size="large"
+      >
+        <Table<EnvOperationLogItem>
+          rowKey={(r, idx) => r.id || `${r.created_at}_${idx}`}
+          loading={changeLogsLoading}
+          dataSource={changeLogs}
+          pagination={{
+            current: changeLogsPage,
+            pageSize: 15,
+            total: changeLogsTotal,
+            onChange: (p) => fetchChangeLogs(p),
+            showTotal: (total) => `共 ${total} 条记录`,
+          }}
+          columns={[
+            {
+              title: '操作时间',
+              dataIndex: 'created_at',
+              key: 'created_at',
+              width: 170,
+              render: (t) => (t ? dayjs(t * 1000).format('YYYY-MM-DD HH:mm:ss') : '-'),
+            },
+            {
+              title: '操作人',
+              dataIndex: 'username',
+              key: 'username',
+              width: 120,
+              render: (u) => <Text strong>{String(u || '-')}</Text>,
+            },
+            {
+              title: '操作方法',
+              dataIndex: 'method',
+              key: 'method',
+              width: 90,
+              render: (m) => (
+                <Tag color={m === 'POST' ? 'green' : m === 'DELETE' ? 'red' : 'blue'}>
+                  {String(m || 'GET')}
+                </Tag>
+              ),
+            },
+            {
+              title: '状态',
+              dataIndex: 'status',
+              key: 'status',
+              width: 80,
+              render: (s) => (
+                <Tag color={Number(s) >= 200 && Number(s) < 300 ? 'success' : 'error'}>
+                  {String(s || 200)}
+                </Tag>
+              ),
+            },
+            {
+              title: '功能/变更详情',
+              dataIndex: 'function',
+              key: 'function',
+              render: (f, record) => (
+                <div>
+                  <Text code>{String(f || '-')}</Text>
+                  {record.detail && (
+                    <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 4 }}>
+                      {record.detail}
+                    </div>
+                  )}
+                </div>
+              ),
+            },
+          ]}
         />
       </Drawer>
 

@@ -37,6 +37,37 @@ export interface YamlTemplateItem {
   variables?: Array<{ key: string; value?: string }>;
 }
 
+export interface DockerfileTemplateItem {
+  id?: string;
+  name: string;
+  content?: string;
+  update_time?: number;
+}
+
+export interface ChartTemplateItem {
+  name?: string;
+  repo_name?: string;
+  chart_name?: string;
+  version?: string;
+  description?: string;
+}
+
+export interface BuildTemplateItem {
+  id?: string;
+  name: string;
+  build_name?: string;
+  scripts?: string;
+  update_time?: number;
+}
+
+export interface ScannerTemplateItem {
+  id?: string;
+  name: string;
+  description?: string;
+  enable?: boolean;
+  update_time?: number;
+}
+
 export const templateApi = {
   /**
    * Get workflow templates (contains 20+ enterprise built-in templates)
@@ -65,9 +96,9 @@ export const templateApi = {
   /**
    * Get Dockerfile templates
    */
-  async getDockerfileTemplates(): Promise<{ dockerfile_template?: unknown[]; total?: number }> {
+  async getDockerfileTemplates(): Promise<{ dockerfile_template?: DockerfileTemplateItem[]; total?: number }> {
     try {
-      const res = await http.get<{ dockerfile_template?: unknown[]; total?: number }>('/api/aslan/template/dockerfile');
+      const res = await http.get<{ dockerfile_template?: DockerfileTemplateItem[]; total?: number }>('/api/aslan/template/dockerfile');
       return res || { dockerfile_template: [], total: 0 };
     } catch {
       return { dockerfile_template: [], total: 0 };
@@ -77,9 +108,9 @@ export const templateApi = {
   /**
    * Get Helm Chart templates
    */
-  async getChartTemplates(): Promise<{ chartTemplates?: unknown[] }> {
+  async getChartTemplates(): Promise<{ chartTemplates?: ChartTemplateItem[] }> {
     try {
-      const res = await http.get<{ chartTemplates?: unknown[] }>('/api/aslan/template/charts');
+      const res = await http.get<{ chartTemplates?: ChartTemplateItem[] }>('/api/aslan/template/charts');
       return res || { chartTemplates: [] };
     } catch {
       return { chartTemplates: [] };
@@ -89,9 +120,9 @@ export const templateApi = {
   /**
    * Get Build templates
    */
-  async getBuildTemplates(): Promise<{ build_templates?: unknown[] }> {
+  async getBuildTemplates(): Promise<{ build_templates?: BuildTemplateItem[] }> {
     try {
-      const res = await http.get<{ build_templates?: unknown[] }>('/api/aslan/template/build');
+      const res = await http.get<{ build_templates?: BuildTemplateItem[] }>('/api/aslan/template/build');
       return res || { build_templates: [] };
     } catch {
       return { build_templates: [] };
@@ -101,9 +132,9 @@ export const templateApi = {
   /**
    * Get Scanner templates
    */
-  async getScannerTemplates(): Promise<{ scanning_templates?: unknown[] }> {
+  async getScannerTemplates(): Promise<{ scanning_templates?: ScannerTemplateItem[] }> {
     try {
-      const res = await http.get<{ scanning_templates?: unknown[] }>('/api/aslan/template/scanning');
+      const res = await http.get<{ scanning_templates?: ScannerTemplateItem[] }>('/api/aslan/template/scanning');
       return res || { scanning_templates: [] };
     } catch {
       return { scanning_templates: [] };

@@ -13,11 +13,12 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Button, Space, Card, Typography, Modal, Input, Select } from 'antd';
-import { PlusOutlined, PlayCircleOutlined, SaveOutlined } from '@ant-design/icons';
+import { PlusOutlined, PlayCircleOutlined, SaveOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import JobNode, { type JobNodeData } from './JobNode';
 import JobConfigDrawer from './JobConfigDrawer';
 import WorkflowTriggerModal from './WorkflowTriggerModal';
 import type { WorkflowV4Item, WorkflowJob, JobType } from '../../api/workflow';
+import TriggerPanel from './TriggerPanel';
 import { feedback } from '../../utils/feedback';
 
 const { Title, Text } = Typography;
@@ -103,6 +104,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   const [selectedJob, setSelectedJob] = useState<WorkflowJob | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [triggerModalVisible, setTriggerModalVisible] = useState(false);
+  const [triggerPanelVisible, setTriggerPanelVisible] = useState(false);
 
   // Add Job Modal state
   const [addJobModalVisible, setAddJobModalVisible] = useState(false);
@@ -196,6 +198,9 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
       }
       extra={
         <Space orientation="horizontal">
+          <Button icon={<ClockCircleOutlined />} onClick={() => setTriggerPanelVisible(true)}>
+            触发器
+          </Button>
           {!readOnly && (
             <>
               <Button
@@ -256,6 +261,14 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
         onClose={() => setTriggerModalVisible(false)}
       />
 
+      {/* Trigger Panel (cron / git webhook) */}
+      <TriggerPanel
+        open={triggerPanelVisible}
+        onClose={() => setTriggerPanelVisible(false)}
+        workflowName={workflow.name}
+        readOnly={readOnly}
+      />
+
       {/* Add Job Modal */}
       <Modal
         title="添加任务节点"
@@ -283,8 +296,13 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
             options={[
               { label: '构建任务 (zadig-build)', value: 'zadig-build' },
               { label: '部署任务 (zadig-deploy)', value: 'zadig-deploy' },
+              { label: '测试任务 (zadig-test)', value: 'zadig-test' },
+              { label: '代码扫描 (zadig-scanning)', value: 'zadig-scanning' },
+              { label: '镜像分发 (zadig-distribute-image)', value: 'zadig-distribute-image' },
+              { label: '人工审批 (approval)', value: 'approval' },
+              { label: '服务重启 (zadig-restart)', value: 'zadig-restart' },
               { label: '通用脚本任务 (freestyle)', value: 'freestyle' },
-              { label: '插件测试任务 (plugin)', value: 'plugin' },
+              { label: '插件任务 (plugin)', value: 'plugin' },
             ]}
           />
         </div>

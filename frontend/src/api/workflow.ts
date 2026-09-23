@@ -1,6 +1,18 @@
 import http from './client';
 
-export type JobType = 'zadig-build' | 'zadig-deploy' | 'custom-deploy' | 'freestyle' | 'plugin';
+// 与后端 pkg/microservice/aslan/config/consts.go JobType 常量对齐（常用子集）
+export type JobType =
+  | 'zadig-build'
+  | 'zadig-deploy'
+  | 'zadig-test'
+  | 'zadig-scanning'
+  | 'zadig-distribute-image'
+  | 'zadig-restart'
+  | 'approval'
+  | 'custom-deploy'
+  | 'freestyle'
+  | 'plugin'
+  | (string & {});
 
 export interface WorkflowJobSpec {
   service_name?: string;
@@ -89,12 +101,15 @@ export interface ListWorkflowTaskResponse {
 
 export const workflowApi = {
   /**
-   * List workflows by project
+   * List workflows by project (or global if project omitted)
    */
-  async getWorkflows(projectName: string): Promise<WorkflowV4Item[]> {
+  async getWorkflows(projectName?: string): Promise<WorkflowV4Item[]> {
     try {
+      const url = projectName
+        ? `/api/aslan/workflow/v4?projectName=${projectName}`
+        : '/api/aslan/workflow/v4';
       const res = await http.get<{ workflow_list?: WorkflowV4Item[] } | WorkflowV4Item[]>(
-        `/api/aslan/workflow/v4?projectName=${projectName}`,
+        url,
         { skipErrorHandler: true }
       );
       if (Array.isArray(res)) return res;

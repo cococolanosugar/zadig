@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Card,
   Typography,
@@ -10,6 +10,9 @@ import {
   Modal,
   Form,
   Select,
+  Input,
+  Tag,
+  Spin,
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
@@ -17,43 +20,166 @@ import {
   PlusOutlined,
   EllipsisOutlined,
   ReloadOutlined,
+  DeleteOutlined,
+  ClusterOutlined,
+  ThunderboltOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { workflowApi, type WorkflowTaskPreview } from '../../api/workflow';
+import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
 
 const { Text } = Typography;
 
+interface DashboardCardConfig {
+  id?: string;
+  name: string;
+  type: string;
+  config?: Record<string, unknown>;
+}
+
+interface WorkflowResponseItem {
+  task_id: number;
+  name: string;
+  project: string;
+  creator: string;
+  start_time: number;
+  status: string;
+  display_name: string;
+  workflow_type: string;
+}
+
+interface EnvResponseItem {
+  name: string;
+  alias?: string;
+  production: boolean;
+  project_name: string;
+  update_time: number;
+  updated_by: string;
+  cluster_id: string;
+}
+
+const CARD_TYPE_OPTIONS = [
+  { label: '运行中的工作流', value: 'running_workflow' },
+  { label: '我的工作流', value: 'my_workflow' },
+  { label: '我的环境', value: 'my_env' },
+  { label: '服务热力图', value: 'service_update_frequency' },
+];
+
+const CARD_TYPE_LABEL: Record<string, string> = {
+  running_workflow: '运行中的工作流',
+  my_workflow: '我的工作流',
+  my_env: '我的环境',
+  service_update_frequency: '服务热力图',
+};
+
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const [tasks, setTasks] = useState<WorkflowTaskPreview[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [cards, setCards] = useState<DashboardCardConfig[]>([]);
+  const [cardsLoading, setCardsLoading] = useState(true);
   const [addCardModalOpen, setAddCardModalOpen] = useState(false);
+  const [addForm] = Form.useForm();
+  const [cardType, setCardType] = useState<string>('running_workflow');
 
-  const fetchTasks = async () => {
-    setLoading(true);
+  // [card.id, data] pairs for each card's fetched data
+  const [cardData, setCardData] = useState<Record<string, unknown>>({});
+
+  const loadCardConfig = useCallback(async () => {
+    setCardsLoading(true);
     try {
-      const taskRes = await workflowApi.getWorkflowTasks({ pageNum: 1, pageSize: 10 });
-      if (taskRes?.workflow_list) {
-        setTasks(taskRes.workflow_list);
-      }
+      const res = await http.get<{ cards?: DashboardCardConfig[] }>(
+        '/api/aslan/system/dashboard/settings',
+        { skipErrorHandler: true }
+      );
+      const list = res?.cards && res.cards.length > 0 ? res.cards : [{ name: '运行中的工作流', type: 'running_workflow' }];
+      setCards(list);
     } catch {
-      setTasks([]);
+      setCards([{ name: '运行中的工作流', type: 'running_workflow' }]);
     } finally {
-      setLoading(false);
+      setCardsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCardConfig();
+  }, [loadCardConfig]);
+
+  const fetchCardData = useCallback(async (card: DashboardCardConfig) => {
+    try {
+      let data: unknown = null;
+      if (card.type === 'running_workflow') {
+        data = await http.get<WorkflowResponseItem[]>('/api/aslan/system/dashboard/workflow/running', {
+          skipErrorHandler: true,
+        });
+      } else if (card.type === 'my_workflow') {
+        data = await http.get<WorkflowResponseItem[]>(
+          `/api/aslan/system/dashboard/workflow/mine${card.id ? `?card_id=${card.id}` : ''}`,
+          { skipErrorHandler: true }
+        );
+      } else if (card.type === 'my_env') {
+        const cfg = card.config || {};
+        data = await http.get<EnvResponseItem>(
+          `/api/aslan/system/dashboard/environment/${cfg.env_name as string}?projectName=${cfg.project_name as string}`,
+          { skipErrorHandler: true }
+        );
+      }
+      setCardData((prev) => ({ ...prev, [card.id || card.name]: data }));
+    } catch {
+      setCardData((prev) => ({ ...prev, [card.id || card.name]: null }));
+    }
+  }, []);
+
+  useEffect(() => {
+    cards.forEach((card) => {
+      if (card.type === 'running_workflow' || card.type === 'my_workflow' || card.type === 'my_env') {
+        fetchCardData(card);
+      }
+    });
+  }, [cards, fetchCardData]);
+
+  const handleSaveCards = async (nextCards: DashboardCardConfig[]) => {
+    try {
+      await http.put('/api/aslan/system/dashboard/settings', { cards: nextCards });
+      setCards(nextCards);
+      feedback.message.success('工作台卡片配置已保存');
+      return true;
+    } catch (err: any) {
+      feedback.message.error(err?.response?.data?.message || err?.message || '卡片配置保存失败');
+      return false;
     }
   };
 
-  useEffect(() => {
-    fetchTasks();
-  }, []);
+  const handleAddCard = async () => {
+    try {
+      const values = await addForm.validateFields();
+      const newCard: DashboardCardConfig = { name: values.name, type: values.type };
+      if (values.type === 'my_env') {
+        newCard.config = { project_name: values.project_name, env_name: values.env_name };
+      }
+      const ok = await handleSaveCards([...cards, newCard]);
+      if (ok) {
+        setAddCardModalOpen(false);
+        addForm.resetFields();
+        setCardType('running_workflow');
+      }
+    } catch {
+      // Form validation error
+    }
+  };
+
+  const handleRemoveCard = (card: DashboardCardConfig) => {
+    handleSaveCards(cards.filter((c) => c !== card));
+  };
 
   const cardMenuItems: MenuProps['items'] = [
     {
       key: 'refresh',
       icon: <ReloadOutlined />,
       label: '刷新卡片',
-      onClick: fetchTasks,
+      onClick: () => {
+        loadCardConfig();
+        cards.forEach((c) => fetchCardData(c));
+      },
     },
     {
       key: 'view-all',
@@ -63,39 +189,144 @@ export const DashboardPage: React.FC = () => {
     },
   ];
 
-  const columns = [
-    {
-      title: '工作流名称',
-      dataIndex: 'workflow_name',
-      key: 'workflow_name',
-      render: (text: string, record: WorkflowTaskPreview) => (
-        <Space orientation="horizontal">
-          <BranchesOutlined style={{ color: '#0066ff' }} />
-          <Button
-            type="link"
-            style={{ padding: 0, fontWeight: 500 }}
-            onClick={() => navigate(`/v1/pipelines/${record.workflow_name}/task/${record.task_id}`)}
-          >
-            {text || `Task #${record.task_id}`}
-          </Button>
-        </Space>
-      ),
-    },
-    {
-      title: '执行者',
-      dataIndex: 'task_creator',
-      key: 'task_creator',
-      render: (creator: string) => <Text type="secondary">{creator || 'System'}</Text>,
-    },
-    {
-      title: '创建时间',
-      dataIndex: 'create_time',
-      key: 'create_time',
-      render: (time: number) => (
-        <Text type="secondary">{time ? new Date(time * 1000).toLocaleString() : '-'}</Text>
-      ),
-    },
-  ];
+  const renderWorkflowList = (items: WorkflowResponseItem[] | null | undefined, emptyText: string) => {
+    if (!Array.isArray(items) || items.length === 0) {
+      return (
+        <div style={{ padding: '40px 0', textAlign: 'center' }}>
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span style={{ color: '#8c8c8c' }}>{emptyText}</span>} />
+        </div>
+      );
+    }
+    return (
+      <Table
+        dataSource={items}
+        rowKey={(r) => `${r.name || 'task'}-${r.task_id}`}
+        pagination={{ pageSize: 8, hideOnSinglePage: true }}
+        size="middle"
+        columns={[
+          {
+            title: '工作流名称',
+            key: 'name',
+            render: (_, record) => (
+              <Space orientation="horizontal">
+                <BranchesOutlined style={{ color: '#0066ff' }} />
+                <Button
+                  type="link"
+                  style={{ padding: 0, fontWeight: 500 }}
+                  onClick={() => navigate(`/v1/pipelines/${record.name}/task/${record.task_id}`)}
+                >
+                  {record.display_name || record.name}
+                </Button>
+              </Space>
+            ),
+          },
+          {
+            title: '执行者',
+            dataIndex: 'creator',
+            key: 'creator',
+            render: (creator: string) => <Text type="secondary">{creator || 'System'}</Text>,
+          },
+          {
+            title: '创建时间',
+            dataIndex: 'start_time',
+            key: 'start_time',
+            render: (time: number) => (
+              <Text type="secondary">{time ? new Date(time * 1000).toLocaleString() : '-'}</Text>
+            ),
+          },
+        ]}
+      />
+    );
+  };
+
+  const renderCard = (card: DashboardCardConfig, index: number) => {
+    const key = card.id || card.name;
+    const data = cardData[key];
+
+    let body: React.ReactNode;
+    if (card.type === 'running_workflow') {
+      body = Array.isArray(data) ? (
+        renderWorkflowList(data as WorkflowResponseItem[], '当前没有正在运行的工作流')
+      ) : data === null ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据" />
+      ) : (
+        <Spin />
+      );
+    } else if (card.type === 'my_workflow') {
+      body = Array.isArray(data) ? (
+        renderWorkflowList(data as WorkflowResponseItem[], '暂无与我相关的工作流任务')
+      ) : data === null ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据" />
+      ) : (
+        <Spin />
+      );
+    } else if (card.type === 'my_env') {
+      const env = data as EnvResponseItem | null | undefined;
+      body = env ? (
+        <div style={{ padding: '24px 0' }}>
+          <Space orientation="horizontal" size={16} wrap>
+            <ClusterOutlined style={{ fontSize: 28, color: '#0066ff' }} />
+            <div>
+              <Text strong style={{ fontSize: 16 }}>{env.name}</Text>
+              <div style={{ marginTop: 4 }}>
+                <Tag color={env.production ? 'gold' : 'blue'}>{env.production ? '生产环境' : '测试环境'}</Tag>
+                <Tag color="geekblue">{env.project_name}</Tag>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  最后更新: {env.update_time ? new Date(env.update_time * 1000).toLocaleString() : '-'}
+                  {env.updated_by ? ` · ${env.updated_by}` : ''}
+                </Text>
+              </div>
+            </div>
+          </Space>
+        </div>
+      ) : env === null ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="环境不存在或已删除" />
+      ) : (
+        <Spin />
+      );
+    } else {
+      body = (
+        <div style={{ padding: '40px 0', textAlign: 'center' }}>
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该卡片类型暂不支持" />
+        </div>
+      );
+    }
+
+    return (
+      <Card
+        key={key || index}
+        variant="borderless"
+        title={
+          <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2d3d' }}>
+            {card.name || CARD_TYPE_LABEL[card.type]}
+          </span>
+        }
+        extra={
+          <Space>
+            <Button
+              type="text"
+              size="small"
+              icon={<DeleteOutlined />}
+              onClick={() => handleRemoveCard(card)}
+            />
+            <Dropdown menu={{ items: cardMenuItems }} placement="bottomRight">
+              <Button type="text" icon={<EllipsisOutlined style={{ fontSize: 18 }} />} />
+            </Dropdown>
+          </Space>
+        }
+        style={{
+          borderRadius: 4,
+          boxShadow: '0 1px 4px rgba(0,21,41,0.08)',
+          backgroundColor: '#ffffff',
+        }}
+        styles={{ body: { padding: '12px 24px', minHeight: 240 } }}
+      >
+        {body}
+      </Card>
+    );
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -116,72 +347,65 @@ export const DashboardPage: React.FC = () => {
         </Button>
       </div>
 
-      {/* Widget Card: 运行中的工作流 */}
-      <Card
-        variant="borderless"
-        title={
-          <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2d3d' }}>
-            运行中的工作流
-          </span>
-        }
-        extra={
-          <Dropdown menu={{ items: cardMenuItems }} placement="bottomRight">
-            <Button type="text" icon={<EllipsisOutlined style={{ fontSize: 18 }} />} />
-          </Dropdown>
-        }
-        style={{
-          borderRadius: 4,
-          boxShadow: '0 1px 4px rgba(0,21,41,0.08)',
-          backgroundColor: '#ffffff',
-        }}
-        styles={{
-          body: {
-            padding: '12px 24px',
-            minHeight: 280,
-          },
-        }}
-      >
-        {tasks.length > 0 ? (
-          <Table
-            dataSource={tasks}
-            columns={columns}
-            rowKey={(r) => `${r.workflow_name || 'task'}-${r.task_id}`}
-            pagination={false}
-            size="middle"
-            loading={loading}
-          />
-        ) : (
-          <div style={{ padding: '60px 0', textAlign: 'center' }}>
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={<span style={{ color: '#8c8c8c' }}>暂无数据</span>}
-            />
-          </div>
-        )}
-      </Card>
+      {/* Dashboard Cards (config persisted per-user via /api/aslan/system/dashboard/settings) */}
+      {cardsLoading ? (
+        <div style={{ textAlign: 'center', padding: '60px 0' }}>
+          <Spin size="large" />
+        </div>
+      ) : (
+        cards.map((card, idx) => renderCard(card, idx))
+      )}
 
       {/* Add Card Modal */}
       <Modal
         title="添加工作台卡片"
         open={addCardModalOpen}
-        onOk={() => {
-          feedback.message.success('卡片配置已更新');
-          setAddCardModalOpen(false);
-        }}
+        onOk={handleAddCard}
         onCancel={() => setAddCardModalOpen(false)}
-        okText="确定"
+        okText="保存"
         cancelText="取消"
+        confirmLoading={false}
       >
-        <Form layout="vertical" style={{ marginTop: 16 }}>
-          <Form.Item label="选择卡片类型" initialValue="workflow">
-            <Select
-              options={[
-                { label: '运行中的工作流', value: 'workflow' },
-                { label: '环境状态卡片', value: 'env' },
-                { label: '构建统计卡片', value: 'build' },
-              ]}
-            />
+        <Form
+          form={addForm}
+          layout="vertical"
+          style={{ marginTop: 16 }}
+          initialValues={{ type: 'running_workflow' }}
+        >
+          <Form.Item name="type" label="选择卡片类型" rules={[{ required: true }]}>
+            <Select options={CARD_TYPE_OPTIONS} onChange={(v) => setCardType(v)} />
           </Form.Item>
+          <Form.Item name="name" label="卡片名称" rules={[{ required: true, message: '请输入卡片名称' }]}>
+            <Input placeholder={CARD_TYPE_LABEL[cardType]} />
+          </Form.Item>
+          {cardType === 'my_env' && (
+            <>
+              <Form.Item
+                name="project_name"
+                label="所属项目"
+                rules={[{ required: true, message: '请输入项目名称' }]}
+              >
+                <Input placeholder="例如: demo-k8s" />
+              </Form.Item>
+              <Form.Item
+                name="env_name"
+                label="环境名称"
+                rules={[{ required: true, message: '请输入环境名称' }]}
+              >
+                <Input placeholder="例如: dev" />
+              </Form.Item>
+            </>
+          )}
+          {cardType === 'service_update_frequency' && (
+            <Text type="secondary">
+              <ThunderboltOutlined /> 服务热力图卡片将在后续版本支持，请先选择其他卡片类型。
+            </Text>
+          )}
+          {cardType === 'running_workflow' && (
+            <Text type="secondary">
+              <UserOutlined /> 展示当前集群中所有正在执行的工作流任务。
+            </Text>
+          )}
         </Form>
       </Modal>
     </div>

@@ -21,7 +21,7 @@ import {
   CodeOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/project';
 import YamlEditor from '../../components/Editor/YamlEditor';
 import YamlDiffEditor from '../../components/Editor/YamlDiffEditor';
@@ -40,7 +40,10 @@ interface ServiceItem {
 export const ServicesPage: React.FC = () => {
   const { projectName } = useParams<{ projectName?: string }>();
   const { currentProject } = useProjectStore();
+  const location = useLocation();
+  const navigate = useNavigate();
   const activeProject = projectName || currentProject;
+  const isProduction = location.pathname.endsWith('/services/production');
 
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [selectedService, setSelectedService] = useState<string | null>(null);
@@ -62,14 +65,17 @@ export const ServicesPage: React.FC = () => {
     setLoading(true);
     try {
       const res = await http.get<ServiceItem[] | { data: ServiceItem[] }>(
-        `/api/aslan/service/services?projectName=${activeProject}`
+        `/api/aslan/service/services?projectName=${activeProject}&production=${isProduction}`
       );
       const list = Array.isArray(res) ? res : ('data' in res && Array.isArray(res.data) ? res.data : []);
       setServices(list);
+      const searchParams = new URLSearchParams(location.search);
+      const queryServiceName = searchParams.get('serviceName') || searchParams.get('service');
       if (list.length > 0) {
-        setSelectedService(list[0].service_name);
-        setYamlContent(list[0].yaml || '');
-        setOriginalYaml(list[0].yaml || '');
+        const chosen = (queryServiceName && list.find((s) => s.service_name === queryServiceName)) || list[0];
+        setSelectedService(chosen.service_name);
+        setYamlContent(chosen.yaml || '');
+        setOriginalYaml(chosen.yaml || '');
       } else {
         setSelectedService(null);
         setYamlContent('');
@@ -84,7 +90,7 @@ export const ServicesPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeProject]);
+  }, [activeProject, isProduction]);
 
   useEffect(() => {
     loadServices();
@@ -93,15 +99,19 @@ export const ServicesPage: React.FC = () => {
   const handleSaveYaml = async () => {
     if (!selectedService || !activeProject) return;
     try {
-      await http.put(`/api/aslan/service/services/${selectedService}`, {
-        service_name: selectedService,
-        yaml: yamlContent,
-        projectName: activeProject,
-      });
+      await http.put(
+        `/api/aslan/service/services/${selectedService}?production=${isProduction}`,
+        {
+          service_name: selectedService,
+          yaml: yamlContent,
+          projectName: activeProject,
+        }
+      );
       setOriginalYaml(yamlContent);
       feedback.message.success(`服务 ${selectedService} 配置已保存成功！`);
-    } catch {
-      // Handled
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '保存失败，请检查网络与权限';
+      feedback.message.error(msg);
     }
   };
 
@@ -153,7 +163,7 @@ spec:
 
     setCreatingService(true);
     try {
-      await http.post('/api/aslan/service/services', {
+      await http.post(`/api/aslan/service/services?production=${isProduction}`, {
         product_name: activeProject,
         service_name: trimmedName,
         source: 'spock',
@@ -187,7 +197,7 @@ spec:
               <CloudServerOutlined style={{ fontSize: 20, color: '#0066ff' }} />
               <div>
                 <Title level={4} style={{ margin: 0 }}>
-                  服务配置管理
+                  {isProduction ? '生产服务配置' : '服务配置管理'}
                 </Title>
                 <Text type="secondary" style={{ fontSize: 12 }}>
                   所属项目: <Tag color="blue">{activeProject || '全局工作区'}</Tag>
@@ -197,6 +207,17 @@ spec:
           </Col>
           <Col>
             <Space orientation="horizontal">
+              <Radio.Group
+                size="small"
+                value={isProduction ? 'production' : 'testing'}
+                onChange={(e) => {
+                  const base = `/v1/projects/detail/${activeProject}/services`;
+                  navigate(e.target.value === 'production' ? `${base}/production` : base);
+                }}
+              >
+                <Radio.Button value="testing">测试配置</Radio.Button>
+                <Radio.Button value="production">生产配置</Radio.Button>
+              </Radio.Group>
               <Radio.Group
                 size="small"
                 value={editorTheme}

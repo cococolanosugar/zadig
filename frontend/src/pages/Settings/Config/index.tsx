@@ -14,6 +14,8 @@ import {
   Spin,
   Tag,
   Modal,
+  Select,
+  DatePicker,
 } from 'antd';
 import {
   MailOutlined,
@@ -28,12 +30,26 @@ import {
   ApiOutlined,
   PlusOutlined,
   DeleteOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
+import dayjs from 'dayjs';
 import http from '../../../api/client';
 import { feedback } from '../../../utils/feedback';
 
 const { Title, Text } = Typography;
+
+interface AnnouncementItem {
+  id?: string;
+  receiver?: string;
+  content?: {
+    title: string;
+    priority: number;
+    content: string;
+    start_time?: number;
+    end_time?: number;
+  };
+}
 
 interface BasicImageItem {
   id: string;
@@ -87,6 +103,7 @@ export const SystemConfigPage: React.FC = () => {
     if (path.endsWith('/plugins')) return 'plugins';
     if (path.endsWith('/announcement')) return 'announcement';
     if (path.endsWith('/auditlog')) return 'auditlog';
+    if (path.endsWith('/aiCodeReview')) return 'aiCodeReview';
     return searchParams.get('tab') || 'mail';
   };
 
@@ -96,9 +113,12 @@ export const SystemConfigPage: React.FC = () => {
   const [emailForm] = Form.useForm();
   const [concurrencyForm] = Form.useForm();
   const [proxyForm] = Form.useForm();
+  const [aiReviewForm] = Form.useForm();
+  const [llmOptions, setLlmOptions] = useState<Array<{ label: string; value: string }>>([]);
+  const [savingAiReview, setSavingAiReview] = useState(false);
 
   // Data states
-  const [announcements, setAnnouncements] = useState<unknown[]>([]);
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [basicImages, setBasicImages] = useState<BasicImageItem[]>([]);
   const [packages, setPackages] = useState<InstallPackageItem[]>([]);
   const [plugins, setPlugins] = useState<PluginItem[]>([]);
@@ -107,6 +127,9 @@ export const SystemConfigPage: React.FC = () => {
   // Modals
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [imageForm] = Form.useForm();
+  const [announcementModalOpen, setAnnouncementModalOpen] = useState(false);
+  const [announcementForm] = Form.useForm();
+  const [editingAnnouncementId, setEditingAnnouncementId] = useState<string | null>(null);
 
   const loadTabData = useCallback(async (tab: string) => {
     setLoading(true);
@@ -134,8 +157,11 @@ export const SystemConfigPage: React.FC = () => {
         const res = await http.get<PluginItem[]>('/api/aslan/system/plugin', { skipErrorHandler: true });
         setPlugins(Array.isArray(res) ? res : []);
       } else if (tab === 'announcement') {
-        const annRes = await http.get<unknown[]>('/api/aslan/system/announcement', { skipErrorHandler: true });
-        setAnnouncements(Array.isArray(annRes) ? annRes : []);
+        const annRes = await http.get<AnnouncementItem[] | { announcements?: AnnouncementItem[] }>(
+          '/api/aslan/system/announcement/all',
+          { skipErrorHandler: true }
+        );
+        setAnnouncements(Array.isArray(annRes) ? annRes : (annRes as { announcements?: AnnouncementItem[] })?.announcements || []);
       } else if (tab === 'proxy') {
         const res = await http.get<unknown[]>('/api/aslan/system/proxyManage', { skipErrorHandler: true });
         if (Array.isArray(res) && res.length > 0) {
@@ -149,13 +175,30 @@ export const SystemConfigPage: React.FC = () => {
         if (res && Array.isArray(res.operation_logs)) {
           setOperationLogs(res.operation_logs);
         }
+      } else if (tab === 'aiCodeReview') {
+        const [cfgRes, llmRes] = await Promise.all([
+          http.get<Record<string, unknown>>('/api/aslan/system/ai/review', { skipErrorHandler: true }),
+          http.get<Array<{ id: string; name: string }>>('/api/aslan/system/llm/integration', { skipErrorHandler: true }),
+        ]);
+        if (cfgRes) {
+          aiReviewForm.setFieldsValue({
+            llm_integration_id: cfgRes.llm_integration_id,
+            include_paths: (cfgRes.include_paths as string[] | undefined)?.join('\n') || '',
+            exclude_paths: (cfgRes.exclude_paths as string[] | undefined)?.join('\n') || '',
+            output_language: cfgRes.output_language || '中文',
+            rules: (cfgRes.rules as Array<Record<string, unknown>> | undefined)?.length
+              ? JSON.stringify(cfgRes.rules, null, 2)
+              : '',
+          });
+        }
+        setLlmOptions(Array.isArray(llmRes) ? llmRes.map((l) => ({ label: l.name, value: l.id })) : []);
       }
     } catch {
       // Graceful fallback
     } finally {
       setLoading(false);
     }
-  }, [emailForm, concurrencyForm, proxyForm]);
+  }, [emailForm, concurrencyForm, proxyForm, aiReviewForm]);
 
   useEffect(() => {
     loadTabData(activeTab);
@@ -169,6 +212,7 @@ export const SystemConfigPage: React.FC = () => {
       plugins: '/v1/system/plugins',
       announcement: '/v1/system/announcement',
       auditlog: '/v1/system/auditlog',
+      aiCodeReview: '/v1/system/aiCodeReview',
     };
     if (tabPathMap[key]) {
       navigate(tabPathMap[key]);
@@ -177,12 +221,30 @@ export const SystemConfigPage: React.FC = () => {
     }
   };
 
-  const handleSaveEmail = async (values: unknown) => {
+  const mapEmailValues = (v: Record<string, unknown>) => ({
+    name: v.name,
+    port: Number(v.port) || 465,
+    username: v.user_name,
+    password: v.password,
+    isTLS: v.is_ssl !== false,
+  });
+
+  const handleSaveEmail = async (values: Record<string, unknown>) => {
     try {
-      await http.post('/api/v1/emails/host', values);
+      await http.post('/api/v1/emails/host', mapEmailValues(values));
       feedback.message.success('SMTP 邮箱配置保存成功');
-    } catch {
-      feedback.message.success('邮箱服务器配置已更新');
+    } catch (err: any) {
+      feedback.message.error(err?.response?.data?.message || err?.message || '邮箱服务器配置保存失败');
+    }
+  };
+
+  const handleTestEmail = async () => {
+    try {
+      const values = await emailForm.validateFields();
+      await http.post('/api/v1/emails/host/validate', mapEmailValues(values));
+      feedback.message.success('SMTP 连接验证通过');
+    } catch (err: any) {
+      feedback.message.error(err?.response?.data?.message || err?.message || 'SMTP 连接验证失败，请检查服务器地址与凭据');
     }
   };
 
@@ -190,8 +252,8 @@ export const SystemConfigPage: React.FC = () => {
     try {
       await http.post('/api/aslan/system/concurrency/workflow', values);
       feedback.message.success('工作流与构建并发配额已保存');
-    } catch {
-      feedback.message.success('任务并发配置已更新');
+    } catch (err: any) {
+      feedback.message.error(err?.response?.data?.message || err?.message || '任务并发配置保存失败');
     }
   };
 
@@ -218,11 +280,67 @@ export const SystemConfigPage: React.FC = () => {
     }
   };
 
-  const handleTestEmail = () => {
-    feedback.message.loading('正在向管理员邮箱发送测试邮件...', 1.5);
-    setTimeout(() => {
-      feedback.message.success('测试邮件发送成功，请查收！');
-    }, 1500);
+  const handleSaveAiReview = async () => {
+    try {
+      const values = await aiReviewForm.validateFields();
+      setSavingAiReview(true);
+      let rules: unknown;
+      try {
+        rules = values.rules?.trim() ? JSON.parse(values.rules) : undefined;
+      } catch {
+        feedback.message.error('审查规则需为合法 JSON 数组格式');
+        return;
+      }
+      await http.put('/api/aslan/system/ai/review', {
+        llm_integration_id: values.llm_integration_id || '',
+        include_paths: String(values.include_paths || '')
+          .split('\n')
+          .map((s: string) => s.trim())
+          .filter(Boolean),
+        exclude_paths: String(values.exclude_paths || '')
+          .split('\n')
+          .map((s: string) => s.trim())
+          .filter(Boolean),
+        output_language: values.output_language || '中文',
+        rules,
+      });
+      feedback.message.success('AI 代码审查配置已保存');
+    } catch (err: any) {
+      if (!err?.errorFields) {
+        feedback.message.error(err?.response?.data?.message || err?.message || 'AI 代码审查配置保存失败');
+      }
+    } finally {
+      setSavingAiReview(false);
+    }
+  };
+
+  const handleSaveAnnouncement = async () => {
+    try {
+      const values = await announcementForm.validateFields();
+      const body = {
+        receiver: '',
+        content: {
+          title: values.title,
+          priority: values.priority ?? 0,
+          content: values.content,
+          start_time: values.range?.[0] ? Math.floor(dayjs(values.range[0]).valueOf() / 1000) : undefined,
+          end_time: values.range?.[1] ? Math.floor(dayjs(values.range[1]).valueOf() / 1000) : undefined,
+        },
+      };
+      if (editingAnnouncementId) {
+        await http.put('/api/aslan/system/announcement/update', { ...body, id: editingAnnouncementId });
+        feedback.message.success('公告已更新');
+      } else {
+        await http.post('/api/aslan/system/announcement', body);
+        feedback.message.success('公告发布成功');
+      }
+      setAnnouncementModalOpen(false);
+      loadTabData('announcement');
+    } catch (err: any) {
+      if (!err?.errorFields) {
+        feedback.message.error(err?.response?.data?.message || err?.message || '公告保存失败');
+      }
+    }
   };
 
   const tabItems = [
@@ -283,6 +401,14 @@ export const SystemConfigPage: React.FC = () => {
       ),
     },
     {
+      key: 'aiCodeReview',
+      label: (
+        <span>
+          <RobotOutlined /> AI 代码审查
+        </span>
+      ),
+    },
+    {
       key: 'auditlog',
       label: (
         <span>
@@ -328,7 +454,6 @@ export const SystemConfigPage: React.FC = () => {
               initialValues={{
                 port: 465,
                 is_ssl: true,
-                user_name: 'admin@qq.com',
               }}
             >
               <Form.Item
@@ -373,7 +498,7 @@ export const SystemConfigPage: React.FC = () => {
                     保存配置
                   </Button>
                   <Button icon={<SendOutlined />} onClick={handleTestEmail}>
-                    发送测试邮件
+                    验证 SMTP 连接
                   </Button>
                 </Space>
               </Form.Item>
@@ -508,22 +633,106 @@ export const SystemConfigPage: React.FC = () => {
         ) : activeTab === 'announcement' ? (
           <div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => feedback.message.info('新建公告')}>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => {
+                  announcementForm.resetFields();
+                  setEditingAnnouncementId(null);
+                  setAnnouncementModalOpen(true);
+                }}
+              >
                 发布新公告
               </Button>
             </div>
             <Table
               dataSource={announcements}
+              rowKey={(_, idx) => String(idx)}
               columns={[
-                { title: '公告标题', dataIndex: 'title', key: 'title', render: (t) => t || '系统日常维护通知' },
-                { title: '公告内容', dataIndex: 'content', key: 'content', render: (c) => c || '-' },
-                { title: '状态', dataIndex: 'status', key: 'status', render: () => <Tag color="green">已发布</Tag> },
-                { title: '操作', key: 'action', render: () => <Button type="link">编辑</Button> },
+                { title: '公告标题', key: 'title', render: (_, r: AnnouncementItem) => r.content?.title || '-' },
+                { title: '公告内容', key: 'content', ellipsis: true, render: (_, r: AnnouncementItem) => r.content?.content || '-' },
+                {
+                  title: '级别',
+                  key: 'priority',
+                  render: (_, r: AnnouncementItem) => {
+                    const p = r.content?.priority || 0;
+                    return <Tag color={p >= 2 ? 'red' : p === 1 ? 'orange' : 'green'}>{p >= 2 ? '紧急' : p === 1 ? '重要' : '常规'}</Tag>;
+                  },
+                },
+                {
+                  title: '有效期',
+                  key: 'validity',
+                  render: (_, r: AnnouncementItem) => {
+                    const s = r.content?.start_time;
+                    const e = r.content?.end_time;
+                    if (!s && !e) return '-';
+                    return (
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        {s ? new Date(s * 1000).toLocaleDateString() : ''} ~ {e ? new Date(e * 1000).toLocaleDateString() : ''}
+                      </Text>
+                    );
+                  },
+                },
+                {
+                  title: '操作',
+                  key: 'action',
+                  render: (_, r: AnnouncementItem) => (
+                    <Button
+                      type="link"
+                      onClick={() => {
+                        announcementForm.setFieldsValue({
+                          title: r.content?.title,
+                          content: r.content?.content,
+                          priority: r.content?.priority || 0,
+                          range: [
+                            r.content?.start_time ? dayjs(r.content.start_time * 1000) : undefined,
+                            r.content?.end_time ? dayjs(r.content.end_time * 1000) : undefined,
+                          ],
+                        });
+                        setEditingAnnouncementId(r.id || null);
+                        setAnnouncementModalOpen(true);
+                      }}
+                    >
+                      编辑
+                    </Button>
+                  ),
+                },
               ]}
               locale={{
                 emptyText: <Empty description="暂无系统公告" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
               }}
             />
+
+            {/* Create / Edit Announcement Modal */}
+            <Modal
+              title={editingAnnouncementId ? '编辑公告' : '发布新公告'}
+              open={announcementModalOpen}
+              onOk={handleSaveAnnouncement}
+              onCancel={() => setAnnouncementModalOpen(false)}
+              okText={editingAnnouncementId ? '保存修改' : '发布'}
+              cancelText="取消"
+            >
+              <Form form={announcementForm} layout="vertical" style={{ marginTop: 16 }}>
+                <Form.Item name="title" label="公告标题" rules={[{ required: true, message: '请输入公告标题' }]}>
+                  <Input placeholder="例如: 系统维护通知" />
+                </Form.Item>
+                <Form.Item name="content" label="公告内容" rules={[{ required: true, message: '请输入公告内容' }]}>
+                  <Input.TextArea rows={4} placeholder="公告详细信息" />
+                </Form.Item>
+                <Form.Item name="priority" label="公告级别" initialValue={0}>
+                  <Select
+                    options={[
+                      { label: '常规', value: 0 },
+                      { label: '重要', value: 1 },
+                      { label: '紧急', value: 2 },
+                    ]}
+                  />
+                </Form.Item>
+                <Form.Item name="range" label="有效期 (可选)">
+                  <DatePicker.RangePicker showTime style={{ width: '100%' }} />
+                </Form.Item>
+              </Form>
+            </Modal>
           </div>
         ) : activeTab === 'proxy' ? (
           <div style={{ maxWidth: 640 }}>
@@ -537,8 +746,64 @@ export const SystemConfigPage: React.FC = () => {
               <Form.Item label="无需代理地址 (No Proxy)" name="no_proxy">
                 <Input placeholder="localhost, 127.0.0.1, .cluster.local" />
               </Form.Item>
-              <Button type="primary" icon={<SaveOutlined />} onClick={() => feedback.message.success('代理配置已更新')}>
+              <Button
+                type="primary"
+                icon={<SaveOutlined />}
+                onClick={async () => {
+                  try {
+                    const values = await proxyForm.validateFields();
+                    await http.post('/api/aslan/system/proxyManage', values);
+                    feedback.message.success('代理配置已保存');
+                  } catch (err: any) {
+                    if (!err?.errorFields) {
+                      feedback.message.error(err?.response?.data?.message || err?.message || '代理配置保存失败');
+                    }
+                  }
+                }}
+              >
                 保存代理设置
+              </Button>
+            </Form>
+          </div>
+        ) : activeTab === 'aiCodeReview' ? (
+          <div style={{ maxWidth: 720 }}>
+            <Form form={aiReviewForm} layout="vertical">
+              <Form.Item
+                name="llm_integration_id"
+                label="LLM 模型集成"
+                rules={[{ required: true, message: '请选择 LLM 模型集成' }]}
+                extra="列表来自系统集成 → AI 模型接入配置"
+              >
+                <Select
+                  showSearch={{ optionFilterProp: 'label' }}
+                  options={llmOptions}
+                  placeholder="选择用于代码审查的大模型"
+                  notFoundContent="暂无 LLM 集成，请先在系统集成中配置 AI 模型"
+                />
+              </Form.Item>
+              <Form.Item name="include_paths" label="审查路径包含 (每行一个，支持通配符)">
+                <Input.TextArea rows={3} placeholder={'src/**\napp/**'} />
+              </Form.Item>
+              <Form.Item name="exclude_paths" label="审查路径排除 (每行一个)">
+                <Input.TextArea rows={3} placeholder={'**/*_test.go\nvendor/**'} />
+              </Form.Item>
+              <Form.Item name="output_language" label="输出语言" initialValue="中文">
+                <Select
+                  options={[
+                    { label: '中文', value: '中文' },
+                    { label: 'English', value: 'English' },
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item
+                name="rules"
+                label="审查规则 (JSON 数组，可选)"
+                extra='例如: [{"name":"安全","description":"检查 SQL 注入与敏感信息泄露"}]'
+              >
+                <Input.TextArea rows={6} placeholder='[{"name": "...", "description": "..."}]' />
+              </Form.Item>
+              <Button type="primary" icon={<SaveOutlined />} loading={savingAiReview} onClick={handleSaveAiReview}>
+                保存 AI 审查配置
               </Button>
             </Form>
           </div>
