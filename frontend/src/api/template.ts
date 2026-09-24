@@ -140,6 +140,18 @@ export const templateApi = {
       return { scanning_templates: [] };
     }
   },
+
+  /**
+   * Get Release Plan templates
+   */
+  async getReleasePlanTemplates(): Promise<Array<{ id: string; name: string; description?: string; update_time?: number }>> {
+    try {
+      const res = await http.get<Array<{ id: string; name: string; description?: string; update_time?: number }>>('/api/aslan/template/release_plan');
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
 };
 
 export default templateApi;

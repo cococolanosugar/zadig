@@ -23,7 +23,7 @@ import {
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/project';
 import { workflowApi, type WorkflowV4Item } from '../../api/workflow';
 import WorkflowCanvas from '../../components/WorkflowDAG/WorkflowCanvas';
@@ -34,8 +34,14 @@ const { Title, Text } = Typography;
 
 export const PipelinesPage: React.FC = () => {
   const { projectName } = useParams<{ projectName?: string }>();
-  const { currentProject } = useProjectStore();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { currentProject, projects } = useProjectStore();
   const activeProject = projectName || currentProject;
+
+  const isCreateRoute = location.pathname.endsWith('/custom/create');
+  const isGlobalRoute = location.pathname.startsWith('/v1/releaseWorkflow') || location.pathname === '/v1/pipelines';
+  const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>(projectName || 'all');
 
   const [workflows, setWorkflows] = useState<WorkflowV4Item[]>([]);
   const [activeWorkflow, setActiveWorkflow] = useState<WorkflowV4Item | null>(null);
@@ -56,7 +62,9 @@ export const PipelinesPage: React.FC = () => {
     try {
       const list = await workflowApi.getWorkflows(activeProject || '');
       setWorkflows(list);
-      setActiveWorkflow(list.length > 0 ? list[0] : null);
+      if (!isCreateRoute) {
+        setActiveWorkflow(list.length > 0 ? list[0] : null);
+      }
     } catch {
       setWorkflows([]);
       setActiveWorkflow(null);
@@ -64,11 +72,44 @@ export const PipelinesPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeProject]);
+  }, [activeProject, isCreateRoute]);
 
   useEffect(() => {
     loadWorkflows();
   }, [loadWorkflows]);
+
+  useEffect(() => {
+    if (isCreateRoute) {
+      setActiveTab('dag');
+      setActiveWorkflow({
+        name: '',
+        project: activeProject || 'default',
+        description: '',
+        stages: [
+          {
+            name: '构建阶段',
+            jobs: [
+              {
+                name: 'build-job',
+                type: 'zadig-build',
+                spec: {},
+              },
+            ],
+          },
+          {
+            name: '部署阶段',
+            jobs: [
+              {
+                name: 'deploy-job',
+                type: 'zadig-deploy',
+                spec: {},
+              },
+            ],
+          },
+        ],
+      });
+    }
+  }, [isCreateRoute, activeProject]);
 
   const handleOpenTrigger = (name: string) => {
     setTriggerWorkflowName(name);
@@ -223,7 +264,13 @@ export const PipelinesPage: React.FC = () => {
               <Button
                 type="primary"
                 icon={<PlusOutlined />}
-                onClick={() => setCreateModalVisible(true)}
+                onClick={() => {
+                  if (activeProject && !isGlobalRoute) {
+                    navigate(`/v1/projects/detail/${activeProject}/pipelines/custom/create`);
+                  } else {
+                    setCreateModalVisible(true);
+                  }
+                }}
               >
                 新建工作流
               </Button>
@@ -245,16 +292,37 @@ export const PipelinesPage: React.FC = () => {
               </span>
             ),
             children: (
-              <ProTable<WorkflowV4Item>
-                rowKey="name"
-                search={false}
-                options={{ density: false, fullScreen: true, reload: true, setting: false }}
-                loading={loading}
-                dataSource={workflows}
-                columns={columns}
-                cardBordered={false}
-                pagination={{ pageSize: 10 }}
-              />
+              <div>
+                {isGlobalRoute && (
+                  <div style={{ marginBottom: 12 }}>
+                    <Tabs
+                      activeKey={selectedProjectFilter}
+                      onChange={(k) => setSelectedProjectFilter(k)}
+                      items={[
+                        { key: 'all', label: '所有' },
+                        ...projects.map((p) => {
+                          const pName = p.name || p.product_name || '';
+                          return { key: pName, label: p.alias || pName };
+                        }),
+                      ]}
+                    />
+                  </div>
+                )}
+                <ProTable<WorkflowV4Item>
+                  rowKey="name"
+                  search={false}
+                  options={{ density: false, fullScreen: true, reload: true, setting: false }}
+                  loading={loading}
+                  dataSource={
+                    isGlobalRoute && selectedProjectFilter !== 'all'
+                      ? workflows.filter((w) => (w.project || (w as any).project_name) === selectedProjectFilter)
+                      : workflows
+                  }
+                  columns={columns}
+                  cardBordered={false}
+                  pagination={{ pageSize: 10 }}
+                />
+              </div>
             ),
           },
           {
@@ -270,10 +338,20 @@ export const PipelinesPage: React.FC = () => {
                 projectName={activeProject || 'default'}
                 onSave={async (updated) => {
                   try {
-                    await workflowApi.updateWorkflow(updated.name, updated);
+                    const isNew = !workflows.some((w) => w.name === updated.name);
+                    if (isNew) {
+                      await workflowApi.createWorkflow(updated);
+                      feedback.message.success(`工作流 [${updated.name}] 创建成功！`);
+                      setWorkflows((prev) => [...prev, updated]);
+                    } else {
+                      await workflowApi.updateWorkflow(updated.name, updated);
+                      feedback.message.success(`工作流 [${updated.name}] 编排配置已成功保存！`);
+                      setWorkflows((prev) => prev.map((w) => (w.name === updated.name ? updated : w)));
+                    }
                     setActiveWorkflow(updated);
-                    setWorkflows((prev) => prev.map((w) => (w.name === updated.name ? updated : w)));
-                    feedback.message.success(`工作流 [${updated.name}] 编排配置已成功保存！`);
+                    if (isCreateRoute && activeProject) {
+                      navigate(`/v1/projects/detail/${activeProject}/pipelines`);
+                    }
                   } catch (err: unknown) {
                     const msg = err instanceof Error ? err.message : '保存失败，请检查配置参数';
                     feedback.message.error(`保存工作流失败: ${msg}`);

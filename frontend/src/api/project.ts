@@ -61,11 +61,58 @@ export const projectApi = {
    */
   async getProjectGroups(): Promise<Array<{ id: string; name: string }>> {
     try {
-      const res = await http.get<Array<{ id: string; name: string }>>('/api/aslan/project/group');
-      return Array.isArray(res) ? res : [];
+      const res = await http.get<unknown>('/api/aslan/project/group');
+      if (Array.isArray(res)) {
+        return res.map((item) =>
+          typeof item === 'string' ? { id: item, name: item } : (item as { id: string; name: string })
+        );
+      }
+      return [];
     } catch {
       return [];
     }
+  },
+
+  /**
+   * Create a project group
+   */
+  async createProjectGroup(payload: { group_name: string; project_keys?: string[] }): Promise<unknown> {
+    return http.post('/api/aslan/project/group', {
+      group_name: payload.group_name,
+      project_keys: payload.project_keys || [],
+    });
+  },
+
+  /**
+   * Update a project group
+   */
+  async updateProjectGroup(payload: { group_name: string; project_keys?: string[] }): Promise<unknown> {
+    return http.put('/api/aslan/project/group', {
+      group_name: payload.group_name,
+      project_keys: payload.project_keys || [],
+    });
+  },
+
+  /**
+   * Delete a project group
+   */
+  async deleteProjectGroup(groupName: string): Promise<unknown> {
+    return http.delete('/api/aslan/project/group', {
+      params: { groupName },
+    });
+  },
+
+  /**
+   * Get preset project relations for a group
+   */
+  async getProjectGroupPreset(groupName?: string): Promise<{
+    group_id?: string;
+    group_name?: string;
+    projects?: Array<{ project_name: string; project_key: string; enabled: boolean }>;
+  }> {
+    return http.get('/api/aslan/project/group/preset', {
+      params: { groupName: groupName || '' },
+    });
   },
 
   /**
