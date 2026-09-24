@@ -82,6 +82,9 @@ export const EnvironmentWizardPage: React.FC = () => {
           ? clusterRes
           : (clusterRes as any)?.data || [];
         setClusters(clusterList);
+        if (clusterList.length > 0 && !form.getFieldValue('cluster_id')) {
+          form.setFieldsValue({ cluster_id: clusterList[0].id });
+        }
 
         const svcList = Array.isArray(serviceRes)
           ? serviceRes

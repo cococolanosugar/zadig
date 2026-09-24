@@ -31,7 +31,7 @@ export const TemplateCenterPage: React.FC = () => {
   const navigate = useNavigate();
 
   const pathSegment = location.pathname.split('/')[3];
-  const initialTab = tab || pathSegment || searchParams.get('tab') || 'workflows';
+  const initialTab = tab || pathSegment || searchParams.get('tab') || 'k8s-yamls';
   const [activeTab, setActiveTab] = useState(initialTab);
 
   useEffect(() => {
@@ -55,6 +55,7 @@ export const TemplateCenterPage: React.FC = () => {
   const [chartTemplates, setChartTemplates] = useState<ChartTemplateItem[]>([]);
   const [buildTemplates, setBuildTemplates] = useState<BuildTemplateItem[]>([]);
   const [scannerTemplates, setScannerTemplates] = useState<ScannerTemplateItem[]>([]);
+  const [releasePlanTemplates, setReleasePlanTemplates] = useState<Array<{ id: string; name: string; description?: string; update_time?: number }>>([]);
 
   // Load workflow + yaml templates once (workflow list is also used for search header)
   useEffect(() => {
@@ -96,6 +97,8 @@ export const TemplateCenterPage: React.FC = () => {
       templateApi.getBuildTemplates().then((res) => setBuildTemplates(res.build_templates || []));
     } else if (activeTab === 'scanners') {
       templateApi.getScannerTemplates().then((res) => setScannerTemplates(res.scanning_templates || []));
+    } else if (activeTab === 'releasePlan') {
+      templateApi.getReleasePlanTemplates().then((res) => setReleasePlanTemplates(res));
     }
   }, [activeTab]);
 
@@ -113,14 +116,6 @@ export const TemplateCenterPage: React.FC = () => {
 
   const tabItems = [
     {
-      key: 'workflows',
-      label: (
-        <span>
-          <BranchesOutlined /> 工作流模板库
-        </span>
-      ),
-    },
-    {
       key: 'k8s-yamls',
       label: (
         <span>
@@ -129,18 +124,18 @@ export const TemplateCenterPage: React.FC = () => {
       ),
     },
     {
-      key: 'dockerfiles',
-      label: (
-        <span>
-          <ContainerOutlined /> Dockerfile 模板库
-        </span>
-      ),
-    },
-    {
       key: 'charts',
       label: (
         <span>
           <AppstoreOutlined /> Helm Chart 模板库
+        </span>
+      ),
+    },
+    {
+      key: 'dockerfiles',
+      label: (
+        <span>
+          <ContainerOutlined /> Dockerfile 模板库
         </span>
       ),
     },
@@ -157,6 +152,22 @@ export const TemplateCenterPage: React.FC = () => {
       label: (
         <span>
           <SafetyCertificateOutlined /> 代码扫描模板库
+        </span>
+      ),
+    },
+    {
+      key: 'workflows',
+      label: (
+        <span>
+          <BranchesOutlined /> 工作流模板库
+        </span>
+      ),
+    },
+    {
+      key: 'releasePlan',
+      label: (
+        <span>
+          <RocketOutlined /> 发布计划模板库
         </span>
       ),
     },
@@ -418,7 +429,7 @@ export const TemplateCenterPage: React.FC = () => {
               emptyText: <Empty description="暂无构建模板" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
             }}
           />
-        ) : (
+        ) : activeTab === 'scanners' ? (
           <Table
             dataSource={scannerTemplates}
             rowKey={(r) => r.id || r.name}
@@ -457,6 +468,40 @@ export const TemplateCenterPage: React.FC = () => {
             ]}
             locale={{
               emptyText: <Empty description="暂无代码扫描模板" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+            }}
+          />
+        ) : (
+          <Table
+            rowKey={(r: any) => r.id || r.name}
+            dataSource={releasePlanTemplates}
+            columns={[
+              {
+                title: '模板名称',
+                dataIndex: 'name',
+                key: 'name',
+                render: (name) => (
+                  <Space orientation="horizontal">
+                    <RocketOutlined style={{ color: '#0066ff' }} />
+                    <Text strong>{name}</Text>
+                  </Space>
+                ),
+              },
+              {
+                title: '描述',
+                dataIndex: 'description',
+                key: 'description',
+                ellipsis: true,
+                render: (t) => <Text type="secondary">{String(t || '-')}</Text>,
+              },
+              {
+                title: '更新时间',
+                dataIndex: 'update_time',
+                key: 'update_time',
+                render: (t: number | undefined) => (t ? new Date(t * 1000).toLocaleString() : '-'),
+              },
+            ]}
+            locale={{
+              emptyText: <Empty description="暂无发布计划模板" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
             }}
           />
         )}

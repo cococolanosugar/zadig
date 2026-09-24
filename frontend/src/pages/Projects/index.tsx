@@ -19,6 +19,9 @@ import {
   Empty,
   Spin,
   Tooltip,
+  Form,
+  Select,
+  Modal,
 } from 'antd';
 import {
   PlusOutlined,
@@ -30,6 +33,8 @@ import {
   ClockCircleOutlined,
   DeploymentUnitOutlined,
   SearchOutlined,
+  CloseOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -120,10 +125,112 @@ export const ProjectsPage: React.FC = () => {
     );
   });
 
+  const [groupModalVisible, setGroupModalVisible] = useState(false);
+  const [groupModalType, setGroupModalType] = useState<'create' | 'edit'>('create');
+  const [editingGroupName, setEditingGroupName] = useState('');
+  const [groupSubmitting, setGroupSubmitting] = useState(false);
+  const [groupForm] = Form.useForm();
+
+  const handleOpenCreateGroup = () => {
+    setGroupModalType('create');
+    setEditingGroupName('');
+    groupForm.resetFields();
+    setGroupModalVisible(true);
+  };
+
+  const handleOpenEditGroup = async (groupName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setGroupModalType('edit');
+    setEditingGroupName(groupName);
+    try {
+      const preset = await projectApi.getProjectGroupPreset(groupName);
+      const selectedKeys = (preset?.projects || [])
+        .filter((p) => p.enabled)
+        .map((p) => p.project_key || p.project_name);
+      groupForm.setFieldsValue({
+        group_name: groupName,
+        project_keys: selectedKeys,
+      });
+    } catch {
+      groupForm.setFieldsValue({
+        group_name: groupName,
+        project_keys: [],
+      });
+    }
+    setGroupModalVisible(true);
+  };
+
+  const handleDeleteGroup = async (groupName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await projectApi.deleteProjectGroup(groupName);
+      feedback.message.success(`分组 ${groupName} 已删除`);
+      if (activeGroup === groupName) {
+        setActiveGroup('all');
+      }
+      fetchProjects();
+    } catch {
+      feedback.message.error('删除分组失败');
+    }
+  };
+
+  const handleSaveGroup = async () => {
+    try {
+      const values = await groupForm.validateFields();
+      setGroupSubmitting(true);
+      if (groupModalType === 'create') {
+        await projectApi.createProjectGroup({
+          group_name: values.group_name,
+          project_keys: values.project_keys || [],
+        });
+        feedback.message.success(`分组 ${values.group_name} 创建成功`);
+      } else {
+        await projectApi.updateProjectGroup({
+          group_name: values.group_name,
+          project_keys: values.project_keys || [],
+        });
+        feedback.message.success(`分组 ${values.group_name} 更新成功`);
+      }
+      setGroupModalVisible(false);
+      fetchProjects();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '保存分组失败';
+      feedback.message.error(msg);
+    } finally {
+      setGroupSubmitting(false);
+    }
+  };
+
   const tabItems = [
     { key: 'all', label: '所有' },
     { key: 'ungrouped', label: '未分组' },
-    ...groups.map((g) => ({ key: g.name, label: g.name })),
+    ...groups.map((g) => ({
+      key: g.name,
+      label: (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {g.name}
+          <Tooltip title="编辑分组">
+            <EditOutlined
+              style={{ fontSize: 12, color: '#8c8c8c' }}
+              onClick={(e) => handleOpenEditGroup(g.name, e)}
+            />
+          </Tooltip>
+          <Popconfirm
+            title={`确定要删除分组 "${g.name}" 吗？`}
+            onConfirm={(e) => e && handleDeleteGroup(g.name, e as any)}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Tooltip title="删除分组">
+              <CloseOutlined
+                style={{ fontSize: 12, color: '#ff4d4f' }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </Tooltip>
+          </Popconfirm>
+        </span>
+      ),
+    })),
   ];
 
   return (
@@ -215,6 +322,16 @@ export const ProjectsPage: React.FC = () => {
           items={tabItems}
           onChange={(key) => setActiveGroup(key)}
           tabBarStyle={{ marginBottom: 0 }}
+          tabBarExtraContent={
+            <Button
+              type="link"
+              icon={<PlusOutlined />}
+              onClick={handleOpenCreateGroup}
+              style={{ color: '#0066ff', fontWeight: 500 }}
+            >
+              添加
+            </Button>
+          }
         />
       </div>
 
@@ -437,6 +554,39 @@ export const ProjectsPage: React.FC = () => {
           </div>
         </Card>
       )}
+
+      {/* Project Group Create / Edit Modal */}
+      <Modal
+        title={groupModalType === 'create' ? '添加项目分组' : `编辑项目分组: ${editingGroupName}`}
+        open={groupModalVisible}
+        onOk={handleSaveGroup}
+        confirmLoading={groupSubmitting}
+        onCancel={() => setGroupModalVisible(false)}
+        okText="确定"
+        cancelText="取消"
+      >
+        <Form form={groupForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item
+            name="group_name"
+            label="分组名称"
+            rules={[{ required: true, message: '请输入分组名称' }]}
+          >
+            <Input placeholder="请输入分组名称" disabled={groupModalType === 'edit'} />
+          </Form.Item>
+          <Form.Item name="project_keys" label="选择项目">
+            <Select
+              mode="multiple"
+              placeholder="请选择属于该分组的项目"
+              style={{ width: '100%' }}
+              options={projectList.map((p) => {
+                const pName = p.name || p.product_name || '';
+                const pAlias = p.alias ? ` (${p.alias})` : '';
+                return { label: `${pName}${pAlias}`, value: pName };
+              })}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

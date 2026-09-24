@@ -172,6 +172,10 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   };
 
   const handleSaveWorkflow = async () => {
+    if (!currentWorkflow.name.trim()) {
+      feedback.message.warning('请输入工作流标识名称');
+      return;
+    }
     if (!onSave) return;
     setSaving(true);
     try {
@@ -187,13 +191,25 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
       styles={{ body: { padding: 0 } }}
       style={{ borderRadius: 8, height: 620, overflow: 'hidden' }}
       title={
-        <Space orientation="horizontal">
-          <Title level={5} style={{ margin: 0 }}>
-            工作流编排画布: {currentWorkflow.name}
-          </Title>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            (点击任务节点可进入配置抽屉)
-          </Text>
+        <Space orientation="horizontal" size={12} align="center">
+          {currentWorkflow.name && !currentWorkflow.name.startsWith('new-') ? (
+            <Title level={5} style={{ margin: 0 }}>
+              {currentWorkflow.name}
+            </Title>
+          ) : (
+            <Input
+              placeholder="请输入工作流标识名称"
+              style={{ width: 260 }}
+              value={currentWorkflow.name}
+              onChange={(e) => setCurrentWorkflow({ ...currentWorkflow, name: e.target.value })}
+            />
+          )}
+          <Input
+            placeholder="描述信息(选填)"
+            style={{ width: 200 }}
+            value={currentWorkflow.description || ''}
+            onChange={(e) => setCurrentWorkflow({ ...currentWorkflow, description: e.target.value })}
+          />
         </Space>
       }
       extra={

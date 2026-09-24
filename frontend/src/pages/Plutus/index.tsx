@@ -1,15 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Table, Typography, Button, Space, Tag, Empty, Spin, Tooltip } from 'antd';
+import { Card, Table, Typography, Button, Space, Tag, Empty, Spin, Tabs } from 'antd';
 import {
   ShopOutlined,
   PlusOutlined,
   TeamOutlined,
+  HistoryOutlined,
+  DashboardOutlined,
+  FileTextOutlined,
+  UserAddOutlined,
 } from '@ant-design/icons';
 import http from '../../api/client';
 
 const { Title, Text } = Typography;
 
 export const PlutusDeliveryPage: React.FC = () => {
+  const [activeTab, setActiveTab] = useState('customer');
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState<unknown[]>([]);
 
@@ -27,6 +32,41 @@ export const PlutusDeliveryPage: React.FC = () => {
     };
     fetchData();
   }, []);
+
+  const tabItems = [
+    {
+      key: 'customer',
+      label: (
+        <span>
+          <TeamOutlined /> 客户管理
+        </span>
+      ),
+    },
+    {
+      key: 'version',
+      label: (
+        <span>
+          <HistoryOutlined /> 版本管理
+        </span>
+      ),
+    },
+    {
+      key: 'board',
+      label: (
+        <span>
+          <DashboardOutlined /> 交付看板
+        </span>
+      ),
+    },
+    {
+      key: 'auditlog',
+      label: (
+        <span>
+          <FileTextOutlined /> 操作日志
+        </span>
+      ),
+    },
+  ];
 
   return (
     <div style={{ padding: '20px 24px', backgroundColor: '#f5f7fa', minHeight: 'calc(100vh - 110px)' }}>
@@ -50,12 +90,17 @@ export const PlutusDeliveryPage: React.FC = () => {
         </div>
 
         <Space orientation="horizontal" size={12}>
-          <Tooltip title="客户交付管理依赖企业版 Plutus 组件，请联系管理员确认部署情况">
-            <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 4 }} disabled>
-              新建交付项目
-            </Button>
-          </Tooltip>
+          <Button type="primary" icon={<UserAddOutlined />} style={{ borderRadius: 4 }}>
+            新建客户
+          </Button>
+          <Button icon={<PlusOutlined />} style={{ borderRadius: 4 }}>
+            新建交付项目
+          </Button>
         </Space>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <Tabs activeKey={activeTab} items={tabItems} onChange={(k) => setActiveTab(k)} />
       </div>
 
       <Card
