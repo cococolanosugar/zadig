@@ -38,6 +38,8 @@ import ScannersPage from '../pages/Projects/Scanners';
 import ProjectWizardPage from '../pages/Projects/Wizard';
 import VarsGroupPage from '../pages/Projects/VarsGroup';
 import SystemIntegrationPage from '../pages/Settings/Integration';
+import InstallationSignUpPage from '../pages/Installation/SignUp';
+import InstallationVersionPage from '../pages/Installation/Version';
 
 export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -59,11 +61,12 @@ export const AppRouter: React.FC = () => {
         <Route path="/signin" element={<LoginPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/login/password" element={<LoginPage />} />
+        {/* MFA 挑战入口：带 mfa_challenge_token 参数时 LoginPage 进入验证/绑定流程 */}
         <Route path="/mfa-enroll" element={<LoginPage />} />
 
-        {/* Installation & Initial Setup Routes */}
-        <Route path="/v1/installation/signup" element={<LoginPage />} />
-        <Route path="/v1/installation/version" element={<LoginPage />} />
+        {/* Installation & Initial Setup Routes (decompiled from Chunk 105 & Chunk 106) */}
+        <Route path="/v1/installation/signup" element={<InstallationSignUpPage />} />
+        <Route path="/v1/installation/version" element={<InstallationVersionPage />} />
 
         <Route
           path="/v1"
