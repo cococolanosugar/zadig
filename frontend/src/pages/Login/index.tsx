@@ -10,6 +10,7 @@ import {
   AppstoreOutlined,
   LineChartOutlined,
   RocketOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { authApi } from '../../api/auth';
@@ -73,6 +74,23 @@ export const LoginPage: React.FC = () => {
   const [retrieveAccount, setRetrieveAccount] = useState('');
   const [retrieveResult, setRetrieveResult] = useState<string | null>(null);
   const [connectors, setConnectors] = useState<Array<{ id: string; name: string }>>([]);
+  const [mfaChallenge, setMfaChallenge] = useState<string | null>(null);
+  const [mfaMode, setMfaMode] = useState<'verify' | 'enroll'>('verify');
+  const [mfaQrCode, setMfaQrCode] = useState<string>('');
+  const [mfaSubmitting, setMfaSubmitting] = useState(false);
+  const [mfaUseRecovery, setMfaUseRecovery] = useState(false);
+  const [mfaForm] = Form.useForm();
+  const [mfaEnrollForm] = Form.useForm();
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [pendingLoginRes, setPendingLoginRes] = useState<{
+    token: string;
+    uid: string;
+    name?: string;
+    account: string;
+    email?: string;
+    phone?: string;
+    identityType?: string;
+  } | null>(null);
 
   // 第三方登录连接器（Dex）：有启用的连接器时展示入口
   useEffect(() => {
@@ -99,6 +117,16 @@ export const LoginPage: React.FC = () => {
       setResetMode(true);
     }
   }, [idToken]);
+
+  // /mfa-enroll?mfa_challenge_token=...&required_action=enroll|verify — MFA 挑战回链（第三方登录等场景）
+  const routeMfaChallenge = searchParams.get('mfa_challenge_token') || '';
+  const routeMfaAction = searchParams.get('required_action') || '';
+  React.useEffect(() => {
+    if (routeMfaChallenge) {
+      setMfaChallenge(routeMfaChallenge);
+      setMfaMode(routeMfaAction === 'enroll' ? 'enroll' : 'verify');
+    }
+  }, [routeMfaChallenge, routeMfaAction]);
 
   const handleRetrievePassword = async (account: string) => {
     setRetrieving(true);
@@ -161,6 +189,51 @@ export const LoginPage: React.FC = () => {
     }
   };
 
+  // 完成登录态写入与跳转（账号密码登录与 MFA 验证成功共用）
+  const completeLogin = async (loginRes: {
+    token: string;
+    uid: string;
+    name?: string;
+    account?: string;
+    email?: string;
+    phone?: string;
+    identityType?: string;
+  }) => {
+    setAuth(loginRes.token, {
+      uid: loginRes.uid,
+      name: loginRes.name || loginRes.account || '',
+      email: loginRes.email || '',
+      phone: loginRes.phone,
+      account: loginRes.account || '',
+      identity_type: loginRes.identityType,
+    });
+
+    try {
+      const perm = await authApi.getUserPermissions();
+      if (perm?.is_system_admin) {
+        setRoles(['admin']);
+      } else {
+        setRoles(['user']);
+      }
+    } catch {
+      setRoles(['admin']);
+    }
+
+    feedback.message.success('登录成功，欢迎使用 Zadig！');
+
+    let target = searchParams.get('redirect') ? decodeURIComponent(searchParams.get('redirect')!) : '/v1/dashboard';
+    while (target.startsWith('/login') || target.startsWith('/signin')) {
+      const match = target.match(/[?&]redirect=([^&]+)/);
+      if (match) {
+        target = decodeURIComponent(match[1]);
+      } else {
+        target = '/v1/dashboard';
+        break;
+      }
+    }
+    navigate(target, { replace: true });
+  };
+
   const handleSubmit = async (values: LoginFormValues) => {
     setLoading(true);
     setErrorMessage(null);
@@ -173,40 +246,16 @@ export const LoginPage: React.FC = () => {
 
       const loginRes = await authApi.login(values.account, values.password, captchaPayload);
 
+      if (loginRes && loginRes.mfa_required && loginRes.mfa_challenge_token) {
+        // 账号开启了 MFA：进入验证 / 注册挑战阶段
+        setMfaChallenge(loginRes.mfa_challenge_token);
+        setMfaMode(loginRes.required_action === 'enroll' ? 'enroll' : 'verify');
+        setLoading(false);
+        return;
+      }
+
       if (loginRes && loginRes.token) {
-        setAuth(loginRes.token, {
-          uid: loginRes.uid,
-          name: loginRes.name || loginRes.account,
-          email: loginRes.email,
-          phone: loginRes.phone,
-          account: loginRes.account,
-          identity_type: loginRes.identityType,
-        });
-
-        try {
-          const perm = await authApi.getUserPermissions();
-          if (perm?.is_system_admin) {
-            setRoles(['admin']);
-          } else {
-            setRoles(['user']);
-          }
-        } catch {
-          setRoles(['admin']);
-        }
-
-        feedback.message.success('登录成功，欢迎使用 Zadig！');
-
-        let target = searchParams.get('redirect') ? decodeURIComponent(searchParams.get('redirect')!) : '/v1/dashboard';
-        while (target.startsWith('/login') || target.startsWith('/signin')) {
-          const match = target.match(/[?&]redirect=([^&]+)/);
-          if (match) {
-            target = decodeURIComponent(match[1]);
-          } else {
-            target = '/v1/dashboard';
-            break;
-          }
-        }
-        navigate(target, { replace: true });
+        await completeLogin(loginRes);
       }
     } catch (err: unknown) {
       const error = err as { response?: { data?: { errorMsg?: string; message?: string; description?: string } } };
@@ -224,6 +273,80 @@ export const LoginPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleBackToPasswordLogin = () => {
+    setMfaChallenge(null);
+    setMfaQrCode('');
+    setMfaUseRecovery(false);
+    setErrorMessage(null);
+    mfaForm.resetFields();
+    mfaEnrollForm.resetFields();
+    if (routeMfaChallenge) {
+      navigate('/signin', { replace: true });
+    }
+  };
+
+  const handleMfaVerify = async (values: { otp_code?: string; recovery_code?: string }) => {
+    if (!mfaChallenge) return;
+    setMfaSubmitting(true);
+    setErrorMessage(null);
+    try {
+      const otp = mfaUseRecovery ? undefined : values.otp_code;
+      const recovery = mfaUseRecovery ? (values.otp_code || values.recovery_code) : undefined;
+      const res = await authApi.mfaVerify(mfaChallenge, otp, recovery);
+      if (res && res.token) {
+        await completeLogin(res);
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string; description?: string } } })?.response?.data
+        ?.message || 'MFA 验证失败，请检查验证码';
+      setErrorMessage(msg);
+    } finally {
+      setMfaSubmitting(false);
+    }
+  };
+
+  const handleMfaEnroll = async (values: { otp_code: string }) => {
+    if (!mfaChallenge) return;
+    setMfaSubmitting(true);
+    setErrorMessage(null);
+    try {
+      const res = await authApi.mfaEnroll(mfaChallenge, values.otp_code);
+      if (res && res.token) {
+        // 先展示恢复码再进入系统（恢复码仅此一次展示）
+        setRecoveryCodes(res.recovery_codes || []);
+        setPendingLoginRes(res);
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string; description?: string } } })?.response?.data
+        ?.message || 'MFA 绑定失败，请检查验证码';
+      setErrorMessage(msg);
+    } finally {
+      setMfaSubmitting(false);
+    }
+  };
+
+  // enroll 模式进入时拉取 QR 码
+  useEffect(() => {
+    if (mfaMode === 'enroll' && mfaChallenge && !mfaQrCode) {
+      authApi
+        .mfaSetup(mfaChallenge)
+        .then((res) => setMfaQrCode(res?.qrcode || res?.otpauth_url || ''))
+        .catch(() => setMfaQrCode(''));
+    }
+  }, [mfaMode, mfaChallenge, mfaQrCode]);
+
+  const handleDownloadRecoveryCodes = () => {
+    if (!recoveryCodes.length) return;
+    const content = recoveryCodes.join('\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'zadig-mfa-recovery-codes.txt';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -334,7 +457,78 @@ export const LoginPage: React.FC = () => {
             />
           )}
 
-          {resetMode ? (
+          {mfaChallenge ? (
+            mfaMode === 'enroll' ? (
+              /* MFA 首次绑定：扫码 + OTP */
+              <Form form={mfaEnrollForm} name="mfaEnrollForm" layout="vertical" size="large" onFinish={handleMfaEnroll} requiredMark={false}>
+                <Alert title="开启多因子认证 (MFA)" description="使用认证器 App（如 Google Authenticator）扫描下方二维码，并输入 6 位动态验证码完成绑定。" type="info" showIcon style={{ marginBottom: 20, borderRadius: 6 }} />
+                {mfaQrCode && (
+                  <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                    <img src={mfaQrCode} alt="MFA QR Code" style={{ width: 180, height: 180, borderRadius: 6, background: '#fff', padding: 8 }} />
+                  </div>
+                )}
+                <Form.Item
+                  name="otp_code"
+                  label={<span style={{ color: '#e2e8f0', fontSize: 14 }}>动态验证码</span>}
+                  rules={[{ required: true, message: '请输入 6 位动态验证码' }, { pattern: /^\d{6}$/, message: '请输入 6 位数字' }]}
+                >
+                  <Input
+                    prefix={<SafetyCertificateOutlined style={{ color: '#94a3b8' }} />}
+                    placeholder="6 位动态验证码"
+                    maxLength={6}
+                    style={{ height: 42, borderRadius: 6, backgroundColor: '#ffffff' }}
+                  />
+                </Form.Item>
+                <Form.Item style={{ marginBottom: 12, marginTop: 24 }}>
+                  <Button type="primary" htmlType="submit" loading={mfaSubmitting} block style={{ height: 42, fontSize: 15, fontWeight: 500, borderRadius: 6, backgroundColor: '#0066ff' }}>
+                    完成绑定并登录
+                  </Button>
+                </Form.Item>
+                <div style={{ textAlign: 'center', marginTop: 12 }}>
+                  <a onClick={handleBackToPasswordLogin} style={{ fontSize: 13, color: '#94a3b8' }}>
+                    返回账号密码登录
+                  </a>
+                </div>
+              </Form>
+            ) : (
+              /* MFA 登录验证：OTP 或恢复码 */
+              <Form form={mfaForm} name="mfaVerifyForm" layout="vertical" size="large" onFinish={handleMfaVerify} requiredMark={false}>
+                <Alert title="多因子认证验证" description="该账号已开启 MFA，请输入认证器中的 6 位动态验证码继续登录。" type="info" showIcon style={{ marginBottom: 20, borderRadius: 6 }} />
+                <Form.Item
+                  name="otp_code"
+                  label={<span style={{ color: '#e2e8f0', fontSize: 14 }}>{mfaUseRecovery ? '恢复码' : '动态验证码'}</span>}
+                  rules={[{ required: true, message: mfaUseRecovery ? '请输入恢复码' : '请输入 6 位动态验证码' }]}
+                >
+                  <Input
+                    prefix={<SafetyCertificateOutlined style={{ color: '#94a3b8' }} />}
+                    placeholder={mfaUseRecovery ? '例如: 4a5b-6c7d' : '6 位动态验证码'}
+                    maxLength={mfaUseRecovery ? 12 : 6}
+                    style={{ height: 42, borderRadius: 6, backgroundColor: '#ffffff' }}
+                  />
+                </Form.Item>
+                <Form.Item style={{ marginBottom: 12, marginTop: 24 }}>
+                  <Button type="primary" htmlType="submit" loading={mfaSubmitting} block style={{ height: 42, fontSize: 15, fontWeight: 500, borderRadius: 6, backgroundColor: '#0066ff' }}>
+                    验证并登录
+                  </Button>
+                </Form.Item>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                  <a
+                    onClick={() => {
+                      setMfaUseRecovery(!mfaUseRecovery);
+                      mfaForm.resetFields();
+                      setErrorMessage(null);
+                    }}
+                    style={{ fontSize: 13, color: '#38bdf8' }}
+                  >
+                    {mfaUseRecovery ? '使用动态验证码' : '使用恢复码登录'}
+                  </a>
+                  <a onClick={handleBackToPasswordLogin} style={{ fontSize: 13, color: '#94a3b8' }}>
+                    返回账号密码登录
+                  </a>
+                </div>
+              </Form>
+            )
+          ) : resetMode ? (
             <Form
               form={resetForm}
               name="resetPasswordForm"
@@ -522,8 +716,53 @@ export const LoginPage: React.FC = () => {
           </Form>
           )}
 
-          {/* Retrieve Password Modal */}
+          {/* MFA Enrollment Recovery Codes (one-time display) */}
           <Modal
+            title="MFA 恢复码"
+            open={recoveryCodes.length > 0 && !!pendingLoginRes}
+            onCancel={() => {
+              setRecoveryCodes([]);
+              if (pendingLoginRes) {
+                const res = pendingLoginRes;
+                setPendingLoginRes(null);
+                completeLogin(res);
+              }
+            }}
+            okText="我已保存，进入系统"
+            cancelText="取消"
+            onOk={() => {
+              setRecoveryCodes([]);
+              if (pendingLoginRes) {
+                const res = pendingLoginRes;
+                setPendingLoginRes(null);
+                completeLogin(res);
+              }
+            }}
+          >
+            <Alert
+              title="请妥善保存以下恢复码"
+              description="当认证器不可用时，可使用恢复码登录。每个恢复码仅可使用一次，且不会再次展示。"
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16, borderRadius: 6 }}
+            />
+            <Space size={8} wrap>
+              {recoveryCodes.map((code) => (
+                <Text key={code} code copyable style={{ fontSize: 14 }}>{code}</Text>
+              ))}
+            </Space>
+            <div style={{ marginTop: 20, textAlign: 'center' }}>
+              <Button
+                icon={<DownloadOutlined />}
+                onClick={handleDownloadRecoveryCodes}
+                style={{ borderRadius: 6 }}
+              >
+                下载恢复码文件 (zadig-mfa-recovery-codes.txt)
+              </Button>
+            </div>
+          </Modal>
+
+          {/* Retrieve Password Modal */}          <Modal
             title="找回密码"
             open={retrieveModalOpen}
             onCancel={() => setRetrieveModalOpen(false)}

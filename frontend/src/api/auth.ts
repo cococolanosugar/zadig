@@ -16,6 +16,19 @@ export interface LoginResponse extends UserInfo {
   group_ids?: string[];
   identityType?: string;
   mfa_required?: boolean;
+  required_action?: string;
+  mfa_challenge_token?: string;
+  mfa_expires_at?: number;
+  recovery_codes?: string[];
+}
+
+export interface MFASetupResponse {
+  required_action?: string;
+  mfa_challenge_token?: string;
+  mfa_expires_at?: number;
+  secret?: string;
+  otpauth_url?: string;
+  qrcode?: string;
 }
 
 export interface UserPermissionResponse {
@@ -83,6 +96,45 @@ export const authApi = {
    */
   async getLoginEnabled(): Promise<unknown> {
     return http.get('/api/v1/login-enabled');
+  },
+
+  /**
+   * MFA login challenge: generate QR/secret for first-time enrollment.
+   */
+  async mfaSetup(mfaChallengeToken: string): Promise<MFASetupResponse> {
+    return http.post<MFASetupResponse>(
+      '/api/v1/login/mfa/setup',
+      { mfa_challenge_token: mfaChallengeToken },
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * MFA login challenge: submit OTP to finish first-time enrollment.
+   * Returns the formal login state (User + token + recovery codes).
+   */
+  async mfaEnroll(mfaChallengeToken: string, otpCode: string): Promise<LoginResponse> {
+    return http.post<LoginResponse>(
+      '/api/v1/login/mfa/enroll',
+      { mfa_challenge_token: mfaChallengeToken, otp_code: otpCode },
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * MFA login challenge: submit OTP or recovery code to finish login.
+   * Returns the formal login state (User + token).
+   */
+  async mfaVerify(mfaChallengeToken: string, otpCode?: string, recoveryCode?: string): Promise<LoginResponse> {
+    return http.post<LoginResponse>(
+      '/api/v1/login/mfa/verify',
+      {
+        mfa_challenge_token: mfaChallengeToken,
+        otp_code: otpCode || undefined,
+        recovery_code: recoveryCode || undefined,
+      },
+      { skipErrorHandler: true }
+    );
   },
 };
 
