@@ -24,10 +24,12 @@ import {
   BranchesOutlined,
   PlusOutlined,
   ReloadOutlined,
+  ApiOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
+import { workflowApi } from '../../api/workflow';
 
 const { Text } = Typography;
 
@@ -39,6 +41,12 @@ interface CronItem {
   number: number;
   max_failures?: number;
   cron?: string;
+}
+
+interface GeneralHookItem {
+  name: string;
+  enabled: boolean;
+  description?: string;
 }
 
 interface GitHookItem {
@@ -103,6 +111,12 @@ export const TriggerPanel: React.FC<{
   const [hookForm] = Form.useForm();
   const [hookPresetRepo, setHookPresetRepo] = useState<GitHookItem['main_repo'] | null>(null);
 
+  // --- General hook (custom webhook) state ---
+  const [generalHooks, setGeneralHooks] = useState<GeneralHookItem[]>([]);
+  const [generalLoading, setGeneralLoading] = useState(false);
+  const [generalModalOpen, setGeneralModalOpen] = useState(false);
+  const [generalForm] = Form.useForm();
+
   const loadCrons = useCallback(async () => {
     if (!workflowName) return;
     setCronLoading(true);
@@ -117,6 +131,56 @@ export const TriggerPanel: React.FC<{
       setCronLoading(false);
     }
   }, [workflowName]);
+
+  const loadGeneralHooks = useCallback(async () => {
+    if (!workflowName) return;
+    setGeneralLoading(true);
+    try {
+      const list = await workflowApi.listGeneralHooks(workflowName);
+      setGeneralHooks(list);
+    } catch {
+      setGeneralHooks([]);
+    } finally {
+      setGeneralLoading(false);
+    }
+  }, [workflowName]);
+
+  const handleCreateGeneralHook = async () => {
+    try {
+      const values = await generalForm.validateFields();
+      // 从 preset 取服务端渲染的最新工作流执行参数（后端要求 workflow_arg 非空）
+      let workflowArg: unknown;
+      try {
+        const preset = await workflowApi.getGeneralHookPreset(workflowName);
+        workflowArg = preset?.workflow_arg;
+      } catch {
+        // preset 失败时交由服务端校验
+      }
+      await workflowApi.createGeneralHook(workflowName, {
+        name: values.name,
+        enabled: values.enabled ?? true,
+        description: values.description || '',
+        workflow_arg: workflowArg,
+      });
+      feedback.message.success('通用 Webhook 触发器已创建');
+      setGeneralModalOpen(false);
+      loadGeneralHooks();
+    } catch (err: any) {
+      if (!err?.errorFields) {
+        feedback.message.error(err?.response?.data?.message || err?.message || '创建失败');
+      }
+    }
+  };
+
+  const handleDeleteGeneralHook = async (item: GeneralHookItem) => {
+    try {
+      await workflowApi.deleteGeneralHook(workflowName, item.name);
+      feedback.message.success('通用 Webhook 触发器已删除');
+      loadGeneralHooks();
+    } catch {
+      // Handled
+    }
+  };
 
   const loadHooks = useCallback(async () => {
     if (!workflowName) return;
@@ -138,8 +202,9 @@ export const TriggerPanel: React.FC<{
     if (open) {
       loadCrons();
       loadHooks();
+      loadGeneralHooks();
     }
-  }, [open, loadCrons, loadHooks]);
+  }, [open, loadCrons, loadHooks, loadGeneralHooks]);
 
   const openCronModal = (item: CronItem | null) => {
     setEditingCron(item);
@@ -447,6 +512,83 @@ export const TriggerPanel: React.FC<{
               </div>
             ),
           },
+          {
+            key: 'general',
+            label: (
+              <span>
+                <ApiOutlined /> 通用 Webhook
+              </span>
+            ),
+            children: (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                  {!readOnly && (
+                    <Button
+                      type="primary"
+                      size="small"
+                      icon={<PlusOutlined />}
+                      onClick={() => {
+                        generalForm.resetFields();
+                        generalForm.setFieldsValue({ enabled: true });
+                        setGeneralModalOpen(true);
+                      }}
+                    >
+                      新建通用 Webhook
+                    </Button>
+                  )}
+                </div>
+                <Table
+                  dataSource={generalHooks}
+                  rowKey="name"
+                  loading={generalLoading}
+                  pagination={false}
+                  size="small"
+                  columns={[
+                    {
+                      title: '触发器名称',
+                      dataIndex: 'name',
+                      key: 'name',
+                      render: (n) => <Text strong>{String(n || '-')}</Text>,
+                    },
+                    {
+                      title: '描述',
+                      dataIndex: 'description',
+                      key: 'description',
+                      ellipsis: true,
+                      render: (d) => <Text type="secondary">{String(d || '-')}</Text>,
+                    },
+                    {
+                      title: '状态',
+                      dataIndex: 'enabled',
+                      key: 'enabled',
+                      render: (v) => <Tag color={v ? 'success' : 'default'}>{v ? '启用' : '停用'}</Tag>,
+                    },
+                    {
+                      title: '操作',
+                      key: 'action',
+                      render: (_, r) => (
+                        <Popconfirm
+                          title={`确定删除通用 Webhook [${r.name}]？`}
+                          onConfirm={() => handleDeleteGeneralHook(r)}
+                          okText="删除"
+                          cancelText="取消"
+                        >
+                          <Button type="link" size="small" danger disabled={readOnly}>
+                            删除
+                          </Button>
+                        </Popconfirm>
+                      ),
+                    },
+                  ]}
+                  locale={{
+                    emptyText: (
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无通用 Webhook 触发器（支持调用任意第三方系统接口触发工作流）" />
+                    ),
+                  }}
+                />
+              </div>
+            ),
+          },
         ]}
       />
 
@@ -534,6 +676,43 @@ export const TriggerPanel: React.FC<{
           <Form.Item name="enabled" label="启用状态" valuePropName="checked" initialValue={true}>
             <Switch />
           </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* General webhook create modal */}
+      <Modal
+        title="新建通用 Webhook 触发"
+        open={generalModalOpen}
+        onOk={handleCreateGeneralHook}
+        onCancel={() => setGeneralModalOpen(false)}
+        okText="创建"
+        cancelText="取消"
+        width={520}
+      >
+        <Form form={generalForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item
+            name="name"
+            label="触发器名称"
+            rules={[
+              { required: true, message: '请输入触发器名称' },
+              { pattern: /^[a-zA-Z0-9_-]+$/, message: '仅支持字母、数字、下划线与连字符' },
+            ]}
+          >
+            <Input placeholder="例如: internal-cmdb-trigger" />
+          </Form.Item>
+          <Form.Item name="description" label="描述">
+            <Input placeholder="触发器用途说明（例如: 由内部 CMDB 变更触发）" />
+          </Form.Item>
+          <Form.Item name="enabled" label="启用状态" valuePropName="checked" initialValue={true}>
+            <Switch />
+          </Form.Item>
+          <Alert
+            title="Webhook 调用地址"
+            description={`POST /api/aslan/workflow/v4/generalhook/${workflowName}/${'{name}'}/webhook，请求体中通过触发器名称匹配。`}
+            type="info"
+            showIcon
+            style={{ borderRadius: 6 }}
+          />
         </Form>
       </Modal>
     </Drawer>

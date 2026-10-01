@@ -11,6 +11,9 @@ import {
   Typography,
   Badge,
   Empty,
+  Alert,
+  Input,
+  Popconfirm,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -20,6 +23,7 @@ import {
   BranchesOutlined,
   ClockCircleOutlined,
   UserOutlined,
+  SafetyOutlined,
 } from '@ant-design/icons';
 import { workflowApi, type WorkflowTaskExecution } from '../../api/workflow';
 import { useProjectStore } from '../../stores/project';
@@ -27,6 +31,19 @@ import { feedback } from '../../utils/feedback';
 import LogViewer from '../../components/Terminal/LogViewer';
 
 const { Title, Text } = Typography;
+
+// 从任务中找到等待审批的 approval job
+const findPendingApproval = (task: WorkflowTaskExecution | null) => {
+  if (!task?.stages) return null;
+  for (const stage of task.stages) {
+    for (const job of stage.jobs || []) {
+      if (job.type === 'approval' && (job.status === 'wait_for_approval' || job.status === 'waiting')) {
+        return { jobName: job.name, stageName: stage.name };
+      }
+    }
+  }
+  return null;
+};
 
 export const PipelineExecutionPage: React.FC = () => {
   const { name: workflowName, taskId, projectName } = useParams<{ name: string; taskId: string; projectName?: string }>();
@@ -37,6 +54,37 @@ export const PipelineExecutionPage: React.FC = () => {
   const [task, setTask] = useState<WorkflowTaskExecution | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState<string>('');
+  const [approveComment, setApproveComment] = useState('');
+  const [approving, setApproving] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [cloning, setCloning] = useState(false);
+
+  const pendingApproval = findPendingApproval(task);
+
+  const handleApprove = async (approve: boolean) => {
+    if (!pendingApproval || !task) return;
+    setApproving(true);
+    try {
+      await workflowApi.approveStage({
+        workflow_name: task.workflow_name,
+        job_name: pendingApproval.jobName,
+        task_id: task.task_id,
+        approve,
+        comment: approveComment,
+        project_name: activeProject,
+      });
+      feedback.message.success(approve ? '已同意，任务继续执行' : '已驳回，任务将终止');
+      setApproveComment('');
+      await loadTask();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '审批操作失败');
+      feedback.message.error(msg);
+    } finally {
+      setApproving(false);
+    }
+  };
 
   const loadTask = useCallback(async () => {
     if (!workflowName || !taskId) return;
@@ -89,6 +137,9 @@ export const PipelineExecutionPage: React.FC = () => {
         return <Tag icon={<SyncOutlined spin />} color="processing">正在执行</Tag>;
       case 'failed':
         return <Tag icon={<CloseCircleOutlined />} color="error">执行失败</Tag>;
+      case 'wait_for_approval':
+      case 'waiting':
+        return <Tag icon={<SafetyOutlined />} color="warning">等待审批</Tag>;
       default:
         return <Tag color="default">排队中</Tag>;
     }
@@ -157,16 +208,120 @@ export const PipelineExecutionPage: React.FC = () => {
             </Space>
           </Col>
           <Col>
-            <Button
-              icon={<SyncOutlined />}
-              loading={loading}
-              onClick={loadTask}
-            >
-              刷新进度
-            </Button>
+            <Space orientation="horizontal" size={8}>
+              {task?.status === 'running' && (
+                <Popconfirm
+                  title="确定取消正在运行的任务？"
+                  onConfirm={async () => {
+                    if (!workflowName || !taskId) return;
+                    setCancelling(true);
+                    try {
+                      await workflowApi.cancelWorkflowTask(workflowName, taskId, activeProject);
+                      feedback.message.success('任务已取消');
+                      await loadTask();
+                    } catch (err: unknown) {
+                      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '取消任务失败';
+                      feedback.message.error(msg);
+                    } finally {
+                      setCancelling(false);
+                    }
+                  }}
+                  okText="取消任务"
+                  cancelText="返回"
+                >
+                  <Button danger icon={<CloseCircleOutlined />} loading={cancelling}>
+                    取消任务
+                  </Button>
+                </Popconfirm>
+              )}
+              {task?.status === 'failed' && (
+                <Button
+                  icon={<SyncOutlined />}
+                  loading={retrying}
+                  onClick={async () => {
+                    if (!workflowName || !taskId) return;
+                    setRetrying(true);
+                    try {
+                      await workflowApi.retryWorkflowTask(workflowName, taskId, activeProject);
+                      feedback.message.success('任务已重新入队执行');
+                      await loadTask();
+                    } catch (err: unknown) {
+                      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '重试失败';
+                      feedback.message.error(msg);
+                    } finally {
+                      setRetrying(false);
+                    }
+                  }}
+                >
+                  重试失败任务
+                </Button>
+              )}
+              {(task?.status === 'passed' || task?.status === 'failed') && (
+                <Popconfirm
+                  title="以本次参数重新触发任务？"
+                  onConfirm={async () => {
+                    if (!workflowName || !taskId) return;
+                    setCloning(true);
+                    try {
+                      const body = await workflowApi.cloneWorkflowTask(workflowName, taskId, activeProject);
+                      const res = await workflowApi.triggerWorkflow(body);
+                      feedback.message.success(`已按原参数重新触发 (新任务 #${res.task_id || 1})`);
+                      navigate(`/v1/pipelines/${workflowName}/task/${res.task_id || 1}`);
+                    } catch (err: unknown) {
+                      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '克隆触发失败';
+                      feedback.message.error(msg);
+                    } finally {
+                      setCloning(false);
+                    }
+                  }}
+                  okText="重新触发"
+                  cancelText="取消"
+                >
+                  <Button icon={<ClockCircleOutlined />} loading={cloning}>
+                    克隆重跑
+                  </Button>
+                </Popconfirm>
+              )}
+              <Button
+                icon={<SyncOutlined />}
+                loading={loading}
+                onClick={loadTask}
+              >
+                刷新进度
+              </Button>
+            </Space>
           </Col>
         </Row>
       </Card>
+
+      {/* Approval Required Action */}
+      {pendingApproval && task?.status === 'waiting' && (
+        <Card variant="borderless" style={{ borderRadius: 8, border: '1px solid #faad14' }}>
+          <Alert
+            title="该任务包含等待审批的节点"
+            description={`Job [${pendingApproval.jobName}] (Stage: ${pendingApproval.stageName}) 正在等待人工审批。`}
+            type="warning"
+            showIcon
+            icon={<SafetyOutlined />}
+            style={{ marginBottom: 16, borderRadius: 6 }}
+          />
+          <Input.TextArea
+            rows={2}
+            placeholder="审批意见 (可选)"
+            value={approveComment}
+            onChange={(e) => setApproveComment(e.target.value)}
+            style={{ marginBottom: 12 }}
+          />
+          <Space>
+            <Button type="primary" icon={<CheckCircleOutlined />} loading={approving} onClick={() => handleApprove(true)}>
+              同意，继续执行
+            </Button>
+            <Button danger icon={<CloseCircleOutlined />} loading={approving} onClick={() => handleApprove(false)}>
+              驳回，终止任务
+            </Button>
+          </Space>
+        </Card>
+      )}
 
       {/* Pipeline Stage Progress Steps */}
       <Card

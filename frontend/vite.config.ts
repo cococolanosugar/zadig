@@ -14,15 +14,15 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': {
-        target: 'http://192.168.31.174:8380',
+        target: 'http://192.168.31.174',
         changeOrigin: true,
       },
       '/dex': {
-        target: 'http://192.168.31.174:8380',
+        target: 'http://192.168.31.174',
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://192.168.31.174:8380',
+        target: 'ws://192.168.31.174',
         ws: true,
       },
     },

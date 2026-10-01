@@ -163,7 +163,7 @@ spec:
 
     setCreatingService(true);
     try {
-      await http.post(`/api/aslan/service/services?production=${isProduction}`, {
+      await http.post(`/api/aslan/service/services?production=${isProduction}&force=true`, {
         product_name: activeProject,
         service_name: trimmedName,
         source: 'spock',

@@ -23,6 +23,7 @@ import {
   PlusOutlined,
   FileSearchOutlined,
   HistoryOutlined,
+  AppstoreOutlined,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
@@ -30,6 +31,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { useProjectStore } from '../../stores/project';
 import PodTerminal from '../../components/Terminal/PodTerminal';
+import EnvConfigDrawer from './EnvConfigDrawer';
 import LogViewer from '../../components/Terminal/LogViewer';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
@@ -42,6 +44,7 @@ interface EnvironmentItem {
   cluster_name?: string;
   namespace?: string;
   status?: string;
+  production?: boolean;
   update_time?: number;
 }
 
@@ -91,6 +94,9 @@ export const EnvironmentsPage: React.FC = () => {
   const [scaleModalVisible, setScaleModalVisible] = useState(false);
   const [replicas, setReplicas] = useState<number>(1);
   const [scaling, setScaling] = useState(false);
+
+  // Env config management drawer (configmaps/secrets/ingresses/pvcs)
+  const [configDrawerOpen, setConfigDrawerOpen] = useState(false);
 
   // Environment Change Log Drawer state
   const [changeLogOpen, setChangeLogOpen] = useState<boolean>(false);
@@ -368,6 +374,13 @@ export const EnvironmentsPage: React.FC = () => {
                 副本伸缩
               </Button>
               <Button
+                icon={<AppstoreOutlined />}
+                onClick={() => setConfigDrawerOpen(true)}
+                disabled={!currentEnv}
+              >
+                配置管理
+              </Button>
+              <Button
                 icon={<SyncOutlined />}
                 onClick={loadWorkloadPods}
               >
@@ -542,6 +555,14 @@ export const EnvironmentsPage: React.FC = () => {
           />
         </div>
       </Modal>
+      {/* Env Config Management Drawer (ConfigMap/Secret/Ingress/PVC) */}
+      <EnvConfigDrawer
+        open={configDrawerOpen}
+        onClose={() => setConfigDrawerOpen(false)}
+        envName={currentEnv || ''}
+        projectName={activeProject || ''}
+        production={environments.find((e) => e.name === currentEnv)?.production ?? false}
+      />
     </div>
   );
 };
