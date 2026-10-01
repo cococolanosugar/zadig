@@ -23,8 +23,17 @@ export const RegistriesPage: React.FC = () => {
 
   const handleCreate = async (values: Record<string, unknown>) => {
     try {
+      // 后端要求 reg_provider 必填（models.RegistryNamespace.RegProvider）
+      const providerMap: Record<string, string> = {
+        native: 'native',
+        aliyun: 'acr',
+        tencent: 'tcr',
+        dockerhub: 'dockerhub',
+        jfrog: 'jfrog',
+      };
       await settingsApi.createRegistry({
         reg_addr: values.reg_addr as string,
+        reg_provider: providerMap[values.reg_type as string] || 'native',
         reg_type: values.reg_type as string,
         namespace: values.namespace as string,
         access_key: values.access_key as string,
