@@ -37,6 +37,7 @@ export interface CodeHostItem {
 export interface RegistryItem {
   id: string;
   reg_addr: string;
+  reg_provider?: string;
   reg_type?: string;
   is_default?: boolean;
   namespace?: string;
