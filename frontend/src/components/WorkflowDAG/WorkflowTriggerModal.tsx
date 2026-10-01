@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   Form,
@@ -7,9 +7,10 @@ import {
   Button,
   Space,
   Typography,
+  Spin,
 } from 'antd';
-import { PlayCircleOutlined, BranchesOutlined } from '@ant-design/icons';
-import { workflowApi } from '../../api/workflow';
+import { PlayCircleOutlined } from '@ant-design/icons';
+import { workflowApi, type WorkflowParam } from '../../api/workflow';
 import { feedback } from '../../utils/feedback';
 import { useNavigate } from 'react-router-dom';
 
@@ -22,6 +23,11 @@ export interface WorkflowTriggerModalProps {
   onClose: () => void;
 }
 
+/**
+ * 执行工作流 Modal — 数据源为 GET /api/aslan/workflow/v4/preset/:name
+ * （渲染后的完整 WorkflowV4：params + stages），用户修改 params 值后
+ * 将整个 preset 作为 POST /workflowtask 的请求体。
+ */
 export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
   visible,
   workflowName,
@@ -30,15 +36,47 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
 }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [presetLoading, setPresetLoading] = useState(false);
+  const [preset, setPreset] = useState<Record<string, unknown> | null>(null);
+  const [params, setParams] = useState<WorkflowParam[]>([]);
   const navigate = useNavigate();
 
-  const handleExecute = async (values: Record<string, unknown>) => {
+  useEffect(() => {
+    if (visible && workflowName) {
+      setPresetLoading(true);
+      setPreset(null);
+      setParams([]);
+      workflowApi
+        .getWorkflowPreset(workflowName)
+        .then((res) => {
+          if (res) {
+            setPreset(res as unknown as Record<string, unknown>);
+            setParams(res.params || []);
+            const initialValues: Record<string, string> = {};
+            (res.params || []).forEach((p) => {
+              initialValues[p.name] = p.value ?? p.default ?? '';
+            });
+            form.setFieldsValue(initialValues);
+          }
+        })
+        .catch(() => feedback.message.error('获取工作流执行参数失败'))
+        .finally(() => setPresetLoading(false));
+    }
+  }, [visible, workflowName, form]);
+
+  const handleExecute = async () => {
+    if (!preset) return;
     setLoading(true);
     try {
+      const values = await form.validateFields();
+      const updatedParams = params.map((p) => ({
+        ...p,
+        value: values[p.name] ?? p.value ?? '',
+      }));
       const res = await workflowApi.triggerWorkflow({
-        workflow_name: workflowName,
-        project_name: projectName,
-        inputs: values,
+        ...(preset as Record<string, unknown>),
+        project: projectName,
+        params: updatedParams,
       });
 
       feedback.message.success(`工作流 ${workflowName} 已成功启动！`);
@@ -46,10 +84,27 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
 
       const taskId = res?.task_id || 1;
       navigate(`/v1/pipelines/${workflowName}/task/${taskId}`);
-    } catch {
-      // Handled
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      if (msg) feedback.message.error(`触发失败: ${msg}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const renderParamField = (p: WorkflowParam) => {
+    switch (p.type) {
+      case 'choice':
+        return (
+          <Select
+            options={(p.choice_option || []).map((opt) => ({ label: opt, value: opt }))}
+            placeholder="请选择"
+          />
+        );
+      case 'text':
+        return <Input.TextArea rows={2} placeholder={p.description || '请输入'} />;
+      default:
+        return <Input placeholder={p.description || '请输入'} />;
     }
   };
 
@@ -72,54 +127,43 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
           type="primary"
           icon={<PlayCircleOutlined />}
           loading={loading}
+          disabled={presetLoading || !preset}
           onClick={() => form.submit()}
         >
           立即执行
         </Button>,
       ]}
-      width={540}
+      width={560}
     >
-      <Form
-        form={form}
-        layout="vertical"
-        onFinish={handleExecute}
-        initialValues={{
-          branch: 'main',
-          env: 'dev',
-        }}
-        style={{ marginTop: 16 }}
-      >
-        <Form.Item
-          name="branch"
-          label={
-            <Space orientation="horizontal">
-              <BranchesOutlined />
-              <Text>构建代码分支 (Git Branch)</Text>
-            </Space>
-          }
-          rules={[{ required: true, message: '请输入代码分支' }]}
-        >
-          <Input placeholder="例如: main, release/v1.0, master" />
-        </Form.Item>
-
-        <Form.Item name="env" label="目标发布环境">
-          <Select
-            options={[
-              { label: '开发测试环境 (dev)', value: 'dev' },
-              { label: '集成测试环境 (qa)', value: 'qa' },
-              { label: '生产集群环境 (prod)', value: 'prod' },
-            ]}
-          />
-        </Form.Item>
-
-        <Form.Item name="image_tag" label="自定义镜像 Tag (可选)">
-          <Input placeholder="留空默认根据 commit id 生成" />
-        </Form.Item>
-
-        <Form.Item name="custom_args" label="动态运行时变量 (Key=Value)">
-          <Input.TextArea placeholder="KEY1=VALUE1&#10;KEY2=VALUE2" rows={3} />
-        </Form.Item>
-      </Form>
+      {presetLoading ? (
+        <div style={{ textAlign: 'center', padding: '48px 0' }}>
+          <Spin size="large" />
+          <div style={{ marginTop: 16, color: '#64748b' }}>正在获取工作流执行参数...</div>
+        </div>
+      ) : params.length > 0 ? (
+        <Form form={form} layout="vertical" onFinish={handleExecute} style={{ marginTop: 16 }}>
+          {params.map((p) => (
+            <Form.Item
+              key={p.name}
+              name={p.name}
+              label={
+                <Space orientation="horizontal" size={6}>
+                  <Text strong>{p.name}</Text>
+                  {p.type && <Text type="secondary" style={{ fontSize: 11 }}>({p.type})</Text>}
+                </Space>
+              }
+              tooltip={p.description}
+              rules={p.type === 'repo' ? undefined : [{ required: false }]}
+            >
+              {renderParamField(p)}
+            </Form.Item>
+          ))}
+        </Form>
+      ) : (
+        <div style={{ padding: '24px 0', textAlign: 'center' }}>
+          <Text type="secondary">该工作流没有可配置的运行参数，点击「立即执行」直接启动。</Text>
+        </div>
+      )}
     </Modal>
   );
 };

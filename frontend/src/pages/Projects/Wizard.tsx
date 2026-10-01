@@ -71,7 +71,8 @@ export const ProjectWizardPage: React.FC = () => {
 
   // Step 3: environment config (受控 + 真实集群)
   const [clusters, setClusters] = useState<Array<{ id: string; name: string }>>([]);
-  const [clusterId, setClusterId] = useState<string>('local');
+  // 集群 ID 必须是真实 ObjectID（'local' 字面量会被后端拒绝）
+  const [clusterId, setClusterId] = useState<string>('');
   const [selectedEnvs, setSelectedEnvs] = useState<string[]>(['dev', 'qa']);
 
   const stepItems = [
@@ -107,6 +108,9 @@ export const ProjectWizardPage: React.FC = () => {
         .then((res) => {
           const list = Array.isArray(res) ? res : [];
           setClusters(list.map((c) => ({ id: c.id, name: c.name })));
+          // 默认选中本地集群（若存在）；必须使用真实 ObjectID
+          const local = list.find((c) => c.id && (c as { is_local?: boolean }).is_local) || list[0];
+          if (local?.id) setClusterId(local.id);
         })
         .catch(() => setClusters([]));
     }
@@ -160,7 +164,7 @@ spec:
     if (serviceName.trim()) {
       try {
         await http.post(
-          `/api/aslan/service/services?production=false`,
+          `/api/aslan/service/services?production=false&force=true`,
           {
             product_name: targetProject,
             service_name: serviceName.trim(),
@@ -181,7 +185,7 @@ spec:
     for (const envName of selectedEnvs) {
       try {
         await http.post(
-          `/api/aslan/environment/environments?projectName=${targetProject}`,
+          `/api/aslan/environment/environments?projectName=${targetProject}&type=k8s`,
           [
             {
               product_name: targetProject,
@@ -503,16 +507,13 @@ spec:
             />
 
             <Form layout="vertical">
-              <Form.Item label="目标部署 Kubernetes 集群" required>
+              <Form.Item label="目标部署 Kubernetes 集群" required validateStatus={clusters.length === 0 ? 'warning' : undefined} extra={clusters.length === 0 ? '集群列表加载失败，请刷新页面后重试' : undefined}>
                 <Select
-                  value={clusterId}
+                  value={clusterId || undefined}
                   onChange={setClusterId}
-                  options={[
-                    ...(clusters.length > 0
-                      ? clusters.map((c) => ({ label: c.name, value: c.id }))
-                      : [{ label: '本地集群 (local)', value: 'local' }]),
-                  ]}
-                  notFoundContent="未获取到集群列表，默认使用本地集群"
+                  placeholder="请选择集群"
+                  options={clusters.map((c) => ({ label: c.name, value: c.id }))}
+                  notFoundContent="未获取到集群列表"
                 />
               </Form.Item>
 

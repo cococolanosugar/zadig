@@ -234,13 +234,14 @@ export const BuildsPage: React.FC = () => {
         ) || workflows[0];
 
       if (matchingWorkflow) {
+        // 以 preset 为触发 body（后端要求完整 WorkflowV4 结构），修改构建分支参数
+        const preset = await workflowApi.getWorkflowPreset(matchingWorkflow.name);
+        const presetParams = (preset.params || []).map((p) =>
+          p.type === 'repo' && values.branch ? { ...p, repo: { ...(p as any).repo, branch: values.branch } } : p
+        );
         const res = await workflowApi.triggerWorkflow({
-          workflow_name: matchingWorkflow.name,
-          project_name: projectName,
-          inputs: {
-            branch: values.branch,
-            build_name: execExecutingBuildName,
-          },
+          ...preset,
+          params: presetParams,
         });
         feedback.message.success(
           `构建任务已通过工作流 [${matchingWorkflow.name}] 成功触发启动 (任务 #${res.task_id || 1})！`

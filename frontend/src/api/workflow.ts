@@ -51,9 +51,20 @@ export interface WorkflowV4Item {
   description?: string;
   category?: string;
   stages: WorkflowStage[];
+  params?: WorkflowParam[];
   created_by?: string;
   created_at?: number;
   updated_at?: number;
+}
+
+// models.Param — 工作流自定义运行时参数（string/text/choice/repo/file）
+export interface WorkflowParam {
+  name: string;
+  description?: string;
+  type?: string;
+  value?: string;
+  choice_option?: string[];
+  default?: string;
 }
 
 export interface WorkflowTaskExecution {
@@ -171,13 +182,22 @@ export const workflowApi = {
   },
 
   /**
-   * Trigger workflow execution
+   * Get the rendered workflow preset (params + stages) for manual execution.
+   * GET /api/aslan/workflow/v4/preset/:name — the returned body (with modified
+   * param values) is what POST /workflowtask expects.
    */
-  async triggerWorkflow(payload: {
-    workflow_name: string;
-    project_name: string;
-    inputs?: Record<string, unknown>;
-  }): Promise<{ task_id: number }> {
+  async getWorkflowPreset(name: string): Promise<WorkflowV4Item & { task_id?: number }> {
+    return http.get<WorkflowV4Item & { task_id?: number }>(
+      `/api/aslan/workflow/v4/preset/${encodeURIComponent(name)}`
+    );
+  },
+
+  /**
+   * Trigger a workflow task. The payload must be the workflow preset body
+   * (name/project/params/stages) with user-modified param values.
+   * POST /api/aslan/workflow/v4/workflowtask
+   */
+  async triggerWorkflow(payload: Record<string, unknown>): Promise<{ task_id: number }> {
     return http.post<{ task_id: number }>('/api/aslan/workflow/v4/workflowtask', payload);
   },
 
@@ -191,6 +211,131 @@ export const workflowApi = {
   ): Promise<WorkflowTaskExecution> {
     return http.get<WorkflowTaskExecution>(
       `/api/aslan/workflow/v4/workflowtask/workflow/${workflowName}/task/${taskId}?projectName=${projectName}`
+    );
+  },
+
+  /**
+   * Approve / reject a waiting approval stage of a workflow task.
+   * POST /api/aslan/workflow/v4/workflowtask/approve?projectName=
+   */
+  async approveStage(args: {
+    workflow_name: string;
+    job_name: string;
+    task_id: number | string;
+    approve: boolean;
+    comment?: string;
+    project_name?: string;
+  }): Promise<unknown> {
+    const query = args.project_name ? `?projectName=${encodeURIComponent(args.project_name)}` : '';
+    return http.post(
+      `/api/aslan/workflow/v4/workflowtask/approve${query}`,
+      { ...args, task_id: Number(args.task_id) },
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Cancel a running workflow task.
+   * DELETE /api/aslan/workflow/v4/workflowtask/workflow/:name/task/:taskID?projectName=
+   */
+  async cancelWorkflowTask(
+    workflowName: string,
+    taskId: number | string,
+    projectName?: string
+  ): Promise<unknown> {
+    const query = projectName ? `?projectName=${encodeURIComponent(projectName)}` : '';
+    return http.delete(
+      `/api/aslan/workflow/v4/workflowtask/workflow/${encodeURIComponent(workflowName)}/task/${taskId}${query}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Retry a failed workflow task.
+   * POST /api/aslan/workflow/v4/workflowtask/retry/workflow/:name/task/:taskID?projectName=
+   */
+  async retryWorkflowTask(
+    workflowName: string,
+    taskId: number | string,
+    projectName?: string
+  ): Promise<unknown> {
+    const query = projectName ? `?projectName=${encodeURIComponent(projectName)}` : '';
+    return http.post(
+      `/api/aslan/workflow/v4/workflowtask/retry/workflow/${encodeURIComponent(workflowName)}/task/${taskId}${query}`,
+      {},
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Clone a task: returns a workflow body (with original param values) that
+   * can be POSTed back to /workflowtask to re-run with the same config.
+   * GET /api/aslan/workflow/v4/workflowtask/clone/workflow/:name/task/:taskID?projectName=
+   */
+  async cloneWorkflowTask(
+    workflowName: string,
+    taskId: number | string,
+    projectName?: string
+  ): Promise<Record<string, unknown>> {
+    const query = projectName ? `?projectName=${encodeURIComponent(projectName)}` : '';
+    return http.get<Record<string, unknown>>(
+      `/api/aslan/workflow/v4/workflowtask/clone/workflow/${encodeURIComponent(workflowName)}/task/${taskId}${query}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * List custom general-webhook triggers of a workflow.
+   * GET /api/aslan/workflow/v4/generalhook/:workflowName
+   */
+  async listGeneralHooks(workflowName: string): Promise<Array<{ name: string; enabled: boolean; description?: string }>> {
+    try {
+      const res = await http.get<Array<{ name: string; enabled: boolean; description?: string }>>(
+        `/api/aslan/workflow/v4/generalhook/${encodeURIComponent(workflowName)}`,
+        { skipErrorHandler: true }
+      );
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  /**
+   * Get the preset (rendered workflow args) for creating a general-webhook trigger.
+   * GET /api/aslan/workflow/v4/generalhook/preset
+   */
+  async getGeneralHookPreset(
+    workflowName: string
+  ): Promise<{ name?: string; workflow_arg?: unknown }> {
+    return http.get<{ name?: string; workflow_arg?: unknown }>(
+      `/api/aslan/workflow/v4/generalhook/preset?workflowName=${encodeURIComponent(workflowName)}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Create a custom general-webhook trigger.
+   * POST /api/aslan/workflow/v4/generalhook/:workflowName
+   */
+  async createGeneralHook(
+    workflowName: string,
+    payload: { name: string; enabled: boolean; description?: string; workflow_arg?: unknown }
+  ): Promise<unknown> {
+    return http.post(
+      `/api/aslan/workflow/v4/generalhook/${encodeURIComponent(workflowName)}`,
+      payload,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Delete a custom general-webhook trigger.
+   * DELETE /api/aslan/workflow/v4/generalhook/:workflowName/:hookName
+   */
+  async deleteGeneralHook(workflowName: string, hookName: string): Promise<unknown> {
+    return http.delete(
+      `/api/aslan/workflow/v4/generalhook/${encodeURIComponent(workflowName)}/${encodeURIComponent(hookName)}`,
+      { skipErrorHandler: true }
     );
   },
 };

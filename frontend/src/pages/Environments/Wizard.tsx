@@ -144,7 +144,7 @@ export const EnvironmentWizardPage: React.FC = () => {
         },
       ];
 
-      await http.post(`/api/aslan/environment/environments?projectName=${projectName}`, payload);
+      await http.post(`/api/aslan/environment/environments?projectName=${projectName}&type=k8s`, payload);
       feedback.message.success(`环境 [${values.env_name}] 创建成功！正在调度集群初始化...`);
       navigate(`/v1/projects/detail/${projectName}/envs`);
     } catch (err: any) {
