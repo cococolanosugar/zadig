@@ -9,6 +9,7 @@ import {
   ArrowLeftOutlined,
   FileSearchOutlined,
   ExclamationCircleOutlined,
+  SaveOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import http from '../../api/client';
@@ -78,6 +79,10 @@ export const ServiceDetailPage: React.FC = () => {
   const [pods, setPods] = useState<PodItem[]>([]);
   const [yamlContent, setYamlContent] = useState<string>('');
   const [yamlLoading, setYamlLoading] = useState(false);
+  // 环境服务 YAML 编辑保存（对齐旧版；PUT /environments/:envName/services/:serviceName）
+  const [svcCurrentRevision, setSvcCurrentRevision] = useState<number>(0);
+  const [savingYaml, setSavingYaml] = useState(false);
+  const [restarting, setRestarting] = useState(false);
 
   // Log drawer
   const [logPod, setLogPod] = useState<{ pod: string; container: string } | null>(null);
@@ -124,17 +129,66 @@ export const ServiceDetailPage: React.FC = () => {
     }
     setYamlLoading(true);
     try {
-      const res = await http.get<{ yaml?: string } | string>(
-        `/api/aslan/environment/kube/yaml?type=${resourceType}&name=${serviceName}&envName=${envName}&projectName=${projectName}`,
+      // 可编辑的是环境内服务的模板 YAML（variable_yaml）；同时取 current_revision 供保存
+      const detail = await http.get<{
+        services?: Array<Array<{ service_name?: string; revision?: number; variable_yaml?: string }>>;
+      }>(
+        `/api/aslan/environment/environments/${envName}?projectName=${projectName}`,
         { skipErrorHandler: true }
       );
-      setYamlContent(typeof res === 'string' ? res : res?.yaml || '');
+      const svcEntry = (detail?.services || [])
+        .flatMap((g) => g || [])
+        .find((s) => s.service_name === serviceName);
+      setSvcCurrentRevision(Number(svcEntry?.revision) || 0);
+      setYamlContent(svcEntry?.variable_yaml || '');
     } catch {
+      setSvcCurrentRevision(0);
       setYamlContent('');
     } finally {
       setYamlLoading(false);
     }
   }, [envName, projectName, serviceName, serviceType]);
+
+  const handleSaveSvcYaml = async () => {
+    if (!envName || !projectName || !serviceName) return;
+    setSavingYaml(true);
+    try {
+      await http.put(
+        `/api/aslan/environment/environments/${envName}/services/${encodeURIComponent(serviceName)}?projectName=${projectName}&production=false`,
+        {
+          service_name: serviceName,
+          type: 'k8s',
+          current_revision: svcCurrentRevision,
+          variable_yaml: yamlContent,
+        }
+      );
+      feedback.message.success('服务 YAML 已更新，可「重启」使变更生效');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data
+        ?.description || (err as { message?: string })?.message || '服务 YAML 保存失败';
+      feedback.message.error(msg);
+    } finally {
+      setSavingYaml(false);
+    }
+  };
+
+  const handleRestartSvc = async () => {
+    if (!envName || !projectName || !serviceName) return;
+    setRestarting(true);
+    try {
+      await http.post(
+        `/api/aslan/environment/environments/${envName}/services/${encodeURIComponent(serviceName)}/restart?projectName=${projectName}`
+      );
+      feedback.message.success(`服务 [${serviceName}] 已重启，资源将按最新配置同步`);
+      fetchPods();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data
+        ?.description || (err as { message?: string })?.message || '重启失败';
+      feedback.message.error(msg);
+    } finally {
+      setRestarting(false);
+    }
+  };
 
   useEffect(() => {
     fetchPods();
@@ -298,15 +352,35 @@ export const ServiceDetailPage: React.FC = () => {
             },
             {
               key: 'yaml',
-              label: '工作负载 YAML',
+              label: '服务 YAML（可编辑）',
               children: yamlLoading ? (
                 <div style={{ textAlign: 'center', padding: '60px 0' }}>
                   <Spin />
                 </div>
               ) : yamlContent ? (
-                <YamlEditor value={yamlContent} theme="light" height={460} />
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
+                    <Button size="small" icon={<ReloadOutlined />} onClick={fetchYaml}>
+                      重置
+                    </Button>
+                    <Button
+                      size="small"
+                      danger
+                      icon={<ExclamationCircleOutlined />}
+                      loading={restarting}
+                      onClick={handleRestartSvc}
+                      disabled={serviceType === 'pm'}
+                    >
+                      重启生效
+                    </Button>
+                    <Button type="primary" size="small" icon={<SaveOutlined />} loading={savingYaml} onClick={handleSaveSvcYaml}>
+                      保存 YAML
+                    </Button>
+                  </div>
+                  <YamlEditor value={yamlContent} onChange={setYamlContent} theme="light" height={460} />
+                </div>
               ) : (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未获取到工作负载 YAML（可能为只读托管资源）" />
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未获取到服务 YAML（可能为只读托管资源）" />
               ),
             },
           ]}
