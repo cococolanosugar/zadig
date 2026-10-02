@@ -102,15 +102,14 @@ export const ServiceDetailPage: React.FC = () => {
     if (!envName || !projectName) return;
     setLoading(true);
     try {
+      // 后端实际端点为 kube/pods（environments/:env/workloads/pods 不存在）
       const res = await http.get<PodItem[]>(
-        `/api/aslan/environment/environments/${envName}/workloads/pods?projectName=${projectName}`,
+        `/api/aslan/environment/kube/pods?projectName=${projectName}&envName=${envName}&production=false`,
         { skipErrorHandler: true }
       );
       const all = Array.isArray(res) ? res : [];
-      // 按服务过滤：container 名或 pod 名前缀匹配
-      const filtered = all.filter(
-        (p) => p.container_name === serviceName || p.name.startsWith(`${serviceName}-`)
-      );
+      // 按服务过滤：pod 名前缀匹配
+      const filtered = all.filter((p) => p.name.startsWith(`${serviceName}-`));
       setPods(filtered);
     } catch {
       setPods([]);
@@ -195,10 +194,21 @@ export const ServiceDetailPage: React.FC = () => {
     fetchYaml();
   }, [fetchPods, fetchYaml]);
 
-  const openLogs = (pod: PodItem) => {
-    setLogPod({ pod: pod.name, container: pod.container_name });
+  const openLogs = async (pod: PodItem) => {
+    // kube/pods 不返回容器名，先取 Pod 详情中的容器列表
+    let containerName = '';
+    try {
+      const detail = await http.get<PodDetailInfo>(
+        `/api/aslan/environment/kube/pods/${pod.name}?projectName=${projectName}&envName=${envName}`,
+        { skipErrorHandler: true }
+      );
+      containerName = (detail?.containers || []).map((c) => c.name || '').find(Boolean) || pod.name;
+    } catch {
+      containerName = pod.name;
+    }
+    setLogPod({ pod: pod.name, container: containerName });
     setLogStreamUrl(
-      `/api/aslan/logs/sse/pods/${pod.name}/containers/${pod.container_name}?envName=${envName}&projectName=${projectName}&tails=100`
+      `/api/logs/sse/pods/${pod.name}/containers/${containerName}?envName=${envName}&projectName=${projectName}&tails=100`
     );
   };
 

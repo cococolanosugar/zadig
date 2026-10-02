@@ -137,17 +137,28 @@ export const settingsApi = {
   },
 
   // --- Code Hosts ---
+  // 代码源实际挂载在 systemconfig 服务 /api/v1/codehosts（需 encryptedKey）
   async getCodeHosts(): Promise<CodeHostItem[]> {
-    const res = await http.get<CodeHostItem[]>('/api/aslan/code/codehost');
-    return Array.isArray(res) ? res : [];
+    try {
+      const publicKey = await authApi.getRSAPublicKey();
+      const aesKey = generateAesKey(32);
+      const encryptedKey = rsaEncrypt(aesKey, publicKey);
+      const res = await http.get<CodeHostItem[]>(
+        `/api/v1/codehosts?encryptedKey=${encodeURIComponent(encryptedKey)}`,
+        { skipErrorHandler: true }
+      );
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
   },
 
   async createCodeHost(payload: Partial<CodeHostItem>): Promise<unknown> {
-    return http.post('/api/aslan/code/codehost', payload);
+    return http.post('/api/v1/codehosts', payload);
   },
 
   async deleteCodeHost(id: number | string): Promise<unknown> {
-    return http.delete(`/api/aslan/code/codehost/${id}`);
+    return http.delete(`/api/v1/codehosts/${id}`);
   },
 
   // --- Registries ---

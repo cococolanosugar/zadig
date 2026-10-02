@@ -50,10 +50,11 @@ export const PodTerminal: React.FC<PodTerminalProps> = ({
     term.writeln(`\x1b[34m[Zadig Web Terminal]\x1b[0m 正在连接 Pod: \x1b[32m${podName}\x1b[0m (Container: \x1b[36m${containerName}\x1b[0m)...`);
 
     // Build WebSocket URL
+    // 后端 podexec WS: /api/podexec/:productName/:podName/:containerName/podExec/:envName
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     const token = useAuthStore.getState().token || '';
-    const wsUrl = `${protocol}//${host}/api/aslan/environment/environments/${envName}/workloads/pods/${podName}/exec?container=${containerName}&projectName=${projectName}&clusterId=${clusterId}&token=${encodeURIComponent(token)}`;
+    const wsUrl = `${protocol}//${host}/api/podexec/${encodeURIComponent(projectName)}/${encodeURIComponent(podName)}/${encodeURIComponent(containerName)}/podExec/${encodeURIComponent(envName)}?projectName=${encodeURIComponent(projectName)}&token=${encodeURIComponent(token)}`;
 
     let ws: WebSocket;
     try {
