@@ -22,6 +22,7 @@ import {
   AppstoreOutlined,
   HistoryOutlined,
   SyncOutlined,
+  StarFilled,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
@@ -201,7 +202,39 @@ export const PipelinesPage: React.FC = () => {
     }
   };
 
+  const toggleFavorite = async (record: WorkflowV4Item) => {
+    if (!activeProject && !record.project) return;
+    try {
+      if (record.isFavorite) {
+        await workflowApi.deleteFavorite(record.project || activeProject || '', record.name);
+      } else {
+        await workflowApi.addFavorite(record.project || activeProject || '', record.name);
+      }
+      const target = workflows.find((w) => w.name === record.name);
+      if (target) target.isFavorite = !record.isFavorite;
+      setWorkflows([...workflows]);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '收藏操作失败';
+      feedback.message.error(msg);
+    }
+  };
+
   const columns: ProColumns<WorkflowV4Item>[] = [
+    {
+      title: '',
+      key: 'favorite',
+      width: 44,
+      render: (_, record) => (
+        <StarFilled
+          style={{
+            color: record.isFavorite ? '#faad14' : '#d9d9d9',
+            fontSize: 16,
+            cursor: 'pointer',
+          }}
+          onClick={() => toggleFavorite(record)}
+        />
+      ),
+    },
     {
       title: '工作流名称',
       dataIndex: 'name',
@@ -209,9 +242,39 @@ export const PipelinesPage: React.FC = () => {
       render: (_, record) => (
         <Space orientation="horizontal">
           <BranchesOutlined style={{ color: '#0066ff' }} />
-          <Text strong>{record.name}</Text>
+          <Text strong>{record.display_name || record.name}</Text>
         </Space>
       ),
+    },
+    {
+      title: '最近任务',
+      key: 'recent_task',
+      width: 140,
+      render: (_, record) => {
+        const recent = record.recentTasks?.[0];
+        if (!recent) return <Text type="secondary">从未运行</Text>;
+        const map: Record<string, { color: string; text: string }> = {
+          passed: { color: 'success', text: '成功' },
+          running: { color: 'processing', text: '执行中' },
+          failed: { color: 'error', text: '失败' },
+          waiting: { color: 'warning', text: '等待审批' },
+          cancelled: { color: 'default', text: '已取消' },
+          timeout: { color: 'error', text: '超时' },
+        };
+        const m = map[String(recent.status)] || { color: 'default', text: String(recent.status) };
+        return (
+          <Button
+            type="link"
+            size="small"
+            style={{ padding: 0 }}
+            onClick={() => navigate(`/v1/pipelines/${record.name}/task/${recent.task_id}`)}
+          >
+            <Tag color={m.color} style={{ margin: 0 }}>
+              #{recent.task_id} {m.text}
+            </Tag>
+          </Button>
+        );
+      },
     },
     {
       title: '包含 Stage 阶段',

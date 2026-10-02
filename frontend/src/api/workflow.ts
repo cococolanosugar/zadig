@@ -48,6 +48,7 @@ export interface WorkflowStage {
 export interface WorkflowV4Item {
   name: string;
   project: string;
+  display_name?: string;
   description?: string;
   category?: string;
   stages: WorkflowStage[];
@@ -55,6 +56,18 @@ export interface WorkflowV4Item {
   created_by?: string;
   created_at?: number;
   updated_at?: number;
+  // 列表接口附带字段（/workflow/v4?projectName=）
+  isFavorite?: boolean;
+  recentTasks?: Array<{
+    task_id: number;
+    status: string;
+    task_creator?: string;
+    create_time?: number;
+  }>;
+  recentSuccessfulTask?: { task_id: number; create_time?: number } | null;
+  recentFailedTask?: { task_id: number; create_time?: number } | null;
+  successRate?: number;
+  averageExecutionTime?: number;
 }
 
 // models.Param — 工作流自定义运行时参数（string/text/choice/repo/file）
@@ -287,6 +300,27 @@ export const workflowApi = {
     const query = projectName ? `?projectName=${encodeURIComponent(projectName)}` : '';
     return http.get<Record<string, unknown>>(
       `/api/aslan/workflow/v4/workflowtask/clone/workflow/${encodeURIComponent(workflowName)}/task/${taskId}${query}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Favorite a workflow. POST /api/aslan/workflow/favorite
+   */
+  async addFavorite(productName: string, workflowName: string): Promise<unknown> {
+    return http.post(
+      '/api/aslan/workflow/favorite',
+      { product_name: productName, name: workflowName, type: 'workflow_v4' },
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Unfavorite a workflow. DELETE /api/aslan/workflow/favorite/:productName/:name/:type
+   */
+  async deleteFavorite(productName: string, workflowName: string): Promise<unknown> {
+    return http.delete(
+      `/api/aslan/workflow/favorite/${encodeURIComponent(productName)}/${encodeURIComponent(workflowName)}/workflow_v4`,
       { skipErrorHandler: true }
     );
   },
