@@ -12,6 +12,9 @@ import {
   Input,
   Radio,
   Spin,
+  Drawer,
+  Table,
+  Popconfirm,
 } from 'antd';
 import {
   PlusOutlined,
@@ -20,6 +23,7 @@ import {
   CloudServerOutlined,
   CodeOutlined,
   ReloadOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/project';
@@ -55,6 +59,12 @@ export const ServicesPage: React.FC = () => {
   const [creatingService, setCreatingService] = useState<boolean>(false);
   const [newServiceName, setNewServiceName] = useState<string>('');
   const [editorTheme, setEditorTheme] = useState<'vs-dark' | 'light'>('vs-dark');
+
+  // 版本历史抽屉（对齐旧版服务版本管理）
+  const [versionDrawerOpen, setVersionDrawerOpen] = useState(false);
+  const [versions, setVersions] = useState<Array<{ revision: number; create_time: number; create_by: string }>>([]);
+  const [versionLoading, setVersionLoading] = useState(false);
+  const [versionYaml, setVersionYaml] = useState<{ revision: number; yaml: string } | null>(null);
 
   const loadServices = useCallback(async () => {
     if (!activeProject) {
@@ -111,6 +121,52 @@ export const ServicesPage: React.FC = () => {
       feedback.message.success(`服务 ${selectedService} 配置已保存成功！`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '保存失败，请检查网络与权限';
+      feedback.message.error(msg);
+    }
+  };
+
+  // 版本历史（对齐旧版服务版本管理；rollback 需专业版许可）
+  const loadVersions = useCallback(async () => {
+    if (!selectedService || !activeProject) return;
+    setVersionLoading(true);
+    try {
+      const res = await http.get<Array<{ revision: number; create_time: number; create_by: string }>>(
+        `/api/aslan/service/version/${encodeURIComponent(selectedService)}?projectName=${activeProject}&production=${isProduction}`,
+        { skipErrorHandler: true }
+      );
+      setVersions(Array.isArray(res) ? res : []);
+    } catch {
+      setVersions([]);
+    } finally {
+      setVersionLoading(false);
+    }
+  }, [selectedService, activeProject, isProduction]);
+
+  const handleViewRevision = async (revision: number) => {
+    if (!selectedService || !activeProject) return;
+    try {
+      const res = await http.get<{ yaml?: string }>(
+        `/api/aslan/service/version/${encodeURIComponent(selectedService)}/revision/${revision}?projectName=${activeProject}&production=${isProduction}`,
+        { skipErrorHandler: true }
+      );
+      setVersionYaml({ revision, yaml: res?.yaml || '' });
+    } catch {
+      setVersionYaml(null);
+    }
+  };
+
+  const handleRollback = async (revision: number) => {
+    if (!selectedService || !activeProject) return;
+    try {
+      await http.post(
+        `/api/aslan/service/version/${encodeURIComponent(selectedService)}/rollback?projectName=${activeProject}&production=${isProduction}&revision=${revision}`,
+        {}
+      );
+      feedback.message.success(`服务已回滚至版本 ${revision}`);
+      await loadServices();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data
+        ?.description || (err as { message?: string })?.message || '回滚失败';
       feedback.message.error(msg);
     }
   };
@@ -232,6 +288,16 @@ spec:
                 onClick={() => setIsDiffMode(!isDiffMode)}
               >
                 {isDiffMode ? '退出对比' : '版本对比'}
+              </Button>
+              <Button
+                icon={<HistoryOutlined />}
+                disabled={!selectedService}
+                onClick={() => {
+                  setVersionDrawerOpen(true);
+                  loadVersions();
+                }}
+              >
+                版本历史
               </Button>
               <Button
                 type="primary"
@@ -389,6 +455,65 @@ spec:
           />
         </div>
       </Modal>
+
+      {/* Version History Drawer (对齐旧版服务版本管理) */}
+      <Drawer
+        title={`版本历史: ${selectedService || ''}`}
+        placement="right"
+        open={versionDrawerOpen}
+        onClose={() => setVersionDrawerOpen(false)}
+        size="large"
+        extra={
+          <Button icon={<ReloadOutlined />} size="small" onClick={loadVersions}>
+            刷新
+          </Button>
+        }
+      >
+        <Table
+          dataSource={versions}
+          rowKey="revision"
+          loading={versionLoading}
+          pagination={false}
+          size="small"
+          columns={[
+            { title: '版本', dataIndex: 'revision', key: 'revision', render: (r: number) => <Tag color="geekblue">v{String(r)}</Tag> },
+            { title: '创建人', dataIndex: 'create_by', key: 'create_by', render: (c: string) => <Text type="secondary">{String(c || '-')}</Text> },
+            {
+              title: '创建时间',
+              dataIndex: 'create_time',
+              key: 'create_time',
+              render: (t: number) => (t ? new Date(t * 1000).toLocaleString() : '-'),
+            },
+            {
+              title: '操作',
+              key: 'action',
+              render: (_: unknown, r: { revision: number }) => (
+                <Space size={0}>
+                  <Button type="link" size="small" onClick={() => handleViewRevision(r.revision)}>
+                    查看 YAML
+                  </Button>
+                  <Popconfirm
+                    title={`确定回滚至版本 ${r.revision}？`}
+                    onConfirm={() => handleRollback(r.revision)}
+                    okText="回滚"
+                    cancelText="取消"
+                  >
+                    <Button type="link" size="small">
+                      回滚
+                    </Button>
+                  </Popconfirm>
+                </Space>
+              ),
+            },
+          ]}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无历史版本" /> }}
+        />
+        {versionYaml && (
+          <Card size="small" style={{ marginTop: 16 }} title={`版本 ${versionYaml.revision} YAML`}>
+            <YamlEditor value={versionYaml.yaml} theme="light" height={320} />
+          </Card>
+        )}
+      </Drawer>
     </div>
   );
 };
