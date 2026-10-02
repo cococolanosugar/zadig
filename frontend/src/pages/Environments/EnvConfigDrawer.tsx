@@ -146,13 +146,13 @@ export const EnvConfigDrawer: React.FC<{
       };
       if (cfgMode === 'edit') {
         await http.put(
-          `/api/aslan/environment/commonEnvCfgs/${envName}?projectName=${encodeURIComponent(projectName)}&production=${production}`,
+          `/api/aslan/environment/envcfgs/${envName}?projectName=${encodeURIComponent(projectName)}&production=${production}`,
           { ...body, name: cfgEditingName }
         );
         feedback.message.success(`配置 [${cfgEditingName}] 已更新`);
       } else {
         await http.post(
-          `/api/aslan/environment/commonEnvCfgs/${envName}?projectName=${encodeURIComponent(projectName)}&production=${production}`,
+          `/api/aslan/environment/envcfgs/${envName}?projectName=${encodeURIComponent(projectName)}&production=${production}`,
           body
         );
         feedback.message.success(`配置 [${cfgName.trim()}] 已创建`);
@@ -168,10 +168,11 @@ export const EnvConfigDrawer: React.FC<{
     }
   };
 
-  const handleDeleteCfg = async (objectName: string) => {
+  const handleDeleteCfg = async (objectName: string, tabType: ResourceTab) => {
     try {
+      const cfgTypeStr = TAB_TYPE_MAP[tabType];
       await http.delete(
-        `/api/aslan/environment/commonEnvCfgs/${envName}/cfg/${encodeURIComponent(objectName)}?projectName=${encodeURIComponent(projectName)}&production=${production}`,
+        `/api/aslan/environment/envcfgs/${envName}/cfg/${encodeURIComponent(objectName)}?projectName=${encodeURIComponent(projectName)}&commonEnvCfgType=${cfgTypeStr}&production=${production}`,
         { skipErrorHandler: true }
       );
       feedback.message.success(`配置 [${objectName}] 已删除`);
@@ -231,7 +232,7 @@ export const EnvConfigDrawer: React.FC<{
           <Button type="link" size="small" icon={<EditOutlined />} disabled={r.auto_sync === true} onClick={() => openCfgEdit(r.cm_name, r.yaml_data)}>
             编辑
           </Button>
-          <Popconfirm title={`确定删除 ConfigMap [${r.cm_name}]？`} onConfirm={() => handleDeleteCfg(r.cm_name)} okText="删除" cancelText="取消">
+          <Popconfirm title={`确定删除 ConfigMap [${r.cm_name}]？`} onConfirm={() => handleDeleteCfg(r.cm_name, 'configmap')} okText="删除" cancelText="取消">
             <Button type="link" size="small" danger icon={<DeleteOutlined />}>
               删除
             </Button>
@@ -254,7 +255,7 @@ export const EnvConfigDrawer: React.FC<{
       title: '操作',
       key: 'cfg_action',
       render: (_, r) => (
-        <Popconfirm title={`确定删除 Secret [${r.secret_name}]？`} onConfirm={() => handleDeleteCfg(r.secret_name)} okText="删除" cancelText="取消">
+        <Popconfirm title={`确定删除 Secret [${r.secret_name}]？`} onConfirm={() => handleDeleteCfg(r.secret_name, 'secret')} okText="删除" cancelText="取消">
           <Button type="link" size="small" danger icon={<DeleteOutlined />}>
             删除
           </Button>
@@ -278,7 +279,7 @@ export const EnvConfigDrawer: React.FC<{
       title: '操作',
       key: 'cfg_action',
       render: (_, r) => (
-        <Popconfirm title={`确定删除 Ingress [${r.ingress_name}]？`} onConfirm={() => handleDeleteCfg(r.ingress_name)} okText="删除" cancelText="取消">
+        <Popconfirm title={`确定删除 Ingress [${r.ingress_name}]？`} onConfirm={() => handleDeleteCfg(r.ingress_name, 'ingress')} okText="删除" cancelText="取消">
           <Button type="link" size="small" danger icon={<DeleteOutlined />}>
             删除
           </Button>
@@ -302,7 +303,7 @@ export const EnvConfigDrawer: React.FC<{
       title: '操作',
       key: 'cfg_action',
       render: (_, r) => (
-        <Popconfirm title={`确定删除 PVC [${r.pvc_name}]？`} onConfirm={() => handleDeleteCfg(r.pvc_name)} okText="删除" cancelText="取消">
+        <Popconfirm title={`确定删除 PVC [${r.pvc_name}]？`} onConfirm={() => handleDeleteCfg(r.pvc_name, 'pvc')} okText="删除" cancelText="取消">
           <Button type="link" size="small" danger icon={<DeleteOutlined />}>
             删除
           </Button>
