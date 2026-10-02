@@ -81,13 +81,16 @@ export const QualityCenterPage: React.FC = () => {
   const [deployHealth, setDeployHealth] = useState<{ success: number; failure: number }>({ success: 0, failure: 0 });
   const [topDeployed, setTopDeployed] = useState<Array<{ service_name: string; env_name: string; count: number; success: number; failed: number }>>([]);
   const [rollbackTotal, setRollbackTotal] = useState<number>(0);
+  const [deployMonthly, setDeployMonthly] = useState<Array<{ date: string; success: number; rollback: number; failed: number; timeout: number }>>([]);
+  // 测试健康趋势（stat/v2/quality/test/dailyHealthTrend）
+  const [testTrend, setTestTrend] = useState<Array<{ date: string; totalSuccess: number; totalFailure: number; successRate: number }>>([]);
 
   const fetchDeployRollbackQuality = useCallback(async () => {
     const end = Math.floor(Date.now() / 1000);
     const start = end - (buildRange === '7d' ? 7 : buildRange === '30d' ? 30 : 90) * 86400;
     const rangeQ = `startDate=${start}&endDate=${end}`;
     try {
-      const [healthRes, topRes, rbRes] = await Promise.allSettled([
+      const [healthRes, topRes, rbRes, mtRes] = await Promise.allSettled([
         http.get<{ success: number; failure: number }>(
           `/api/aslan/stat/v2/quality/deploy/health?${rangeQ}`, { skipErrorHandler: true }
         ),
@@ -95,16 +98,36 @@ export const QualityCenterPage: React.FC = () => {
           `/api/aslan/stat/v2/quality/deploy/service/top?${rangeQ}&top=5`, { skipErrorHandler: true }
         ),
         http.get<{ total: number }>(`/api/aslan/stat/v2/quality/rollback/total?${rangeQ}`, { skipErrorHandler: true }),
+        http.get<Array<{ date: string; success: number; rollback: number; failed: number; timeout: number }>>(
+          `/api/aslan/stat/v2/quality/deploy/trend/monthly?${rangeQ}`, { skipErrorHandler: true }
+        ),
       ]);
       setDeployHealth(healthRes.status === 'fulfilled' && healthRes.value ? healthRes.value : { success: 0, failure: 0 });
       setTopDeployed(topRes.status === 'fulfilled' && Array.isArray(topRes.value) ? topRes.value : []);
       setRollbackTotal(rbRes.status === 'fulfilled' && rbRes.value ? Number(rbRes.value.total) || 0 : 0);
+      setDeployMonthly(mtRes.status === 'fulfilled' && Array.isArray(mtRes.value) ? mtRes.value : []);
     } catch {
       setDeployHealth({ success: 0, failure: 0 });
       setTopDeployed([]);
       setRollbackTotal(0);
+      setDeployMonthly([]);
     }
   }, [buildRange]);
+
+  const fetchTestTrend = useCallback(async () => {
+    const end = Math.floor(Date.now() / 1000);
+    const start = end - (buildRange === '7d' ? 7 : buildRange === '30d' ? 30 : 90) * 86400;
+    try {
+      const res = await http.post<Array<{ date: string; totalSuccess: number; totalFailure: number; successRate: number }>>(
+        '/api/aslan/stat/v2/quality/test/dailyHealthTrend',
+        { start_time: start, end_time: end, projects: projectName ? [projectName] : [] },
+        { skipErrorHandler: true }
+      );
+      setTestTrend(Array.isArray(res) ? res : []);
+    } catch {
+      setTestTrend([]);
+    }
+  }, [projectName, buildRange]);
 
   // 测试详情抽屉（配置 + 任务历史）
   const [detailOpen, setDetailOpen] = useState(false);
@@ -169,7 +192,8 @@ export const QualityCenterPage: React.FC = () => {
   useEffect(() => {
     fetchBuildQuality();
     fetchDeployRollbackQuality();
-  }, [fetchBuildQuality, fetchDeployRollbackQuality]);
+    fetchTestTrend();
+  }, [fetchBuildQuality, fetchDeployRollbackQuality, fetchTestTrend]);
 
   useEffect(() => {
     if (routeTestName && tests.length > 0) {
@@ -350,6 +374,22 @@ export const QualityCenterPage: React.FC = () => {
         ) : (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`${buildRange === '7d' ? '近 7 天' : buildRange === '30d' ? '近 30 天' : '近 90 天'}暂无构建质量数据`} />
         )}
+        <div style={{ marginTop: 16, marginBottom: 8 }}>
+          <Text strong style={{ fontSize: 14 }}>测试健康趋势 (成功率 %)</Text>
+        </div>
+        {testTrend.length > 0 ? (
+          <Line
+            data={testTrend.map((d) => ({ date: (d.date || '').slice(5), successRate: d.successRate }))}
+            xField="date"
+            yField="successRate"
+            yAxis={{ min: 0, max: 100 }}
+            style={{ lineWidth: 2 }}
+            point={{ shapeField: 'circle', sizeField: 3 }}
+            height={220}
+          />
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`${buildRange === '7d' ? '近 7 天' : buildRange === '30d' ? '近 30 天' : '近 90 天'}暂无测试趋势数据`} />
+        )}
       </Card>
 
       {/* Latest Ten Builds */}
@@ -431,6 +471,27 @@ export const QualityCenterPage: React.FC = () => {
           ]}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该时间范围暂无部署记录" /> }}
         />
+        <div style={{ marginTop: 16, marginBottom: 8 }}>
+          <Text strong style={{ fontSize: 14 }}>部署月度趋势</Text>
+        </div>
+        {topDeployed.length > 0 || deployMonthly.length > 0 ? (
+          <Table
+            dataSource={deployMonthly}
+            rowKey={(r, i) => `${r.date}-${i}`}
+            pagination={false}
+            size="small"
+            columns={[
+              { title: '月份', dataIndex: 'date', key: 'date', render: (d) => <Text strong>{String(d || '-')}</Text> },
+              { title: '成功', dataIndex: 'success', key: 'success', render: (s) => <Tag color="success">{String(s ?? 0)}</Tag> },
+              { title: '失败', dataIndex: 'failed', key: 'failed', render: (f) => <Tag color={Number(f) > 0 ? 'error' : 'default'}>{String(f ?? 0)}</Tag> },
+              { title: '回滚', dataIndex: 'rollback', key: 'rollback', render: (r) => <Tag color={Number(r) > 0 ? 'volcano' : 'default'}>{String(r ?? 0)}</Tag> },
+              { title: '超时', dataIndex: 'timeout', key: 'timeout', render: (t) => <Text type="secondary">{String(t ?? 0)}</Text> },
+            ]}
+            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无月度部署数据" /> }}
+          />
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无月度部署趋势数据" />
+        )}
       </Card>
 
       {/* Main Table */}
