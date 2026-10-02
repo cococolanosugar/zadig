@@ -15,6 +15,8 @@ import {
   Table,
   Dropdown,
   Input,
+  Spin,
+  Empty,
 } from 'antd';
 import {
   ClusterOutlined,
@@ -111,6 +113,12 @@ export const EnvironmentsPage: React.FC = () => {
   const [aliasModalOpen, setAliasModalOpen] = useState(false);
   const [aliasValue, setAliasValue] = useState('');
   const [aliasSaving, setAliasSaving] = useState(false);
+  // 全局变量编辑（对齐旧版「更新全局变量」）
+  const [gvModalOpen, setGvModalOpen] = useState(false);
+  const [gvLoading, setGvLoading] = useState(false);
+  const [gvSaving, setGvSaving] = useState(false);
+  const [gvRows, setGvRows] = useState<Array<{ key: string; value: string; type?: string; desc?: string }>>([]);
+  const [envRevision, setEnvRevision] = useState<number>(0);
   // 当前环境是否处于睡眠状态（后端 ProductStatusSleeping = "Sleeping"）
   const currentEnvObj = environments.find((e) => e.name === currentEnv);
   const currentEnvIsSleeping = currentEnvObj?.status === 'Sleeping';
@@ -199,6 +207,62 @@ export const EnvironmentsPage: React.FC = () => {
       feedback.message.error('获取 Pod 列表失败，请稍后重试');
     }
   }, [activeProject, currentEnv]);
+
+  // 全局变量加载（candidates + 环境当前 revision）
+  const loadGlobalVariables = useCallback(async () => {
+    if (!activeProject || !currentEnv) return;
+    setGvLoading(true);
+    try {
+      const detail = await http.get<{ revision?: number }>(
+        `/api/aslan/environment/environments/${currentEnv}?projectName=${activeProject}`,
+        { skipErrorHandler: true }
+      );
+      setEnvRevision(Number(detail?.revision) || 0);
+      const res = await http.get<Array<{ key: string; value: unknown; type?: string; desc?: string }>>(
+        `/api/aslan/environment/environments/${currentEnv}/globalVariableCandidates?projectName=${activeProject}`,
+        { skipErrorHandler: true }
+      );
+      setGvRows(
+        (Array.isArray(res) ? res : []).map((r) => ({
+          key: r.key,
+          value: r.value === null || r.value === undefined ? '' : String(r.value),
+          type: r.type,
+          desc: r.desc,
+        }))
+      );
+    } catch {
+      setGvRows([]);
+    } finally {
+      setGvLoading(false);
+    }
+  }, [activeProject, currentEnv]);
+
+  const handleSaveGlobalVariables = async () => {
+    if (!activeProject || !currentEnv) return;
+    setGvSaving(true);
+    try {
+      await http.put(
+        `/api/aslan/environment/environments/${currentEnv}/k8s/globalVariables?projectName=${activeProject}&production=${currentEnvIsSleeping ? 'false' : 'false'}`,
+        {
+          current_revision: envRevision,
+          global_variables: gvRows.map((r) => ({
+            key: r.key,
+            value: r.value,
+            type: r.type,
+            desc: r.desc,
+          })),
+        }
+      );
+      feedback.message.success('全局变量已更新');
+      setGvModalOpen(false);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data
+        ?.description || (err as { message?: string })?.message || '全局变量更新失败';
+      feedback.message.error(msg);
+    } finally {
+      setGvSaving(false);
+    }
+  };
 
   useEffect(() => {
     loadWorkloadPods();
@@ -387,8 +451,20 @@ export const EnvironmentsPage: React.FC = () => {
               <Button
                 icon={<ControlOutlined />}
                 onClick={() => setScaleModalVisible(true)}
+                disabled={!currentEnv}
               >
                 副本伸缩
+              </Button>
+              <Button
+                icon={<EditOutlined />}
+                onClick={() => {
+                  setGvRows([]);
+                  setGvModalOpen(true);
+                  loadGlobalVariables();
+                }}
+                disabled={!currentEnv}
+              >
+                全局变量
               </Button>
               <Button
                 icon={<AppstoreOutlined />}
@@ -426,9 +502,10 @@ export const EnvironmentsPage: React.FC = () => {
                       onClick: async () => {
                         if (!currentEnv || !activeProject) return;
                         const action = currentEnvIsSleeping ? 'disable' : 'enable';
+                        const prodParam = currentEnvObj?.production ? '&production=true' : '';
                         try {
                           await http.post(
-                            `/api/aslan/environment/environments/${currentEnv}/sleep?projectName=${activeProject}&action=${action}`
+                            `/api/aslan/environment/environments/${currentEnv}/sleep?projectName=${activeProject}&action=${action}${prodParam}`
                           );
                           feedback.message.success(
                             action === 'enable' ? `环境 [${currentEnv}] 已进入睡眠状态` : `环境 [${currentEnv}] 已唤醒`
@@ -675,6 +752,50 @@ export const EnvironmentsPage: React.FC = () => {
         projectName={activeProject || ''}
         production={environments.find((e) => e.name === currentEnv)?.production ?? false}
       />
+
+      {/* Global Variables Edit Modal (对齐旧版「更新全局变量」) */}
+      <Modal
+        title={`更新全局变量: ${currentEnv}`}
+        open={gvModalOpen}
+        onCancel={() => setGvModalOpen(false)}
+        onOk={handleSaveGlobalVariables}
+        confirmLoading={gvSaving}
+        okText="保存"
+        cancelText="取消"
+        width={640}
+      >
+        {gvLoading ? (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <Spin />
+          </div>
+        ) : gvRows.length > 0 ? (
+          <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+            {gvRows.map((row, idx) => (
+              <div key={row.key} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 10 }}>
+                <div style={{ width: 180 }}>
+                  <Text strong style={{ fontSize: 13 }}>{row.key}</Text>
+                  {row.desc && (
+                    <div>
+                      <Text type="secondary" style={{ fontSize: 11 }}>{row.desc}</Text>
+                    </div>
+                  )}
+                </div>
+                <Input
+                  style={{ flex: 1 }}
+                  value={row.value}
+                  onChange={(e) => {
+                    const next = [...gvRows];
+                    next[idx] = { ...row, value: e.target.value };
+                    setGvRows(next);
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该环境暂无可编辑的全局变量" />
+        )}
+      </Modal>
 
       {/* Alias Edit Modal */}
       <Modal
