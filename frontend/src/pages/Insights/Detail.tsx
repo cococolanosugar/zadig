@@ -11,6 +11,7 @@ import {
   Button,
   Table,
   Tag,
+  Radio,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -83,16 +84,19 @@ export const InsightDetailPage: React.FC = () => {
   const [releaseData, setReleaseData] = useState<ReleaseDashboardResp>({});
 
   const meta = DIMENSION_TITLES[dimension] || DIMENSION_TITLES.overview;
+  const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('30d');
 
   const fetchDimension = useCallback(async () => {
     setLoading(true);
-    // 注意: 该部署实例的 stat 前缀为 /api/aslan/stat (envoy 将 /api/stat fallback 到旧版 SPA)
+    // 后端 GetBuildStat/GetDeployStat 读 startDate/endDate（unix 秒）；GetTestDashboard/GetReleaseDashboard 无参数
+    const endDate = Math.floor(Date.now() / 1000);
+    const startDate = endDate - (timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90) * 86400;
     const requests: Array<Promise<void>> = [];
 
     if (dimension === 'build' || dimension === 'overview') {
       requests.push(
         http
-          .get<BuildDeployResp>('/api/aslan/stat/dashboard/build?startDate=0&endDate=0', { skipErrorHandler: true })
+          .get<BuildDeployResp>(`/api/aslan/stat/dashboard/build?startDate=${startDate}&endDate=${endDate}`, { skipErrorHandler: true })
           .then((res) => setBuildData(res || {}))
           .catch(() => setBuildData({}))
       );
@@ -100,7 +104,7 @@ export const InsightDetailPage: React.FC = () => {
     if (dimension === 'deploy' || dimension === 'overview') {
       requests.push(
         http
-          .get<BuildDeployResp>('/api/aslan/stat/dashboard/deploy?startDate=0&endDate=0', { skipErrorHandler: true })
+          .get<BuildDeployResp>(`/api/aslan/stat/dashboard/deploy?startDate=${startDate}&endDate=${endDate}`, { skipErrorHandler: true })
           .then((res) => setDeployData(res || {}))
           .catch(() => setDeployData({}))
       );
@@ -124,7 +128,7 @@ export const InsightDetailPage: React.FC = () => {
 
     await Promise.all(requests);
     setLoading(false);
-  }, [dimension]);
+  }, [dimension, timeRange]);
 
   useEffect(() => {
     fetchDimension();
@@ -373,9 +377,16 @@ export const InsightDetailPage: React.FC = () => {
             </Space>
           </Col>
           <Col>
-            <Button icon={<ReloadOutlined />} onClick={fetchDimension} loading={loading}>
-              刷新
-            </Button>
+            <Space orientation="horizontal" size={12}>
+              <Radio.Group value={timeRange} onChange={(e) => setTimeRange(e.target.value)} size="middle">
+                <Radio.Button value="7d">近 7 天</Radio.Button>
+                <Radio.Button value="30d">近 30 天</Radio.Button>
+                <Radio.Button value="90d">近 90 天</Radio.Button>
+              </Radio.Group>
+              <Button icon={<ReloadOutlined />} onClick={fetchDimension} loading={loading}>
+                刷新
+              </Button>
+            </Space>
           </Col>
         </Row>
       </Card>
