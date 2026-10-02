@@ -320,7 +320,7 @@ export const workflowApi = {
    */
   async deleteFavorite(productName: string, workflowName: string): Promise<unknown> {
     return http.delete(
-      `/api/aslan/workflow/favorite/${encodeURIComponent(productName)}/${encodeURIComponent(workflowName)}/workflow_v4`,
+      `/api/aslan/workflow/favorite/${encodeURIComponent(productName)}/${encodeURIComponent(workflowName)}/workflow_v4?projectName=${encodeURIComponent(productName)}`,
       { skipErrorHandler: true }
     );
   },
@@ -378,6 +378,26 @@ export const workflowApi = {
       `/api/aslan/workflow/v4/generalhook/${encodeURIComponent(workflowName)}/${encodeURIComponent(hookName)}`,
       { skipErrorHandler: true }
     );
+  },
+
+  /**
+   * Job-level K8s events of a workflow task.
+   * GET /api/aslan/workflow/v4/taskV4/workflow/:workflowName/task/:taskID/job/:jobName/events
+   */
+  async getJobEvents(
+    workflowName: string,
+    taskId: number | string,
+    jobName: string
+  ): Promise<Array<{ event_type: string; time: string; message: string }>> {
+    try {
+      const res = await http.get<Array<{ event_type: string; time: string; message: string }>>(
+        `/api/aslan/workflow/v4/taskV4/workflow/${encodeURIComponent(workflowName)}/task/${taskId}/job/${encodeURIComponent(jobName)}/events`,
+        { skipErrorHandler: true }
+      );
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
   },
 };
 
