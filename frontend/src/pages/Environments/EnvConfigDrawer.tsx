@@ -1,11 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Drawer, Tabs, Table, Typography, Tag, Empty, Space, Button, Tooltip } from 'antd';
+import { Drawer, Tabs, Table, Typography, Tag, Empty, Space, Button, Tooltip, Modal, Input, Popconfirm } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { ReloadOutlined } from '@ant-design/icons';
+import { ReloadOutlined, PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
 
 const { Text } = Typography;
+
+// commonEnvCfgType 值（backend config.CommonEnvCfgType）
+const TAB_TYPE_MAP: Record<ResourceTab, string> = {
+  configmap: 'ConfigMap',
+  secret: 'Secret',
+  ingress: 'Ingress',
+  pvc: 'PVC',
+};
 
 // /api/aslan/environment/configmaps — service.ListConfigMapRes
 interface ConfigMapItem {
@@ -15,6 +23,7 @@ interface ConfigMapItem {
   yaml_data?: string;
   services?: string[];
   update_username?: string;
+  auto_sync?: boolean;
 }
 
 // secrets — service.ListSecretsResponse
@@ -23,6 +32,7 @@ interface SecretItem {
   secret_type?: string;
   yaml_data?: string;
   update_username?: string;
+  auto_sync?: boolean;
 }
 
 // ingresses — service.ListIngressesResponse
@@ -92,6 +102,86 @@ export const EnvConfigDrawer: React.FC<{
     }
   }, [open, loadResources]);
 
+  // 创建/编辑/删除环境配置（对齐旧版环境配置写操作）
+  const [cfgModalOpen, setCfgModalOpen] = useState(false);
+  const [cfgSaving, setCfgSaving] = useState(false);
+  const [cfgName, setCfgName] = useState('');
+  const [cfgYaml, setCfgYaml] = useState('');
+  const [cfgMode, setCfgMode] = useState<'create' | 'edit'>('create');
+  const [cfgType, setCfgType] = useState<ResourceTab>('configmap');
+  const [cfgEditingName, setCfgEditingName] = useState<string>('');
+
+  const openCfgCreate = () => {
+    setCfgMode('create');
+    setCfgType(activeTab);
+    setCfgName('');
+    setCfgYaml('');
+    setCfgModalOpen(true);
+  };
+
+  const openCfgEdit = (itemName: string, yaml: string | undefined) => {
+    setCfgMode('edit');
+    setCfgType(activeTab);
+    setCfgEditingName(itemName);
+    setCfgName(itemName);
+    setCfgYaml(yaml || '');
+    setCfgModalOpen(true);
+  };
+
+  const handleSaveCfg = async () => {
+    if (!cfgName.trim() || !cfgYaml.trim()) {
+      feedback.message.warning('请填写名称与 YAML 内容');
+      return;
+    }
+    setCfgSaving(true);
+    try {
+      const body = {
+        env_name: envName,
+        product_name: projectName,
+        name: cfgName.trim(),
+        yaml_data: cfgYaml,
+        common_env_cfg_type: TAB_TYPE_MAP[cfgType],
+        services: [],
+        production,
+      };
+      if (cfgMode === 'edit') {
+        await http.put(
+          `/api/aslan/environment/commonEnvCfgs/${envName}?projectName=${encodeURIComponent(projectName)}&production=${production}`,
+          { ...body, name: cfgEditingName }
+        );
+        feedback.message.success(`配置 [${cfgEditingName}] 已更新`);
+      } else {
+        await http.post(
+          `/api/aslan/environment/commonEnvCfgs/${envName}?projectName=${encodeURIComponent(projectName)}&production=${production}`,
+          body
+        );
+        feedback.message.success(`配置 [${cfgName.trim()}] 已创建`);
+      }
+      setCfgModalOpen(false);
+      loadResources();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data
+        ?.description || (err as { message?: string })?.message || '配置保存失败';
+      feedback.message.error(msg);
+    } finally {
+      setCfgSaving(false);
+    }
+  };
+
+  const handleDeleteCfg = async (objectName: string) => {
+    try {
+      await http.delete(
+        `/api/aslan/environment/commonEnvCfgs/${envName}/cfg/${encodeURIComponent(objectName)}?projectName=${encodeURIComponent(projectName)}&production=${production}`,
+        { skipErrorHandler: true }
+      );
+      feedback.message.success(`配置 [${objectName}] 已删除`);
+      loadResources();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '删除失败';
+      feedback.message.error(msg);
+    }
+  };
+
   const updatedAt = (r: { update_username?: string }) =>
     r.update_username ? <Text type="secondary" style={{ fontSize: 12 }}>{r.update_username}</Text> : <Text type="secondary">-</Text>;
 
@@ -133,6 +223,22 @@ export const EnvConfigDrawer: React.FC<{
         ),
     },
     { title: '更新人', key: 'updated', render: (_, r) => updatedAt(r) },
+    {
+      title: '操作',
+      key: 'cfg_action',
+      render: (_, r) => (
+        <Space size={0}>
+          <Button type="link" size="small" icon={<EditOutlined />} disabled={r.auto_sync === true} onClick={() => openCfgEdit(r.cm_name, r.yaml_data)}>
+            编辑
+          </Button>
+          <Popconfirm title={`确定删除 ConfigMap [${r.cm_name}]？`} onConfirm={() => handleDeleteCfg(r.cm_name)} okText="删除" cancelText="取消">
+            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
   ];
 
   const secretColumns: ColumnsType<SecretItem> = [
@@ -144,6 +250,17 @@ export const EnvConfigDrawer: React.FC<{
       render: (t) => <Tag color="geekblue">{String(t || 'Opaque')}</Tag>,
     },
     { title: '更新人', key: 'updated', render: (_, r) => updatedAt(r) },
+    {
+      title: '操作',
+      key: 'cfg_action',
+      render: (_, r) => (
+        <Popconfirm title={`确定删除 Secret [${r.secret_name}]？`} onConfirm={() => handleDeleteCfg(r.secret_name)} okText="删除" cancelText="取消">
+          <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+            删除
+          </Button>
+        </Popconfirm>
+      ),
+    },
   ];
 
   const ingressColumns: ColumnsType<IngressItem> = [
@@ -156,6 +273,17 @@ export const EnvConfigDrawer: React.FC<{
       dataIndex: 'error_reason',
       key: 'error_reason',
       render: (e) => (e ? <Tooltip title={e}><Tag color="error">异常</Tag></Tooltip> : <Tag color="success">正常</Tag>),
+    },
+    {
+      title: '操作',
+      key: 'cfg_action',
+      render: (_, r) => (
+        <Popconfirm title={`确定删除 Ingress [${r.ingress_name}]？`} onConfirm={() => handleDeleteCfg(r.ingress_name)} okText="删除" cancelText="取消">
+          <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+            删除
+          </Button>
+        </Popconfirm>
+      ),
     },
   ];
 
@@ -170,6 +298,17 @@ export const EnvConfigDrawer: React.FC<{
     { title: '容量', dataIndex: 'capacity', key: 'capacity', render: (c) => <Text type="secondary">{String(c || '-')}</Text> },
     { title: '访问模式', dataIndex: 'access_modes', key: 'access_modes', render: (m) => <Text type="secondary">{String(m || '-')}</Text> },
     { title: '存储类', dataIndex: 'storageclass', key: 'storageclass', render: (s) => <Text type="secondary">{String(s || '-')}</Text> },
+    {
+      title: '操作',
+      key: 'cfg_action',
+      render: (_, r) => (
+        <Popconfirm title={`确定删除 PVC [${r.pvc_name}]？`} onConfirm={() => handleDeleteCfg(r.pvc_name)} okText="删除" cancelText="取消">
+          <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+            删除
+          </Button>
+        </Popconfirm>
+      ),
+    },
   ];
 
   const renderYamlToggle = (yaml: string | undefined) =>
@@ -211,6 +350,14 @@ export const EnvConfigDrawer: React.FC<{
             key: 'configmap',
             label: `ConfigMap (${configMaps.length})`,
             children: (
+              <div>
+                {!production && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                    <Button size="small" icon={<PlusOutlined />} onClick={openCfgCreate}>
+                      新建 ConfigMap
+                    </Button>
+                  </div>
+                )}
               <Table
                 dataSource={configMaps}
                 columns={configMapColumns}
@@ -234,6 +381,7 @@ export const EnvConfigDrawer: React.FC<{
                 }}
                 locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无 ConfigMap" /> }}
               />
+              </div>
             ),
           },
           {
@@ -255,6 +403,14 @@ export const EnvConfigDrawer: React.FC<{
             key: 'ingress',
             label: `Ingress (${ingresses.length})`,
             children: (
+              <div>
+              {!production && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                  <Button size="small" icon={<PlusOutlined />} onClick={openCfgCreate}>
+                    新建 Ingress
+                  </Button>
+                </div>
+              )}
               <Table
                 dataSource={ingresses}
                 columns={ingressColumns}
@@ -264,12 +420,21 @@ export const EnvConfigDrawer: React.FC<{
                 size="small"
                 locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无 Ingress" /> }}
               />
+              </div>
             ),
           },
           {
             key: 'pvc',
             label: `PVC (${pvcs.length})`,
             children: (
+              <div>
+              {!production && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                  <Button size="small" icon={<PlusOutlined />} onClick={openCfgCreate}>
+                    新建 PVC
+                  </Button>
+                </div>
+              )}
               <Table
                 dataSource={pvcs}
                 columns={pvcColumns}
@@ -279,10 +444,50 @@ export const EnvConfigDrawer: React.FC<{
                 size="small"
                 locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无 PVC" /> }}
               />
+              </div>
             ),
           },
         ]}
       />
+
+      {/* Create/Edit Cfg Modal */}
+      <Modal
+        title={`${cfgMode === 'edit' ? '编辑' : '新建'} ${TAB_TYPE_MAP[cfgType]}: ${cfgMode === 'edit' ? cfgEditingName : cfgName || ''}`}
+        open={cfgModalOpen}
+        onCancel={() => setCfgModalOpen(false)}
+        onOk={handleSaveCfg}
+        confirmLoading={cfgSaving}
+        okText="保存"
+        cancelText="取消"
+        width={640}
+      >
+        <div style={{ marginBottom: 10 }}>
+          <Text strong style={{ fontSize: 13 }}>名称</Text>
+          <Input
+            style={{ marginTop: 4 }}
+            value={cfgName}
+            disabled={cfgMode === 'edit'}
+            onChange={(e) => setCfgName(e.target.value)}
+            placeholder="例如: my-config"
+          />
+        </div>
+        <div>
+          <Text strong style={{ fontSize: 13 }}>YAML 内容</Text>
+          <Input.TextArea
+            style={{ marginTop: 4 }}
+            rows={14}
+            value={cfgYaml}
+            onChange={(e) => setCfgYaml(e.target.value)}
+            placeholder={
+              cfgType === 'configmap'
+                ? 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\ndata:\n  key: value'
+                : cfgType === 'ingress'
+                  ? 'apiVersion: networking.k8s.io/v1\nkind: Ingress\n...'
+                  : 'apiVersion: v1\nkind: PersistentVolumeClaim\n...'
+            }
+          />
+        </div>
+      </Modal>
     </Drawer>
   );
 };
