@@ -92,14 +92,14 @@ export const LoginPage: React.FC = () => {
     identityType?: string;
   } | null>(null);
 
-  // 第三方登录连接器（Dex）：有启用的连接器时展示入口
+  // 第三方登录（Dex）：/api/v1/login-enabled 为公开端点；enabled 时入口跳转 /api/v1/login（Dex 连接器列表页）
   useEffect(() => {
     if (resetMode) return;
-    fetch('/api/v1/connectors')
-      .then((res) => (res.ok ? res.json() : []))
-      .then((list) => {
-        if (Array.isArray(list) && list.length > 0) {
-          setConnectors(list.filter((c: { id?: string }) => c.id).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
+    fetch('/api/v1/login-enabled')
+      .then((res) => (res.ok ? res.json() : { enabled: false }))
+      .then((data) => {
+        if (data?.enabled) {
+          setConnectors([{ id: 'dex', name: '第三方账号登录' }]);
         }
       })
       .catch(() => setConnectors([]));
