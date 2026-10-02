@@ -13,6 +13,8 @@ import {
   Badge,
   InputNumber,
   Table,
+  Dropdown,
+  Input,
 } from 'antd';
 import {
   ClusterOutlined,
@@ -24,6 +26,10 @@ import {
   FileSearchOutlined,
   HistoryOutlined,
   AppstoreOutlined,
+  EyeOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  MoreOutlined,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
@@ -32,6 +38,7 @@ import dayjs from 'dayjs';
 import { useProjectStore } from '../../stores/project';
 import PodTerminal from '../../components/Terminal/PodTerminal';
 import EnvConfigDrawer from './EnvConfigDrawer';
+import EnvWorkloadsDrawer from './EnvWorkloadsDrawer';
 import LogViewer from '../../components/Terminal/LogViewer';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
@@ -40,6 +47,7 @@ const { Title, Text } = Typography;
 
 interface EnvironmentItem {
   name: string;
+  alias?: string;
   cluster_id?: string;
   cluster_name?: string;
   namespace?: string;
@@ -97,6 +105,12 @@ export const EnvironmentsPage: React.FC = () => {
 
   // Env config management drawer (configmaps/secrets/ingresses/pvcs)
   const [configDrawerOpen, setConfigDrawerOpen] = useState(false);
+  // Resource view drawer (workloads by type)
+  const [workloadsDrawerOpen, setWorkloadsDrawerOpen] = useState(false);
+  // Alias edit modal
+  const [aliasModalOpen, setAliasModalOpen] = useState(false);
+  const [aliasValue, setAliasValue] = useState('');
+  const [aliasSaving, setAliasSaving] = useState(false);
 
   // Environment Change Log Drawer state
   const [changeLogOpen, setChangeLogOpen] = useState<boolean>(false);
@@ -341,7 +355,7 @@ export const EnvironmentsPage: React.FC = () => {
                     style={{ width: 140 }}
                     size="small"
                     options={environments.map((e) => ({
-                      label: `${e.name} (${e.status || 'Running'})`,
+                      label: e.alias ? `${e.alias} (${e.name})` : `${e.name} (${e.status || 'Running'})`,
                       value: e.name,
                     }))}
                   />
@@ -380,6 +394,69 @@ export const EnvironmentsPage: React.FC = () => {
               >
                 配置管理
               </Button>
+              <Button
+                icon={<EyeOutlined />}
+                onClick={() => setWorkloadsDrawerOpen(true)}
+                disabled={!currentEnv}
+              >
+                资源视图
+              </Button>
+              <Dropdown
+                menu={{
+                  items: [
+                    {
+                      key: 'alias',
+                      icon: <EditOutlined />,
+                      label: '设置别名',
+                      onClick: () => {
+                        const env = environments.find((e) => e.name === currentEnv);
+                        setAliasValue(env?.alias || '');
+                        setAliasModalOpen(true);
+                      },
+                      disabled: !currentEnv,
+                    },
+                    { type: 'divider' as const },
+                    {
+                      key: 'delete',
+                      icon: <DeleteOutlined />,
+                      label: '删除环境',
+                      danger: true,
+                      disabled: !currentEnv,
+                      onClick: () => {
+                        if (!currentEnv || !activeProject) return;
+                        const currentEnvObj = environments.find((e) => e.name === currentEnv);
+                        const isProd = currentEnvObj?.production ?? false;
+                        const prodParam = isProd ? '&production=true' : '';
+                        feedback.modal?.confirm({
+                          title: `确认删除环境 [${currentEnv}]？`,
+                          content: '环境下的服务实例与配置将被移除，该操作不可恢复。',
+                          okText: '删除',
+                          okButtonProps: { danger: true },
+                          cancelText: '取消',
+                          onOk: async () => {
+                            try {
+                              await http.delete(
+                                `/api/aslan/environment/environments/${currentEnv}?projectName=${activeProject}&is_delete=true${prodParam}`
+                              );
+                              feedback.message.success(`环境 [${currentEnv}] 已删除`);
+                              setCurrentEnv('');
+                              await loadEnvironments();
+                            } catch (err: unknown) {
+                              const msg = (err as { response?: { data?: { message?: string } } })?.response?.data
+                                ?.message || '删除环境失败';
+                              feedback.message.error(msg);
+                            }
+                          },
+                        });
+                      },
+                    },
+                  ],
+                }}
+              >
+                <Button icon={<MoreOutlined />} disabled={!currentEnv}>
+                  环境操作
+                </Button>
+              </Dropdown>
               <Button
                 icon={<SyncOutlined />}
                 onClick={loadWorkloadPods}
@@ -563,6 +640,52 @@ export const EnvironmentsPage: React.FC = () => {
         projectName={activeProject || ''}
         production={environments.find((e) => e.name === currentEnv)?.production ?? false}
       />
+
+      {/* Resource View Drawer (workloads by type, aligned with old portal) */}
+      <EnvWorkloadsDrawer
+        open={workloadsDrawerOpen}
+        onClose={() => setWorkloadsDrawerOpen(false)}
+        envName={currentEnv || ''}
+        projectName={activeProject || ''}
+        production={environments.find((e) => e.name === currentEnv)?.production ?? false}
+      />
+
+      {/* Alias Edit Modal */}
+      <Modal
+        title={`设置环境别名: ${currentEnv}`}
+        open={aliasModalOpen}
+        onCancel={() => setAliasModalOpen(false)}
+        confirmLoading={aliasSaving}
+        okText="保存"
+        cancelText="取消"
+        onOk={async () => {
+          if (!currentEnv || !activeProject) return;
+          setAliasSaving(true);
+          const isProd = environments.find((e) => e.name === currentEnv)?.production ?? false;
+          const prodParam = isProd ? '&production=true' : '';
+          try {
+            await http.put(
+              `/api/aslan/environment/environments/${currentEnv}/alias?projectName=${activeProject}${prodParam}`,
+              { alias: aliasValue }
+            );
+            feedback.message.success('环境别名已更新');
+            setAliasModalOpen(false);
+            loadEnvironments();
+          } catch (err: unknown) {
+            const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '别名保存失败';
+            feedback.message.error(msg);
+          } finally {
+            setAliasSaving(false);
+          }
+        }}
+      >
+        <Input
+          placeholder="环境别名（展示用，可留空清除）"
+          value={aliasValue}
+          onChange={(e) => setAliasValue(e.target.value)}
+          maxLength={32}
+        />
+      </Modal>
     </div>
   );
 };
