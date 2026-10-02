@@ -20,12 +20,14 @@ import {
   DeleteOutlined,
   EditOutlined,
   AppstoreOutlined,
+  HistoryOutlined,
+  SyncOutlined,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/project';
-import { workflowApi, type WorkflowV4Item } from '../../api/workflow';
+import { workflowApi, type WorkflowV4Item, type WorkflowTaskPreview } from '../../api/workflow';
 import WorkflowCanvas from '../../components/WorkflowDAG/WorkflowCanvas';
 import WorkflowTriggerModal from '../../components/WorkflowDAG/WorkflowTriggerModal';
 import { feedback } from '../../utils/feedback';
@@ -45,8 +47,34 @@ export const PipelinesPage: React.FC = () => {
 
   const [workflows, setWorkflows] = useState<WorkflowV4Item[]>([]);
   const [activeWorkflow, setActiveWorkflow] = useState<WorkflowV4Item | null>(null);
-  const [activeTab, setActiveTab] = useState<'list' | 'dag'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'tasks' | 'dag'>('list');
   const [loading, setLoading] = useState(false);
+
+  // 任务历史（对齐旧版全局工作流任务列表）
+  const [tasks, setTasks] = useState<WorkflowTaskPreview[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+
+  const loadTasks = useCallback(async () => {
+    setTasksLoading(true);
+    try {
+      const res = await workflowApi.getWorkflowTasks({
+        pageNum: 1,
+        pageSize: 20,
+        projectName: isGlobalRoute ? undefined : projectName,
+      });
+      setTasks(res.workflow_list || []);
+    } catch {
+      setTasks([]);
+    } finally {
+      setTasksLoading(false);
+    }
+  }, [isGlobalRoute, projectName]);
+
+  useEffect(() => {
+    if (activeTab === 'tasks') {
+      loadTasks();
+    }
+  }, [activeTab, loadTasks]);
 
   // Trigger Modal
   const [triggerModalVisible, setTriggerModalVisible] = useState(false);
@@ -282,7 +310,7 @@ export const PipelinesPage: React.FC = () => {
       {/* Main Tabs */}
       <Tabs
         activeKey={activeTab}
-        onChange={(k) => setActiveTab(k as 'list' | 'dag')}
+        onChange={(k) => setActiveTab(k as 'list' | 'tasks' | 'dag')}
         items={[
           {
             key: 'list',
@@ -323,6 +351,103 @@ export const PipelinesPage: React.FC = () => {
                   pagination={{ pageSize: 10 }}
                 />
               </div>
+            ),
+          },
+          {
+            key: 'tasks',
+            label: (
+              <span>
+                <HistoryOutlined /> 任务历史
+              </span>
+            ),
+            children: (
+              <ProTable<WorkflowTaskPreview>
+                rowKey={(r) => `${r.workflow_name}-${r.task_id}`}
+                search={false}
+                options={{ density: false, fullScreen: true, reload: true, setting: false }}
+                loading={tasksLoading}
+                dataSource={tasks}
+                toolBarRender={() => [
+                  <Button key="refresh" icon={<SyncOutlined />} onClick={loadTasks}>
+                    刷新
+                  </Button>,
+                ]}
+                columns={[
+                  {
+                    title: '工作流',
+                    dataIndex: 'workflow_display_name',
+                    key: 'workflow_name',
+                    render: (_, record) => (
+                      <Space orientation="horizontal">
+                        <BranchesOutlined style={{ color: '#0066ff' }} />
+                        <Button
+                          type="link"
+                          style={{ padding: 0, fontWeight: 600 }}
+                          onClick={() =>
+                            navigate(
+                              `/v1/pipelines/${record.workflow_name}/task/${record.task_id}`
+                            )
+                          }
+                        >
+                          {record.workflow_display_name || record.workflow_name} #{record.task_id}
+                        </Button>
+                      </Space>
+                    ),
+                  },
+                  {
+                    title: '所属项目',
+                    dataIndex: 'project_name',
+                    key: 'project_name',
+                    render: (p) => <Tag color="blue">{String(p || '-')}</Tag>,
+                  },
+                  {
+                    title: '状态',
+                    dataIndex: 'status',
+                    key: 'status',
+                    render: (s) => {
+                      const map: Record<string, { color: string; text: string }> = {
+                        passed: { color: 'success', text: '成功' },
+                        running: { color: 'processing', text: '执行中' },
+                        failed: { color: 'error', text: '失败' },
+                        waiting: { color: 'warning', text: '等待审批' },
+                        cancelled: { color: 'default', text: '已取消' },
+                        timeout: { color: 'error', text: '超时' },
+                      };
+                      const m = map[String(s)] || { color: 'default', text: String(s || '未知') };
+                      return <Tag color={m.color}>{m.text}</Tag>;
+                    },
+                  },
+                  {
+                    title: '触发人',
+                    dataIndex: 'task_creator',
+                    key: 'task_creator',
+                    render: (c) => <Text type="secondary">{String(c || '-')}</Text>,
+                  },
+                  {
+                    title: '创建时间',
+                    dataIndex: 'create_time',
+                    key: 'create_time',
+                    render: (t) => (t ? new Date(Number(t) * 1000).toLocaleString() : '-'),
+                  },
+                  {
+                    title: '操作',
+                    key: 'action',
+                    render: (_, record) => (
+                      <Button
+                        type="link"
+                        size="small"
+                        onClick={() =>
+                          navigate(`/v1/pipelines/${record.workflow_name}/task/${record.task_id}`)
+                        }
+                      >
+                        查看详情
+                      </Button>
+                    ),
+                  },
+                ]}
+                cardBordered={false}
+                pagination={{ pageSize: 10 }}
+              />
             ),
           },
           {
