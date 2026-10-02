@@ -111,6 +111,9 @@ export const EnvironmentsPage: React.FC = () => {
   const [aliasModalOpen, setAliasModalOpen] = useState(false);
   const [aliasValue, setAliasValue] = useState('');
   const [aliasSaving, setAliasSaving] = useState(false);
+  // 当前环境是否处于睡眠状态（后端 ProductStatusSleeping = "Sleeping"）
+  const currentEnvObj = environments.find((e) => e.name === currentEnv);
+  const currentEnvIsSleeping = currentEnvObj?.status === 'Sleeping';
 
   // Environment Change Log Drawer state
   const [changeLogOpen, setChangeLogOpen] = useState<boolean>(false);
@@ -414,6 +417,29 @@ export const EnvironmentsPage: React.FC = () => {
                         setAliasModalOpen(true);
                       },
                       disabled: !currentEnv,
+                    },
+                    {
+                      key: 'sleep',
+                      icon: <EyeOutlined />,
+                      label: currentEnvIsSleeping ? '唤醒环境' : '睡眠环境',
+                      disabled: !currentEnv,
+                      onClick: async () => {
+                        if (!currentEnv || !activeProject) return;
+                        const action = currentEnvIsSleeping ? 'disable' : 'enable';
+                        try {
+                          await http.post(
+                            `/api/aslan/environment/environments/${currentEnv}/sleep?projectName=${activeProject}&action=${action}`
+                          );
+                          feedback.message.success(
+                            action === 'enable' ? `环境 [${currentEnv}] 已进入睡眠状态` : `环境 [${currentEnv}] 已唤醒`
+                          );
+                          await loadEnvironments();
+                        } catch (err: unknown) {
+                          const msg = (err as { response?: { data?: { message?: string } } })?.response?.data
+                            ?.message || '操作失败';
+                          feedback.message.error(msg);
+                        }
+                      },
                     },
                     { type: 'divider' as const },
                     {
