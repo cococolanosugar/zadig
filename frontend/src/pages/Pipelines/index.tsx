@@ -54,6 +54,7 @@ export const PipelinesPage: React.FC = () => {
   // 任务历史（对齐旧版全局工作流任务列表）
   const [tasks, setTasks] = useState<WorkflowTaskPreview[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
+  const [favoriteOnly, setFavoriteOnly] = useState(false);
 
   const loadTasks = useCallback(async () => {
     setTasksLoading(true);
@@ -404,10 +405,23 @@ export const PipelinesPage: React.FC = () => {
                   search={false}
                   options={{ density: false, fullScreen: true, reload: true, setting: false }}
                   loading={loading}
+                  toolBarRender={() => [
+                    <Button
+                      key="fav-filter"
+                      size="small"
+                      type={favoriteOnly ? 'primary' : 'default'}
+                      icon={<StarFilled style={{ color: favoriteOnly ? '#faad14' : undefined }} />}
+                      onClick={() => setFavoriteOnly(!favoriteOnly)}
+                    >
+                      仅看收藏
+                    </Button>,
+                  ]}
                   dataSource={
-                    isGlobalRoute && selectedProjectFilter !== 'all'
-                      ? workflows.filter((w) => (w.project || (w as any).project_name) === selectedProjectFilter)
-                      : workflows
+                    favoriteOnly
+                      ? workflows.filter((w) => w.isFavorite)
+                      : isGlobalRoute && selectedProjectFilter !== 'all'
+                        ? workflows.filter((w) => (w.project || (w as any).project_name) === selectedProjectFilter)
+                        : workflows
                   }
                   columns={columns}
                   cardBordered={false}

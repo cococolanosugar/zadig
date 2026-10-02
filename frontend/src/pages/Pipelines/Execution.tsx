@@ -132,6 +132,50 @@ export const PipelineExecutionPage: React.FC = () => {
   const [jobEvents, setJobEvents] = useState<Array<{ event_type: string; time: string; message: string }>>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
 
+  // 当前选中 job 的执行状态与错误策略（用于 job 级操作判定）
+  const selectedJobInfo = useMemo(() => {
+    for (const stage of task?.stages || []) {
+      const job = (stage.jobs || []).find((j) => j.name === selectedJob);
+      if (job) return { ...job, stageName: stage.name };
+    }
+    return null;
+  }, [task, selectedJob]);
+
+  const handleJobErrorDecision = async (decision: 'reject' | 'ignore') => {
+    if (!task || !selectedJob) return;
+    setApproving(true);
+    try {
+      await workflowApi.handleJobError({
+        workflow_name: task.workflow_name,
+        job_name: selectedJob,
+        task_id: task.task_id,
+        decision,
+      });
+      feedback.message.success(decision === 'ignore' ? '已忽略错误，任务继续执行' : '已终止任务');
+      await loadTask();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '错误处理失败';
+      feedback.message.error(msg);
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleRevertJob = async () => {
+    if (!workflowName || !taskId || !selectedJob) return;
+    setRetrying(true);
+    try {
+      await workflowApi.revertJob(workflowName, selectedJob, taskId);
+      feedback.message.success(`Job [${selectedJob}] 已重新入队`);
+      await loadTask();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Job 重试失败';
+      feedback.message.error(msg);
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   const loadJobEvents = useCallback(async () => {
     if (!workflowName || !taskId || !selectedJob) return;
     setEventsOpen(true);
@@ -365,7 +409,7 @@ export const PipelineExecutionPage: React.FC = () => {
       <Card
         variant="borderless"
         title={
-          <Space orientation="horizontal">
+          <Space orientation="horizontal" wrap>
             <Text strong>执行控制台日志 (Job: {selectedJob || '默认'})</Text>
             {task?.status === 'running' ? (
               <Badge status="processing" text="SSE 实时日志流传输中" />
@@ -379,6 +423,21 @@ export const PipelineExecutionPage: React.FC = () => {
             <Button size="small" onClick={loadJobEvents} disabled={!selectedJob}>
               查看事件
             </Button>
+            {selectedJobInfo?.status === 'failed' && task?.status === 'running' && (
+              <>
+                <Button size="small" onClick={() => handleJobErrorDecision('ignore')} loading={approving}>
+                  忽略错误继续
+                </Button>
+                <Button size="small" danger onClick={() => handleJobErrorDecision('reject')} loading={approving}>
+                  终止任务
+                </Button>
+              </>
+            )}
+            {selectedJobInfo?.status === 'failed' && task?.status === 'failed' && (
+              <Button size="small" onClick={handleRevertJob} loading={retrying}>
+                重试该 Job
+              </Button>
+            )}
           </Space>
         }
         styles={{ body: { padding: 0 } }}
