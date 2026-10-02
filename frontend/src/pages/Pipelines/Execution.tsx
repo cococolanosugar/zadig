@@ -14,6 +14,9 @@ import {
   Alert,
   Input,
   Popconfirm,
+  Drawer,
+  Timeline,
+  Spin,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -122,6 +125,24 @@ export const PipelineExecutionPage: React.FC = () => {
   const sseStreamUrl = useMemo(() => {
     if (!workflowName || !taskId || !selectedJob) return undefined;
     return `/api/aslan/logs/sse/v4/workflow/${encodeURIComponent(workflowName)}/${taskId}/${encodeURIComponent(selectedJob)}/1000`;
+  }, [workflowName, taskId, selectedJob]);
+
+  // Job 级 K8s 事件查看（对齐旧版执行详情）
+  const [eventsOpen, setEventsOpen] = useState(false);
+  const [jobEvents, setJobEvents] = useState<Array<{ event_type: string; time: string; message: string }>>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+
+  const loadJobEvents = useCallback(async () => {
+    if (!workflowName || !taskId || !selectedJob) return;
+    setEventsOpen(true);
+    setEventsLoading(true);
+    setJobEvents([]);
+    try {
+      const list = await workflowApi.getJobEvents(workflowName, taskId, selectedJob);
+      setJobEvents(list);
+    } finally {
+      setEventsLoading(false);
+    }
   }, [workflowName, taskId, selectedJob]);
 
   useEffect(() => {
@@ -355,6 +376,9 @@ export const PipelineExecutionPage: React.FC = () => {
             ) : (
               <Badge status="default" text="日志流就绪" />
             )}
+            <Button size="small" onClick={loadJobEvents} disabled={!selectedJob}>
+              查看事件
+            </Button>
           </Space>
         }
         styles={{ body: { padding: 0 } }}
@@ -362,6 +386,44 @@ export const PipelineExecutionPage: React.FC = () => {
       >
         <LogViewer height={480} streamUrl={sseStreamUrl} />
       </Card>
+
+      {/* Job K8s Events Drawer */}
+      <Drawer
+        title={`K8s 事件: ${selectedJob || ''}`}
+        placement="right"
+        open={eventsOpen}
+        onClose={() => setEventsOpen(false)}
+        size="large"
+        extra={
+          <Button icon={<SyncOutlined />} size="small" onClick={loadJobEvents}>
+            刷新
+          </Button>
+        }
+      >
+        {eventsLoading ? (
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <Spin size="large" />
+          </div>
+        ) : jobEvents.length > 0 ? (
+          <Timeline
+            style={{ padding: '16px 24px' }}
+            items={jobEvents.map((e) => ({
+              color: e.event_type === 'error' ? 'red' : e.event_type === 'warning' ? 'orange' : 'blue',
+              children: (
+                <div style={{ marginBottom: 4 }}>
+                  <Tag color={e.event_type === 'error' ? 'error' : e.event_type === 'warning' ? 'warning' : 'geekblue'}>
+                    {e.event_type || 'info'}
+                  </Tag>
+                  <Text type="secondary" style={{ fontSize: 12 }}>{e.time}</Text>
+                  <div style={{ fontSize: 13, marginTop: 2 }}>{e.message}</div>
+                </div>
+              ),
+            }))}
+          />
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该 Job 暂无 K8s 事件" style={{ padding: '60px 0' }} />
+        )}
+      </Drawer>
     </div>
   );
 };
