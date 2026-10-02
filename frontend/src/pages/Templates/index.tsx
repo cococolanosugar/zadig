@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Tabs, Table, Tag, Typography, Button, Space, Input, Row, Col, Spin, Empty, Badge } from 'antd';
+import { Card, Tabs, Table, Tag, Typography, Button, Space, Input, Row, Col, Spin, Empty, Badge, Drawer, Tooltip } from 'antd';
 import {
   AppstoreOutlined,
   BranchesOutlined,
@@ -47,6 +47,9 @@ export const TemplateCenterPage: React.FC = () => {
   };
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
+  // 模板内容查看抽屉（对齐旧版「查看内容」）
+  const [viewing, setViewing] = useState<{ title: string; content: string; variables?: Array<{ key: string; value?: string }> } | null>(null);
+  const [viewingWorkflow, setViewingWorkflow] = useState<WorkflowTemplateItem | null>(null);
 
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplateItem[]>([]);
   const [i18nMap, setI18nMap] = useState<Record<string, WorkflowTemplateI18n>>({});
@@ -204,9 +207,11 @@ export const TemplateCenterPage: React.FC = () => {
             allowClear
             style={{ width: 240, borderRadius: 4 }}
           />
-          <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 4 }}>
-            新建模板
-          </Button>
+          <Tooltip title="模板由各功能模块内创建（服务/构建/扫描等配置保存后自动收录）">
+            <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 4 }} disabled>
+              新建模板
+            </Button>
+          </Tooltip>
         </Space>
       </div>
 
@@ -298,8 +303,13 @@ export const TemplateCenterPage: React.FC = () => {
                       </div>
 
                       <div style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid #f0f2f5', display: 'flex', justifyContent: 'flex-end' }}>
-                        <Button type="link" size="small" style={{ padding: 0 }}>
-                          基于模板创建工作流
+                        <Button
+                          type="link"
+                          size="small"
+                          style={{ padding: 0 }}
+                          onClick={() => setViewingWorkflow(item)}
+                        >
+                          查看编排详情
                         </Button>
                       </div>
                     </Card>
@@ -321,7 +331,11 @@ export const TemplateCenterPage: React.FC = () => {
                 key: 'update_time',
                 render: (t: number | undefined) => (t ? new Date(t * 1000).toLocaleString() : '-'),
               },
-              { title: '操作', key: 'action', render: () => <Button type="link">查看内容</Button> },
+              { title: '操作', key: 'action', render: (_, r: YamlTemplateItem) => (
+                <Button type="link" onClick={() => setViewing({ title: r.name, content: r.content || '', variables: r.variables })}>
+                  查看内容
+                </Button>
+              ) },
             ]}
             locale={{
               emptyText: <Empty description="暂无该分类模板数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
@@ -358,7 +372,11 @@ export const TemplateCenterPage: React.FC = () => {
                 key: 'update_time',
                 render: (t: number | undefined) => (t ? new Date(t * 1000).toLocaleString() : '-'),
               },
-              { title: '操作', key: 'action', render: () => <Button type="link">查看内容</Button> },
+              { title: '操作', key: 'action', render: (_, r: DockerfileTemplateItem) => (
+                <Button type="link" onClick={() => setViewing({ title: r.name, content: r.content || '' })}>
+                  查看内容
+                </Button>
+              ) },
             ]}
             locale={{
               emptyText: <Empty description="暂无 Dockerfile 模板" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
@@ -506,6 +524,110 @@ export const TemplateCenterPage: React.FC = () => {
           />
         )}
       </Card>
+
+      {/* Template Content View Drawer (k8s-yamls / dockerfiles) */}
+      <Drawer
+        title={`模板内容: ${viewing?.title || ''}`}
+        placement="right"
+        open={!!viewing}
+        onClose={() => setViewing(null)}
+        size="large"
+      >
+        {viewing && (
+          <div>
+            {viewing.variables && viewing.variables.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <Text strong style={{ display: 'block', marginBottom: 8 }}>变量定义</Text>
+                <Space orientation="horizontal" size={4} wrap>
+                  {viewing.variables.map((v) => (
+                    <Tag key={v.key} color="geekblue">{v.key}</Tag>
+                  ))}
+                </Space>
+              </div>
+            )}
+            <pre
+              style={{
+                background: '#f5f7fa',
+                padding: 16,
+                borderRadius: 8,
+                fontSize: 12,
+                lineHeight: 1.8,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+                maxHeight: 520,
+                overflow: 'auto',
+              }}
+            >
+              {viewing.content || '（无内容）'}
+            </pre>
+          </div>
+        )}
+      </Drawer>
+
+      {/* Workflow Template Orchestration View Drawer */}
+      <Drawer
+        title={`编排详情: ${viewingWorkflow ? i18nMap[viewingWorkflow.template_name]?.name_zh || viewingWorkflow.template_name : ''}`}
+        placement="right"
+        open={!!viewingWorkflow}
+        onClose={() => setViewingWorkflow(null)}
+        size="large"
+      >
+        {viewingWorkflow && (
+          <div>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+              {viewingWorkflow.description || i18nMap[viewingWorkflow.template_name]?.description_zh || ''}
+            </Text>
+            <Tabs
+              items={[
+                {
+                  key: 'stages',
+                  label: '编排阶段',
+                  children: (
+                    <Table
+                      dataSource={viewingWorkflow.stages || []}
+                      rowKey={(s, i) => `${s}-${i}`}
+                      pagination={false}
+                      size="small"
+                      columns={[
+                        { title: '阶段', dataIndex: 'stages', key: 'stage', render: (s) => <Tag color="geekblue">{String(s).replace(/^stage-\d+-/, '')}</Tag> },
+                      ]}
+                      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无阶段信息" /> }}
+                    />
+                  ),
+                },
+                {
+                  key: 'details',
+                  label: '阶段明细',
+                  children: (
+                    <Table
+                      dataSource={viewingWorkflow.stage_details || []}
+                      rowKey={(s, i) => `${s.name}-${i}`}
+                      pagination={false}
+                      size="small"
+                      columns={[
+                        { title: '阶段名', dataIndex: 'name', key: 'name', render: (n) => <Text strong>{String(n)}</Text> },
+                        {
+                          title: '任务列表',
+                          dataIndex: 'jobs',
+                          key: 'jobs',
+                          render: (_, r) => (
+                            <Space orientation="horizontal" size={4} wrap>
+                              {(r.jobs || []).map((j) => (
+                                <Tag key={j.name} color="blue">{`${j.name} (${j.job_type})`}</Tag>
+                              ))}
+                            </Space>
+                          ),
+                        },
+                      ]}
+                      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无阶段明细" /> }}
+                    />
+                  ),
+                },
+              ]}
+            />
+          </div>
+        )}
+      </Drawer>
     </div>
   );
 };
