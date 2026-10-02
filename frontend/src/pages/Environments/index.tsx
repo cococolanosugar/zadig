@@ -123,6 +123,12 @@ export const EnvironmentsPage: React.FC = () => {
   const currentEnvObj = environments.find((e) => e.name === currentEnv);
   const currentEnvIsSleeping = currentEnvObj?.status === 'Sleeping';
 
+  // 管理服务（对齐旧版添加/删除服务；后端 PUT /environments/:name 全量替换服务组）
+  const [svcModalOpen, setSvcModalOpen] = useState(false);
+  const [svcLoading, setSvcLoading] = useState(false);
+  const [svcSaving, setSvcSaving] = useState(false);
+  const [availableSvcs, setAvailableSvcs] = useState<Array<{ service_name: string; type: string; selected: boolean; group: Array<{ service_name: string; type: string }> }>>([]);
+
   // Environment Change Log Drawer state
   const [changeLogOpen, setChangeLogOpen] = useState<boolean>(false);
   const [changeLogs, setChangeLogs] = useState<EnvOperationLogItem[]>([]);
@@ -261,6 +267,86 @@ export const EnvironmentsPage: React.FC = () => {
       feedback.message.error(msg);
     } finally {
       setGvSaving(false);
+    }
+  };
+
+  // 管理服务：加载 init_info（项目全部服务）+ 环境详情（当前服务/revision），标记勾选态
+  const loadServiceManagement = useCallback(async () => {
+    if (!activeProject || !currentEnv) return;
+    setSvcLoading(true);
+    try {
+      const [initRes, detailRes] = await Promise.all([
+        http.get<{ services?: Array<Array<{ service_name: string; type: string }>> }>(
+          `/api/aslan/environment/init_info/${activeProject}?envType=general&isBaseEnv=true&baseEnv=&projectName=${activeProject}`,
+          { skipErrorHandler: true }
+        ),
+        http.get<Record<string, unknown>>(
+          `/api/aslan/environment/environments/${currentEnv}?projectName=${activeProject}`,
+          { skipErrorHandler: true }
+        ),
+      ]);
+      const current = new Set<string>();
+      ((detailRes as { services?: Array<Array<{ service_name?: string }>> })?.services || []).forEach((group) =>
+        (group || []).forEach((s) => {
+          if (s.service_name) current.add(s.service_name);
+        })
+      );
+      const flat: Array<{ service_name: string; type: string; selected: boolean; group: Array<{ service_name: string; type: string }> }> = [];
+      ((initRes as { services?: Array<Array<{ service_name?: string; type?: string }>> })?.services || []).forEach((group) => {
+        const normalized = (group || []).map((s) => ({ service_name: s.service_name || '', type: s.type || 'k8s' }));
+        normalized.forEach((s) => {
+          flat.push({
+            service_name: s.service_name,
+            type: s.type,
+            selected: current.has(s.service_name),
+            group: normalized,
+          });
+        });
+      });
+      setAvailableSvcs(flat);
+    } catch {
+      setAvailableSvcs([]);
+    } finally {
+      setSvcLoading(false);
+    }
+  }, [activeProject, currentEnv]);
+
+  const handleSaveServices = async () => {
+    if (!activeProject || !currentEnv) return;
+    setSvcSaving(true);
+    try {
+      // 环境详情作为 PUT body（后端全量替换服务组），勾选的服务聚为一组
+      const detail = await http.get<Record<string, unknown>>(
+        `/api/aslan/environment/environments/${currentEnv}?projectName=${activeProject}`,
+        { skipErrorHandler: true }
+      );
+      const selectedGroup: Array<{ service_name: string; type: string }> = [];
+      const seen = new Set<string>();
+      availableSvcs.forEach((s) => {
+        if (s.selected && !seen.has(s.service_name)) {
+          seen.add(s.service_name);
+          selectedGroup.push({ service_name: s.service_name, type: s.type });
+        }
+      });
+      const body = { ...(detail as Record<string, unknown>), services: [selectedGroup] };
+      delete (body as { created_at?: unknown }).created_at;
+      delete (body as { updated_at?: unknown }).updated_at;
+      const r = await http.put(
+        `/api/aslan/environment/environments/${currentEnv}?projectName=${activeProject}&type=k8s`,
+        body
+      );
+      feedback.message.success(
+        `环境服务已更新（当前 ${selectedGroup.length} 个服务），正在后台同步资源`
+      );
+      setSvcModalOpen(false);
+      return r;
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data
+        ?.description || (err as { message?: string })?.message || '环境服务更新失败';
+      feedback.message.error(msg);
+      return undefined;
+    } finally {
+      setSvcSaving(false);
     }
   };
 
@@ -465,6 +551,16 @@ export const EnvironmentsPage: React.FC = () => {
                 disabled={!currentEnv}
               >
                 全局变量
+              </Button>
+              <Button
+                icon={<AppstoreOutlined />}
+                onClick={() => {
+                  setSvcModalOpen(true);
+                  loadServiceManagement();
+                }}
+                disabled={!currentEnv}
+              >
+                管理服务
               </Button>
               <Button
                 icon={<AppstoreOutlined />}
@@ -794,6 +890,47 @@ export const EnvironmentsPage: React.FC = () => {
           </div>
         ) : (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该环境暂无可编辑的全局变量" />
+        )}
+      </Modal>
+
+      {/* Manage Services Modal (对齐旧版「管理服务」添加/移除) */}
+      <Modal
+        title={`管理服务: ${currentEnv}`}
+        open={svcModalOpen}
+        onCancel={() => setSvcModalOpen(false)}
+        onOk={handleSaveServices}
+        confirmLoading={svcSaving}
+        okText="确定"
+        cancelText="取消"
+        width={520}
+      >
+        {svcLoading ? (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <Spin />
+          </div>
+        ) : availableSvcs.length > 0 ? (
+          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+            {availableSvcs.map((s) => (
+              <label
+                key={s.service_name}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', cursor: 'pointer' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={s.selected}
+                  onChange={() => {
+                    setAvailableSvcs((prev) =>
+                      prev.map((x) => (x.service_name === s.service_name ? { ...x, selected: !x.selected } : x))
+                    );
+                  }}
+                />
+                <Text strong style={{ fontSize: 13 }}>{s.service_name}</Text>
+                <Tag color="geekblue" style={{ marginLeft: 'auto' }}>{s.type}</Tag>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="项目内暂无服务，请先在「服务配置」中创建" />
         )}
       </Modal>
 
