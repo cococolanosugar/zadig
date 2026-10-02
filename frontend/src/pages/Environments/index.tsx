@@ -58,15 +58,13 @@ interface EnvironmentItem {
   update_time?: number;
 }
 
+// GET /api/aslan/environment/kube/pods — kube.ListPodsInfoRespone
 interface PodItem {
   name: string;
-  container_name: string;
-  status: string;
   ready: string;
-  restarts: number;
-  node_name?: string;
-  ip?: string;
-  age?: string;
+  status: string;
+  images?: string[];
+  create_time?: number;
 }
 
 interface EnvOperationLogItem {
@@ -204,8 +202,9 @@ export const EnvironmentsPage: React.FC = () => {
   const loadWorkloadPods = useCallback(async () => {
     if (!activeProject || !currentEnv) return;
     try {
+      // 后端实际端点为 kube/pods（environments/:name/workloads/pods 不存在）
       const res = await http.get<PodItem[]>(
-        `/api/aslan/environment/environments/${currentEnv}/workloads/pods?projectName=${activeProject}`
+        `/api/aslan/environment/kube/pods?projectName=${activeProject}&envName=${currentEnv}&production=false`
       );
       setPods(Array.isArray(res) ? res : []);
     } catch {
@@ -354,24 +353,46 @@ export const EnvironmentsPage: React.FC = () => {
     loadWorkloadPods();
   }, [loadWorkloadPods]);
 
-  const openTerminal = (pod: PodItem) => {
-    setActivePod({ podName: pod.name, containerName: pod.container_name });
+  // kube/pods 不返回容器名，日志/终端需先取 Pod 详情中的容器列表
+  const openPodDetailForContainers = async (pod: PodItem) => {
+    try {
+      const res = await http.get<{
+        containers?: Array<{ name?: string; image?: string }>;
+      }>(
+        `/api/aslan/environment/kube/pods/${pod.name}?projectName=${activeProject}&envName=${currentEnv}`,
+        { skipErrorHandler: true }
+      );
+      const containers = (res?.containers || []).map((c) => c.name || '').filter(Boolean);
+      return containers;
+    } catch {
+      return [];
+    }
+  };
+
+  const openTerminal = async (pod: PodItem) => {
+    const containers = await openPodDetailForContainers(pod);
+    const containerName = containers[0] || pod.name;
+    setActivePod({ podName: pod.name, containerName });
     setTerminalVisible(true);
   };
 
   const openLogs = (pod: PodItem) => {
-    setActiveLogPod(pod.name);
-    setStreamingLogUrl(
-      `/api/aslan/environment/environments/${currentEnv}/workloads/pods/${pod.name}/logs?container=${pod.container_name}&projectName=${activeProject}&follow=true`
-    );
-    setLogDrawerVisible(true);
+    // 容器名需实时获取；若无容器信息则退化为 pod 名（K8s 单容器场景常一致）
+    openPodDetailForContainers(pod).then((containers) => {
+      const containerName = containers[0] || pod.name;
+      setActiveLogPod(pod.name);
+      setStreamingLogUrl(
+        `/api/logs/sse/pods/${pod.name}/containers/${containerName}?envName=${currentEnv}&projectName=${activeProject}&tails=100`
+      );
+      setLogDrawerVisible(true);
+    });
   };
 
   const handleScaleReplicas = async () => {
     if (!activeProject || !currentEnv) return;
     setScaling(true);
     try {
-      const targetService = pods[0]?.container_name || pods[0]?.name || activeProject;
+      const targetService = (pods[0]?.name || '').replace(/-[a-z0-9]+(-[a-z0-9]+)?$/, '') || pods[0]?.name || '';
       await http.post(
         `/api/aslan/environment/environments/${currentEnv}/services/${targetService}/scaleNew?projectName=${activeProject}&type=Deployment&name=${targetService}&number=${replicas}`
       );
@@ -416,35 +437,19 @@ export const EnvironmentsPage: React.FC = () => {
       },
     },
     {
-      title: '重启次数',
-      dataIndex: 'restarts',
-      key: 'restarts',
-      render: (restarts) => {
-        const count = Number(restarts || 0);
-        return count > 0 ? (
-          <Tag color="volcano">{count} 次</Tag>
-        ) : (
-          <Text type="secondary">0 次</Text>
-        );
-      },
-    },
-    {
-      title: '所在主机节点',
-      dataIndex: 'node_name',
-      key: 'node_name',
-      render: (text) => <Text code>{String(text || '-')}</Text>,
-    },
-    {
-      title: 'Pod IP',
-      dataIndex: 'ip',
-      key: 'ip',
-      render: (text) => <Text type="secondary">{String(text || '-')}</Text>,
+      title: '镜像',
+      key: 'images',
+      ellipsis: true,
+      render: (_, record) => (
+        <Text code style={{ fontSize: 12 }}>{(record.images || [])[0] || '-'}</Text>
+      ),
     },
     {
       title: '存活运行时长',
-      dataIndex: 'age',
       key: 'age',
-      render: (text) => <Text type="secondary">{String(text || '-')}</Text>,
+      render: (_, record) => (
+        <Text type="secondary">{record.create_time ? Math.max(1, Math.floor((Date.now() / 1000 - record.create_time) / 86400)) + 'd' : '-'}</Text>
+      ),
     },
     {
       title: '容器操作',
@@ -457,7 +462,7 @@ export const EnvironmentsPage: React.FC = () => {
           icon={<FileSearchOutlined />}
           onClick={() =>
             navigate(
-              `/v1/projects/detail/${activeProject}/envs/${currentEnv}/k8s/${record.container_name || record.name}?service=${record.name}`
+              `/v1/projects/detail/${activeProject}/envs/${currentEnv}/k8s/${record.name}?service=${record.name}`
             )
           }
         >
