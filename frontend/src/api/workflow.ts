@@ -132,16 +132,23 @@ export const workflowApi = {
   },
 
   /**
-   * List workflow tasks
+   * List workflow tasks (GET /api/aslan/workflow/v4/workflowtask)
+   * Aligned with zadig-ee-portal getCustomWorkflowTaskListAPI (page_num, page_size)
    */
   async getWorkflowTasks(params?: {
     pageNum?: number;
     pageSize?: number;
     projectName?: string;
+    workflow_name?: string;
   }): Promise<ListWorkflowTaskResponse> {
     try {
+      const queryParams: Record<string, unknown> = {};
+      if (params?.pageNum !== undefined) queryParams.page_num = params.pageNum;
+      if (params?.pageSize !== undefined) queryParams.page_size = params.pageSize;
+      if (params?.projectName) queryParams.projectName = params.projectName;
+      if (params?.workflow_name) queryParams.workflow_name = params.workflow_name;
       const res = await http.get<ListWorkflowTaskResponse>('/api/aslan/workflow/v4/workflowtask', {
-        params,
+        params: queryParams,
         skipErrorHandler: true,
       });
       return {
