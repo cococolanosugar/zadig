@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Card, Table, Typography, Button, Space, Input, Tag, Row, Col, Statistic, Empty, Spin, Modal, Form, Select, Drawer, Descriptions } from 'antd';
+import { Card, Table, Typography, Button, Space, Input, Tag, Row, Col, Statistic, Empty, Spin, Modal, Form, Select, Drawer, Descriptions, Radio } from 'antd';
+import { Line } from '@ant-design/plots';
 import {
   CheckCircleOutlined,
   PlayCircleOutlined,
@@ -7,6 +8,7 @@ import {
   PlusOutlined,
   FieldTimeOutlined,
   BarChartOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
@@ -47,6 +49,33 @@ export const QualityCenterPage: React.FC = () => {
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form] = Form.useForm();
+
+  // 构建质量效能（对齐旧版质量监控 /api/aslan/stat/quality/*）
+  const [buildRange, setBuildRange] = useState<'7d' | '30d' | '90d'>('30d');
+  const [buildLoading, setBuildLoading] = useState(false);
+  const [buildHealth, setBuildHealth] = useState<{ totalSuccess: number; totalFailure: number }>({ totalSuccess: 0, totalFailure: 0 });
+  const [buildDaily, setBuildDaily] = useState<Array<{ date: string; averageDuration: number }>>([]);
+  const [latestTen, setLatestTen] = useState<Array<{ name?: string; productName?: string; duration: number; status: string; taskCreator?: string; createTime?: number }>>([]);
+
+  const fetchBuildQuality = useCallback(async () => {
+    if (!projectName) return;
+    setBuildLoading(true);
+    const end = Math.floor(Date.now() / 1000);
+    const start = end - (buildRange === '7d' ? 7 : buildRange === '30d' ? 30 : 90) * 86400;
+    const body = { startDate: start, endDate: end, productNames: projectName ? [projectName] : [] };
+    try {
+      const [healthRes, dailyRes, tenRes] = await Promise.allSettled([
+        http.post<{ totalSuccess: number; totalFailure: number }>('/api/aslan/stat/quality/buildHealthMeasure', body, { skipErrorHandler: true }),
+        http.post<Array<{ date: string; averageDuration: number }>>('/api/aslan/stat/quality/buildDailyMeasure', body, { skipErrorHandler: true }),
+        http.post<Array<{ name?: string; productName?: string; duration: number; status: string; taskCreator?: string; createTime?: number }>>('/api/aslan/stat/quality/buildLatestTenMeasure', body, { skipErrorHandler: true }),
+      ]);
+      setBuildHealth(healthRes.status === 'fulfilled' && healthRes.value ? healthRes.value : { totalSuccess: 0, totalFailure: 0 });
+      setBuildDaily(dailyRes.status === 'fulfilled' && Array.isArray(dailyRes.value) ? dailyRes.value : []);
+      setLatestTen(tenRes.status === 'fulfilled' && Array.isArray(tenRes.value) ? tenRes.value : []);
+    } finally {
+      setBuildLoading(false);
+    }
+  }, [projectName, buildRange]);
 
   // 测试详情抽屉（配置 + 任务历史）
   const [detailOpen, setDetailOpen] = useState(false);
@@ -107,6 +136,10 @@ export const QualityCenterPage: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    fetchBuildQuality();
+  }, [fetchBuildQuality]);
 
   useEffect(() => {
     if (routeTestName && tests.length > 0) {
@@ -241,6 +274,96 @@ export const QualityCenterPage: React.FC = () => {
           </Card>
         </Col>
       </Row>
+
+      {/* Build Quality Charts (对齐旧版质量监控 /api/aslan/stat/quality/*) */}
+      <Card
+        variant="borderless"
+        style={{ borderRadius: 8, border: '1px solid #ebeef5', marginBottom: 20 }}
+        title="构建质量效能"
+        extra={
+          <Space size={8}>
+            <Radio.Group value={buildRange} onChange={(e) => setBuildRange(e.target.value)} size="small">
+              <Radio.Button value="7d">近 7 天</Radio.Button>
+              <Radio.Button value="30d">近 30 天</Radio.Button>
+              <Radio.Button value="90d">近 90 天</Radio.Button>
+            </Radio.Group>
+            <Button size="small" icon={<ReloadOutlined />} onClick={fetchBuildQuality} loading={buildLoading} />
+          </Space>
+        }
+      >
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+          <Col xs={24} sm={8}>
+            <Statistic title="构建成功次数" value={buildHealth.totalSuccess} valueStyle={{ color: '#52c41a' }} />
+          </Col>
+          <Col xs={24} sm={8}>
+            <Statistic title="构建失败次数" value={buildHealth.totalFailure} valueStyle={{ color: '#ff4d4f' }} />
+          </Col>
+          <Col xs={24} sm={8}>
+            <Statistic
+              title="构建健康度"
+              value={buildHealth.totalSuccess + buildHealth.totalFailure > 0
+                ? `${Math.round((buildHealth.totalSuccess / (buildHealth.totalSuccess + buildHealth.totalFailure)) * 100)}%`
+                : '-'}
+              prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
+            />
+          </Col>
+        </Row>
+        {buildDaily.length > 0 ? (
+          <Line
+            data={buildDaily.map((d) => ({ date: (d.date || '').slice(5), duration: d.averageDuration }))}
+            xField="date"
+            yField="duration"
+            style={{ lineWidth: 2 }}
+            point={{ shapeField: 'circle', sizeField: 3 }}
+            height={260}
+          />
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`${buildRange === '7d' ? '近 7 天' : buildRange === '30d' ? '近 30 天' : '近 90 天'}暂无构建质量数据`} />
+        )}
+      </Card>
+
+      {/* Latest Ten Builds */}
+      <Card
+        variant="borderless"
+        style={{ borderRadius: 8, border: '1px solid #ebeef5', marginBottom: 20 }}
+        title="最近构建记录"
+      >
+        {latestTen.length > 0 ? (
+          <Table
+            dataSource={latestTen}
+            rowKey={(r, i) => `${r.productName}-${r.createTime}-${i}`}
+            pagination={false}
+            size="small"
+            columns={[
+              { title: '所属项目', dataIndex: 'productName', key: 'productName', render: (p) => <Tag color="blue">{String(p || '-')}</Tag> },
+              { title: '耗时', dataIndex: 'duration', key: 'duration', render: (d) => <Text type="secondary">{d ? `${d} 秒` : '-'}</Text> },
+              {
+                title: '状态',
+                dataIndex: 'status',
+                key: 'status',
+                render: (s) => {
+                  const map: Record<string, { color: string; text: string }> = {
+                    passed: { color: 'success', text: '成功' },
+                    failed: { color: 'error', text: '失败' },
+                    running: { color: 'processing', text: '执行中' },
+                  };
+                  const m = map[String(s)] || { color: 'default', text: String(s || '未知') };
+                  return <Tag color={m.color}>{m.text}</Tag>;
+                },
+              },
+              { title: '触发人', dataIndex: 'taskCreator', key: 'taskCreator', render: (c) => <Text type="secondary">{String(c || '-')}</Text> },
+              {
+                title: '创建时间',
+                dataIndex: 'createTime',
+                key: 'createTime',
+                render: (t) => (t ? new Date(t * 1000).toLocaleString() : '-'),
+              },
+            ]}
+          />
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无构建记录" />
+        )}
+      </Card>
 
       {/* Main Table */}
       <Card
