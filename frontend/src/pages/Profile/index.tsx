@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Card, Tabs, Typography, Form, Input, Button, Descriptions, Tag, Alert, Space, Switch, Select } from 'antd';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, Tabs, Typography, Form, Input, Button, Descriptions, Tag, Alert, Space, Switch, Select, Spin } from 'antd';
 import {
   ApiOutlined,
   UserOutlined,
@@ -108,6 +108,102 @@ export const UserProfilePage: React.FC = () => {
       // Form validation error
     } finally {
       setSavingPref(false);
+    }
+  };
+
+  // MFA 管理（对齐旧版安全设置；后端: /api/v1/users/:uid/mfa/*）
+  const [mfaEnabled, setMfaEnabled] = useState<boolean | null>(null);
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [mfaSetupData, setMfaSetupData] = useState<{ qrcode?: string; secret?: string } | null>(null);
+  const [mfaOtp, setMfaOtp] = useState('');
+  const [mfaSubmitting, setMfaSubmitting] = useState(false);
+  const [mfaRecoveryCodes, setMfaRecoveryCodes] = useState<string[]>([]);
+
+  const loadMfaStatus = useCallback(async () => {
+    if (!userInfo?.uid) return;
+    setMfaLoading(true);
+    try {
+      const res = await http.get<{ enabled: boolean; system_forced_enabled: boolean }>(
+        `/api/v1/users/${userInfo.uid}/mfa/status`,
+        { skipErrorHandler: true }
+      );
+      setMfaEnabled(!!res?.enabled);
+    } catch {
+      setMfaEnabled(null);
+    } finally {
+      setMfaLoading(false);
+    }
+  }, [userInfo?.uid]);
+
+  useEffect(() => {
+    if (activeTab === 'security') {
+      loadMfaStatus();
+    }
+  }, [activeTab, loadMfaStatus]);
+
+  const handleMfaSetup = async () => {
+    if (!userInfo?.uid) return;
+    setMfaLoading(true);
+    try {
+      const res = await http.post<{ qrcode?: string; secret?: string }>(
+        `/api/v1/users/${userInfo.uid}/mfa/setup`,
+        {},
+        { skipErrorHandler: true }
+      );
+      setMfaSetupData(res || {});
+      feedback.message.success('已生成 MFA 绑定二维码，请使用认证器扫描');
+    } catch (err: any) {
+      feedback.message.error(err?.response?.data?.description || err?.message || 'MFA 初始化失败');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleMfaEnable = async () => {
+    if (!userInfo?.uid || !mfaOtp.trim()) {
+      feedback.message.warning('请输入 6 位动态验证码');
+      return;
+    }
+    setMfaSubmitting(true);
+    try {
+      const res = await http.post<{ recovery_codes?: string[] }>(
+        `/api/v1/users/${userInfo.uid}/mfa/enable`,
+        { otp_code: mfaOtp.trim() },
+        { skipErrorHandler: true }
+      );
+      feedback.message.success('MFA 已启用');
+      setMfaEnabled(true);
+      setMfaSetupData(null);
+      setMfaOtp('');
+      if (res?.recovery_codes?.length) {
+        setMfaRecoveryCodes(res.recovery_codes);
+      }
+    } catch (err: any) {
+      feedback.message.error(err?.response?.data?.description || err?.message || 'MFA 启用失败，请检查验证码');
+    } finally {
+      setMfaSubmitting(false);
+    }
+  };
+
+  const handleMfaDisable = async () => {
+    if (!userInfo?.uid || !mfaOtp.trim()) {
+      feedback.message.warning('请输入动态验证码或恢复码以确认关闭 MFA');
+      return;
+    }
+    setMfaSubmitting(true);
+    try {
+      await http.post(
+        `/api/v1/users/${userInfo.uid}/mfa/disable`,
+        { otp_code: mfaOtp.trim() },
+        { skipErrorHandler: true }
+      );
+      feedback.message.success('MFA 已关闭');
+      setMfaEnabled(false);
+      setMfaOtp('');
+    } catch (err: any) {
+      feedback.message.error(err?.response?.data?.description || err?.message || '关闭 MFA 失败');
+    } finally {
+      setMfaSubmitting(false);
     }
   };
 
@@ -276,8 +372,86 @@ export const UserProfilePage: React.FC = () => {
             />
           </div>
         ) : activeTab === 'security' ? (
-          <div style={{ maxWidth: 520 }}>
-            <Title level={5} style={{ marginBottom: 16 }}>
+          <div style={{ maxWidth: 720 }}>
+            {/* MFA 管理（对齐旧版安全设置） */}
+            <Title level={5} style={{ marginBottom: 12 }}>
+              多因素认证 (MFA)
+            </Title>
+            <Alert
+              title={`状态：${mfaEnabled === null ? '未知' : mfaEnabled ? '已启用' : '未启用'}`}
+              description="启用后登录时需输入认证器动态验证码，为账户增加一层安全保护。"
+              type={mfaEnabled ? 'success' : 'info'}
+              showIcon
+              style={{ marginBottom: 16, borderRadius: 6 }}
+            />
+            {mfaLoading && <Spin size="small" style={{ display: 'block', marginBottom: 12 }} />}
+
+            {mfaEnabled === false && !mfaSetupData && (
+              <Button type="primary" icon={<SafetyCertificateOutlined />} onClick={handleMfaSetup} loading={mfaLoading}>
+                启用 MFA
+              </Button>
+            )}
+
+            {mfaSetupData && (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ textAlign: 'center', margin: '12px 0 16px' }}>
+                  {mfaSetupData.qrcode ? (
+                    <img src={mfaSetupData.qrcode} alt="MFA QR Code" style={{ width: 180, height: 180, padding: 8, background: '#fff', borderRadius: 6, border: '1px solid #ebeef5' }} />
+                  ) : (
+                    <Text code copyable style={{ fontSize: 12, wordBreak: 'break-all' }}>{mfaSetupData.secret}</Text>
+                  )}
+                  <div style={{ marginTop: 8 }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      密钥: <Text code copyable style={{ fontSize: 12 }}>{mfaSetupData.secret}</Text>
+                    </Text>
+                  </div>
+                </div>
+                <Space.Compact style={{ width: '100%' }}>
+                  <Input
+                    placeholder="输入认证器 6 位动态验证码"
+                    maxLength={6}
+                    value={mfaOtp}
+                    onChange={(e) => setMfaOtp(e.target.value.replace(/\D/g, ''))}
+                  />
+                  <Button type="primary" loading={mfaSubmitting} onClick={handleMfaEnable}>
+                    确认绑定
+                  </Button>
+                </Space.Compact>
+              </div>
+            )}
+
+            {mfaEnabled && (
+              <div style={{ marginBottom: 24 }}>
+                <Space.Compact style={{ width: '100%' }}>
+                  <Input
+                    placeholder="输入动态验证码或恢复码以确认关闭"
+                    value={mfaOtp}
+                    onChange={(e) => setMfaOtp(e.target.value)}
+                  />
+                  <Button danger loading={mfaSubmitting} onClick={handleMfaDisable}>
+                    关闭 MFA
+                  </Button>
+                </Space.Compact>
+              </div>
+            )}
+
+            {mfaRecoveryCodes.length > 0 && (
+              <Alert
+                title="请妥善保存以下恢复码（仅展示一次）"
+                description={
+                  <Space orientation="horizontal" size={8} wrap>
+                    {mfaRecoveryCodes.map((c) => (
+                      <Text key={c} code copyable>{c}</Text>
+                    ))}
+                  </Space>
+                }
+                type="warning"
+                showIcon
+                style={{ marginBottom: 24, borderRadius: 6 }}
+              />
+            )}
+
+            <Title level={5} style={{ marginBottom: 16, marginTop: 32 }}>
               修改个人登录密码
             </Title>
             <Form form={passwordForm} layout="vertical">
