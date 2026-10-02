@@ -8,52 +8,54 @@ import {
   Input,
   Modal,
   Form,
-  DatePicker,
+  Select,
   Typography,
   Row,
   Col,
   Statistic,
-  Progress,
   Popconfirm,
   Empty,
   Drawer,
-  Select,
-  Switch,
+  Alert,
 } from 'antd';
 import {
   PlusOutlined,
   SearchOutlined,
   ScheduleOutlined,
-  CheckCircleOutlined,
-  ClockCircleOutlined,
-  PlayCircleOutlined,
+  ReloadOutlined,
   DeleteOutlined,
   EditOutlined,
-  ReloadOutlined,
   SettingOutlined,
-  SaveOutlined,
 } from '@ant-design/icons';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import dayjs from 'dayjs';
 import type { ColumnsType } from 'antd/es/table';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
 
 const { Text } = Typography;
-const { TextArea } = Input;
-const { RangePicker } = DatePicker;
 
-export interface SprintItem {
+// GET /api/aslan/sprint_management/v1/sprint?projectName= — models.Sprint
+interface SprintItem {
   id: string;
   name: string;
-  status: 'planning' | 'active' | 'completed';
-  start_date?: string;
-  end_date?: string;
-  description?: string;
-  created_by?: string;
-  created_at?: number;
-  total_work_items?: number;
-  completed_work_items?: number;
+  key?: string;
+  key_initials?: string;
+  template_id?: string;
+  stages?: Array<{ id?: string; name?: string }>;
+  is_archived?: boolean;
+  created_by?: { name?: string; account?: string };
+  create_time?: number;
+  updated_by?: { name?: string; account?: string };
+  update_time?: number;
+}
+
+// GET /api/aslan/sprint_management/v1/sprint_template — models.SprintTemplate
+interface SprintTemplateItem {
+  id: string;
+  name: string;
+  key?: string;
+  key_initials?: string;
+  stages?: Array<{ name?: string }>;
 }
 
 export const SprintsPage: React.FC = () => {
@@ -63,15 +65,14 @@ export const SprintsPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [sprints, setSprints] = useState<SprintItem[]>([]);
   const [searchText, setSearchText] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [editingSprint, setEditingSprint] = useState<SprintItem | null>(null);
   const [form] = Form.useForm();
+  // 创建时选择的迭代模板
+  const [templates, setTemplates] = useState<SprintTemplateItem[]>([]);
 
-  // 迭代配置抽屉状态 (对齐 /sprints/config 路由)
+  // 迭代配置抽屉状态 (对齐 /sprints/config 路由；数据源为 sprint_template 模板列表)
   const [configDrawerOpen, setConfigDrawerOpen] = useState<boolean>(false);
-  const [configForm] = Form.useForm();
-  const [savingConfig, setSavingConfig] = useState<boolean>(false);
 
   useEffect(() => {
     if (location.pathname.endsWith('/config')) {
@@ -86,29 +87,15 @@ export const SprintsPage: React.FC = () => {
     }
   };
 
-  const handleSaveConfig = async () => {
-    setSavingConfig(true);
-    try {
-      const values = await configForm.validateFields();
-      localStorage.setItem(`zadig_sprint_config_${projectName}`, JSON.stringify(values));
-      feedback.message.success('迭代管理配置已成功保存！');
-      handleCloseConfig();
-    } catch {
-      // Form validation error
-    } finally {
-      setSavingConfig(false);
-    }
-  };
-
   const fetchSprints = useCallback(async () => {
     if (!projectName) return;
     setLoading(true);
     try {
-      const res = await http.get<SprintItem[] | { list: SprintItem[] }>(
-        `/api/aslan/sprint_management/v1/sprint/?projectName=${projectName}`
+      // 注意：无尾斜杠；后端 gin 路由注册为 sprint.GET("")
+      const res = await http.get<SprintItem[]>(
+        `/api/aslan/sprint_management/v1/sprint?projectName=${projectName}`
       );
-      const list = Array.isArray(res) ? res : res?.list || [];
-      setSprints(list);
+      setSprints(Array.isArray(res) ? res : []);
     } catch (err: unknown) {
       setSprints([]);
       const msg = err instanceof Error ? err.message : '获取迭代列表失败';
@@ -118,31 +105,39 @@ export const SprintsPage: React.FC = () => {
     }
   }, [projectName]);
 
+  const loadTemplates = useCallback(async () => {
+    if (!projectName) return;
+    try {
+      const res = await http.get<SprintTemplateItem[]>(
+        `/api/aslan/sprint_management/v1/sprint_template?projectName=${projectName}`,
+        { skipErrorHandler: true }
+      );
+      setTemplates(Array.isArray(res) ? res : []);
+    } catch {
+      setTemplates([]);
+    }
+  }, [projectName]);
+
   useEffect(() => {
     fetchSprints();
-  }, [fetchSprints]);
+    loadTemplates();
+  }, [fetchSprints, loadTemplates]);
 
+  // 创建：POST /sprint?projectName=&templateID=&name=（后端从模板实例化迭代）
   const handleCreateOrUpdate = async () => {
     try {
       const values = await form.validateFields();
-      const payload = {
-        name: values.name,
-        description: values.description,
-        start_date: values.dateRange ? values.dateRange[0].format('YYYY-MM-DD') : undefined,
-        end_date: values.dateRange ? values.dateRange[1].format('YYYY-MM-DD') : undefined,
-        status: values.status || 'planning',
-      };
-
       if (editingSprint) {
+        // 后端仅支持改名：PUT /sprint/:id/name?projectName=&name=
         await http.put(
-          `/api/aslan/sprint_management/v1/sprint/${editingSprint.id}?projectName=${projectName}`,
-          payload
+          `/api/aslan/sprint_management/v1/sprint/${editingSprint.id}/name?projectName=${projectName}&name=${encodeURIComponent(values.name)}`,
+          {}
         );
-        feedback.message.success('迭代更新成功');
+        feedback.message.success('迭代名称更新成功');
       } else {
         await http.post(
-          `/api/aslan/sprint_management/v1/sprint/?projectName=${projectName}`,
-          payload
+          `/api/aslan/sprint_management/v1/sprint?projectName=${projectName}&templateID=${values.template_id}&name=${encodeURIComponent(values.name)}`,
+          {}
         );
         feedback.message.success('新建迭代成功');
       }
@@ -169,31 +164,37 @@ export const SprintsPage: React.FC = () => {
     }
   };
 
+  const handleArchiveToggle = async (record: SprintItem) => {
+    try {
+      if (record.is_archived) {
+        await http.put(
+          `/api/aslan/sprint_management/v1/sprint/${record.id}/activate?projectName=${projectName}`,
+          {}
+        );
+        feedback.message.success(`迭代 [${record.name}] 已激活`);
+      } else {
+        await http.put(
+          `/api/aslan/sprint_management/v1/sprint/${record.id}/archive?projectName=${projectName}`,
+          {}
+        );
+        feedback.message.success(`迭代 [${record.name}] 已归档`);
+      }
+      fetchSprints();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '操作失败';
+      feedback.message.error(msg);
+    }
+  };
+
   const handleOpenEdit = (record: SprintItem) => {
     setEditingSprint(record);
-    form.setFieldsValue({
-      name: record.name,
-      description: record.description,
-      status: record.status,
-      dateRange:
-        record.start_date && record.end_date
-          ? [dayjs(record.start_date), dayjs(record.end_date)]
-          : undefined,
-    });
+    form.setFieldsValue({ name: record.name });
     setModalVisible(true);
   };
 
-  const filteredSprints = sprints.filter((s) => {
-    const matchesSearch =
-      s.name.toLowerCase().includes(searchText.toLowerCase()) ||
-      (s.description && s.description.toLowerCase().includes(searchText.toLowerCase()));
-    const matchesStatus = statusFilter === 'all' || s.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  const activeCount = sprints.filter((s) => s.status === 'active').length;
-  const planningCount = sprints.filter((s) => s.status === 'planning').length;
-  const completedCount = sprints.filter((s) => s.status === 'completed').length;
+  const filteredSprints = sprints.filter((s) =>
+    s.name.toLowerCase().includes(searchText.toLowerCase())
+  );
 
   const columns: ColumnsType<SprintItem> = [
     {
@@ -207,91 +208,36 @@ export const SprintsPage: React.FC = () => {
             <Text strong style={{ fontSize: 14 }}>
               {text}
             </Text>
+            {record.key && <Text code style={{ fontSize: 12 }}>{record.key}</Text>}
           </Space>
-          {record.description && (
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {record.description}
-            </Text>
-          )}
+          {record.is_archived && <Tag color="default">已归档</Tag>}
         </Space>
       ),
     },
     {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 120,
-      render: (status: SprintItem['status']) => {
-        if (status === 'active') {
-          return (
-            <Tag color="processing" icon={<PlayCircleOutlined />}>
-              进行中
-            </Tag>
-          );
-        }
-        if (status === 'completed') {
-          return (
-            <Tag color="success" icon={<CheckCircleOutlined />}>
-              已完成
-            </Tag>
-          );
-        }
-        return (
-          <Tag color="default" icon={<ClockCircleOutlined />}>
-            规划中
-          </Tag>
-        );
-      },
+      title: '阶段数',
+      key: 'stages',
+      width: 100,
+      render: (_, record) => <Text type="secondary">{record.stages?.length ?? 0}</Text>,
     },
+    { title: '模板', dataIndex: 'template_id', key: 'template_id', render: (t) => <Text type="secondary">{String(t || '-')}</Text> },
     {
-      title: '周期时间',
-      key: 'dateRange',
-      width: 220,
-      render: (_, record) => (
-        <Text style={{ fontSize: 13 }}>
-          {record.start_date || '未设置'} ~ {record.end_date || '未设置'}
-        </Text>
-      ),
-    },
-    {
-      title: '工作项进度',
-      key: 'progress',
-      width: 200,
-      render: (_, record) => {
-        const total = record.total_work_items || 0;
-        const done = record.completed_work_items || 0;
-        const percent = total > 0 ? Math.round((done / total) * 100) : 0;
-        return (
-          <div style={{ width: 160 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {done} / {total} 项
-              </Text>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {percent}%
-              </Text>
-            </div>
-            <Progress
-              percent={percent}
-              size="small"
-              status={record.status === 'completed' ? 'success' : 'active'}
-              showInfo={false}
-            />
-          </div>
-        );
-      },
-    },
-    {
-      title: '负责人 / 创建人',
-      dataIndex: 'created_by',
+      title: '创建人',
       key: 'created_by',
       width: 130,
-      render: (val) => <Tag>{val || 'admin'}</Tag>,
+      render: (_, record) => <Tag>{record.created_by?.name || record.created_by?.account || 'admin'}</Tag>,
+    },
+    {
+      title: '更新时间',
+      dataIndex: 'update_time',
+      key: 'update_time',
+      width: 170,
+      render: (t) => (t ? new Date(t * 1000).toLocaleString() : '-'),
     },
     {
       title: '操作',
       key: 'actions',
-      width: 160,
+      width: 200,
       render: (_, record) => (
         <Space size="middle">
           <Button
@@ -300,11 +246,13 @@ export const SprintsPage: React.FC = () => {
             icon={<EditOutlined />}
             onClick={() => handleOpenEdit(record)}
           >
-            编辑
+            改名
+          </Button>
+          <Button type="link" size="small" onClick={() => handleArchiveToggle(record)}>
+            {record.is_archived ? '激活' : '归档'}
           </Button>
           <Popconfirm
             title="确认删除该迭代？"
-            description="删除迭代后关联的工作项将回到未规划状态。"
             onConfirm={() => handleDelete(record.id)}
             okText="删除"
             cancelText="取消"
@@ -321,7 +269,7 @@ export const SprintsPage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Metric KPI Cards */}
+      {/* Metric KPI Card */}
       <Row gutter={16}>
         <Col span={6}>
           <Card variant="borderless" styles={{ body: { padding: '16px 20px' } }}>
@@ -329,37 +277,6 @@ export const SprintsPage: React.FC = () => {
               title="全部迭代"
               value={sprints.length}
               prefix={<ScheduleOutlined style={{ color: '#0066ff' }} />}
-              styles={{ content: { fontSize: 24, fontWeight: 600 } }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card variant="borderless" styles={{ body: { padding: '16px 20px' } }}>
-            <Statistic
-              title="进行中迭代"
-              value={activeCount}
-              prefix={<PlayCircleOutlined style={{ color: '#52c41a' }} />}
-              styles={{ content: { fontSize: 24, fontWeight: 600, color: '#52c41a' } }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card variant="borderless" styles={{ body: { padding: '16px 20px' } }}>
-            <Statistic
-              title="规划中迭代"
-              value={planningCount}
-              prefix={<ClockCircleOutlined style={{ color: '#faad14' }} />}
-              styles={{ content: { fontSize: 24, fontWeight: 600, color: '#faad14' } }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card variant="borderless" styles={{ body: { padding: '16px 20px' } }}>
-            <Statistic
-              title="已完成交付"
-              value={completedCount}
-              prefix={<CheckCircleOutlined style={{ color: '#8c8c8c' }} />}
-              styles={{ content: { fontSize: 24, fontWeight: 600 } }}
             />
           </Card>
         </Col>
@@ -377,46 +294,14 @@ export const SprintsPage: React.FC = () => {
             gap: 12,
           }}
         >
-          <Space size="middle">
-            <Input
-              placeholder="搜索迭代名称或目标..."
-              prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              style={{ width: 260 }}
-              allowClear
-            />
-            <Space size={4}>
-              <Button
-                type={statusFilter === 'all' ? 'primary' : 'default'}
-                size="middle"
-                onClick={() => setStatusFilter('all')}
-              >
-                全部 ({sprints.length})
-              </Button>
-              <Button
-                type={statusFilter === 'active' ? 'primary' : 'default'}
-                size="middle"
-                onClick={() => setStatusFilter('active')}
-              >
-                进行中 ({activeCount})
-              </Button>
-              <Button
-                type={statusFilter === 'planning' ? 'primary' : 'default'}
-                size="middle"
-                onClick={() => setStatusFilter('planning')}
-              >
-                规划中 ({planningCount})
-              </Button>
-              <Button
-                type={statusFilter === 'completed' ? 'primary' : 'default'}
-                size="middle"
-                onClick={() => setStatusFilter('completed')}
-              >
-                已完成 ({completedCount})
-              </Button>
-            </Space>
-          </Space>
+          <Input
+            placeholder="搜索迭代名称..."
+            prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            style={{ width: 260 }}
+            allowClear
+          />
 
           <Space size="middle">
             <Button
@@ -453,36 +338,45 @@ export const SprintsPage: React.FC = () => {
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description="暂无迭代记录，可点击右上角「新建迭代」规划产品冲刺"
-              >
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={() => {
-                    setEditingSprint(null);
-                    form.resetFields();
-                    setModalVisible(true);
-                  }}
-                >
-                  新建迭代
-                </Button>
-              </Empty>
+              />
             ),
           }}
         />
       </Card>
 
-      {/* Create / Edit Sprint Modal */}
+      {/* Create / Rename Sprint Modal */}
       <Modal
-        title={editingSprint ? '编辑迭代' : '新建项目交付迭代'}
+        title={editingSprint ? '迭代改名' : '新建项目交付迭代'}
         open={modalVisible}
         onOk={handleCreateOrUpdate}
         onCancel={() => {
           setModalVisible(false);
           setEditingSprint(null);
         }}
-        width={560}
+        width={520}
       >
-        <Form form={form} layout="vertical" initialValues={{ status: 'planning' }} style={{ marginTop: 16 }}>
+        <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+          {editingSprint ? (
+            <Alert
+              title="后端当前仅支持修改迭代名称；周期与阶段请在创建时通过模板确定"
+              type="info"
+              showIcon
+              style={{ marginBottom: 16, borderRadius: 6 }}
+            />
+          ) : (
+            <Form.Item
+              name="template_id"
+              label="迭代模板"
+              rules={[{ required: true, message: '请选择迭代模板' }]}
+              extra="迭代阶段将按所选模板实例化"
+            >
+              <Select
+                placeholder="请选择迭代模板"
+                options={templates.map((t) => ({ label: t.name, value: t.id }))}
+                notFoundContent="暂无迭代模板"
+              />
+            </Form.Item>
+          )}
           <Form.Item
             name="name"
             label="迭代名称"
@@ -490,27 +384,15 @@ export const SprintsPage: React.FC = () => {
           >
             <Input placeholder="例如：Sprint-2409 核心功能交付" />
           </Form.Item>
-
-          <Form.Item
-            name="dateRange"
-            label="迭代起止周期"
-            rules={[{ required: true, message: '请选择迭代起止周期' }]}
-          >
-            <RangePicker style={{ width: '100%' }} />
-          </Form.Item>
-
-          <Form.Item name="description" label="迭代交付目标 / 描述">
-            <TextArea rows={3} placeholder="简述本次迭代的交付目标、范围和里程碑" />
-          </Form.Item>
         </Form>
       </Modal>
 
-      {/* Sprint Configuration Drawer (对齐 /sprints/config 路由) */}
+      {/* Sprint Configuration Drawer (对齐 /sprints/config 路由；展示迭代模板列表) */}
       <Drawer
         title={
           <Space>
             <SettingOutlined style={{ color: '#0066ff' }} />
-            <span>迭代敏捷协同配置 ({projectName})</span>
+            <span>迭代模板配置 ({projectName})</span>
           </Space>
         }
         placement="right"
@@ -518,66 +400,18 @@ export const SprintsPage: React.FC = () => {
         onClose={handleCloseConfig}
         size="large"
       >
-        <Form
-          form={configForm}
-          layout="vertical"
-          initialValues={{
-            cycle: 'biweekly',
-            tracker: 'internal',
-            autoArchive: true,
-            syncStatus: true,
-          }}
-        >
-          <Form.Item name="cycle" label="标准迭代周期">
-            <Select
-              options={[
-                { label: '单周冲刺 (1 周)', value: 'weekly' },
-                { label: '双周冲刺 (2 周 - 推荐)', value: 'biweekly' },
-                { label: '月度大版本 (4 周)', value: 'monthly' },
-              ]}
-            />
-          </Form.Item>
-
-          <Form.Item name="tracker" label="关联需求 / 缺陷追踪源">
-            <Select
-              options={[
-                { label: '内置敏捷看板 (Native Board)', value: 'internal' },
-                { label: 'Jira 敏捷项目管理', value: 'jira' },
-                { label: 'TAPD 敏捷协同', value: 'tapd' },
-                { label: '飞书项目 / 敏捷空间', value: 'lark' },
-              ]}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="autoArchive"
-            label="迭代到期后自动流转并归档"
-            valuePropName="checked"
-            extra="当迭代到达截止时间且所有需求已交付上线时，自动将状态切换为「已完成」并归档。"
-          >
-            <Switch />
-          </Form.Item>
-
-          <Form.Item
-            name="syncStatus"
-            label="双向同步工作流交付产物与版本状态"
-            valuePropName="checked"
-            extra="将工作流构建成功的镜像、部署的环境服务与版本 Tag 自动关联到当前迭代卡片。"
-          >
-            <Switch />
-          </Form.Item>
-
-          <div style={{ marginTop: 24 }}>
-            <Button
-              type="primary"
-              icon={<SaveOutlined />}
-              loading={savingConfig}
-              onClick={handleSaveConfig}
-            >
-              保存迭代配置
-            </Button>
-          </div>
-        </Form>
+        <Table
+          dataSource={templates}
+          rowKey="id"
+          pagination={false}
+          size="small"
+          columns={[
+            { title: '模板名称', dataIndex: 'name', key: 'name', render: (n) => <Text strong>{String(n)}</Text> },
+            { title: '标识', dataIndex: 'key', key: 'key', render: (k) => <Text code>{String(k || '-')}</Text> },
+            { title: '阶段数', key: 'stages', render: (_, r) => <Text type="secondary">{r.stages?.length ?? 0}</Text> },
+          ]}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无迭代模板" /> }}
+        />
       </Drawer>
     </div>
   );

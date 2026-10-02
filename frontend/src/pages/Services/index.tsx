@@ -109,12 +109,15 @@ export const ServicesPage: React.FC = () => {
   const handleSaveYaml = async () => {
     if (!selectedService || !activeProject) return;
     try {
+      // 后端更新端点为 PUT /services（无 /:name），service_name 在 body 中
+      // 后端更新端点为 PUT /services（无 /:name），字段按 models.Product json tag
       await http.put(
-        `/api/aslan/service/services/${selectedService}?production=${isProduction}`,
+        `/api/aslan/service/services?production=${isProduction}`,
         {
           service_name: selectedService,
+          product_name: activeProject,
+          type: 'k8s',
           yaml: yamlContent,
-          projectName: activeProject,
         }
       );
       setOriginalYaml(yamlContent);

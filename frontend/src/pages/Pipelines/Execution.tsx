@@ -124,7 +124,7 @@ export const PipelineExecutionPage: React.FC = () => {
 
   const sseStreamUrl = useMemo(() => {
     if (!workflowName || !taskId || !selectedJob) return undefined;
-    return `/api/aslan/logs/sse/v4/workflow/${encodeURIComponent(workflowName)}/${taskId}/${encodeURIComponent(selectedJob)}/1000`;
+    return `/api/logs/sse/v4/workflow/${encodeURIComponent(workflowName)}/${taskId}/${encodeURIComponent(selectedJob)}/1000`;
   }, [workflowName, taskId, selectedJob]);
 
   // Job 级 K8s 事件查看（对齐旧版执行详情）

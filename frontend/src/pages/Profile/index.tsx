@@ -86,8 +86,8 @@ export const UserProfilePage: React.FC = () => {
 
       setUpdatingPassword(true);
       await http.put(`/api/v1/users/${userInfo.uid}/password`, {
-        old_password: values.old_password,
-        new_password: values.new_password,
+        oldPassword: values.old_password,
+        newPassword: values.new_password,
       });
       feedback.message.success('密码修改成功，请牢记您的新密码！');
       passwordForm.resetFields();

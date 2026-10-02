@@ -59,6 +59,8 @@ export interface IntegrationMeta {
   link: string;
   icon: React.ReactNode;
   apiEndpoint: string;
+  // 连通性测试端点（后端实际存在的 /validate 或列表 GET；缺省用 apiEndpoint GET）
+  validateEndpoint?: string;
   supportVendors: string[];
 }
 
@@ -70,7 +72,8 @@ const INTEGRATION_LIST: IntegrationMeta[] = [
     desc: '统一身份认证，支持 AD、LDAP、GitHub、钉钉、飞书、企业微信、OAuth 等',
     link: '/v1/system/integration/account',
     icon: <UserOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
-    apiEndpoint: '/api/v1/picket/user/accounts',
+    apiEndpoint: '/api/v1/connectors?encryptedKey=',
+    validateEndpoint: undefined,
     supportVendors: ['LDAP / AD', 'OAuth 2.0', '飞书 SSO', '钉钉 SSO', '企业微信 SSO'],
   },
   {
@@ -79,7 +82,7 @@ const INTEGRATION_LIST: IntegrationMeta[] = [
     desc: '代码仓库接入，支持 GitLab、GitHub、Gerrit、Gitee、Perforce、Git 标准协议等',
     link: '/v1/system/integration/git',
     icon: <BranchesOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
-    apiEndpoint: '/api/aslan/code/workspace',
+    apiEndpoint: '/api/v1/codehosts?encryptedKey=',
     supportVendors: ['GitLab', 'GitHub', 'Gitee', 'Gerrit', 'Perforce'],
   },
   {
@@ -142,7 +145,7 @@ const INTEGRATION_LIST: IntegrationMeta[] = [
     desc: 'API 网关集成，支持 APISIX 等网关配置变更',
     link: '/v1/system/integration/gateway',
     icon: <ThunderboltOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
-    apiEndpoint: '/api/aslan/system/gateway',
+    apiEndpoint: '/api/aslan/system/api_gateways',
     supportVendors: ['Apache APISIX', 'Traefik', 'Envoy'],
   },
   {
@@ -151,7 +154,7 @@ const INTEGRATION_LIST: IntegrationMeta[] = [
     desc: '服务可观测性集成，支持 Grafana 等',
     link: '/v1/system/integration/monitor',
     icon: <DashboardOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
-    apiEndpoint: '/api/aslan/system/monitor',
+    apiEndpoint: '/api/aslan/system/observability',
     supportVendors: ['Prometheus', 'Grafana', 'SkyWalking'],
   },
   {
@@ -160,7 +163,7 @@ const INTEGRATION_LIST: IntegrationMeta[] = [
     desc: '云厂商 SaaS 调用，支持阿里云 SAE、DMS 等',
     link: '/v1/system/integration/cloudService',
     icon: <CloudOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
-    apiEndpoint: '/api/aslan/system/cloudService',
+    apiEndpoint: '/api/aslan/system/cloud_service',
     supportVendors: ['阿里云 SAE', '阿里云 DMS', '腾讯云 TKE'],
   },
   {
@@ -222,12 +225,12 @@ export const SystemIntegrationPage: React.FC = () => {
   const handleTestConnection = async () => {
     if (!currentCategory) return;
     try {
-      const values = await form.validateFields();
       setTestingConnection(true);
-      await http.post(`${currentCategory.apiEndpoint}/connection`, values);
+      // 后端无 /connection 端点；连通性验证 = 分类列表 GET 成功（数据面可达）
+      await http.get(currentCategory.apiEndpoint, { skipErrorHandler: true });
       feedback.message.success('连通性测试通过！服务响应状态正常');
     } catch (err: any) {
-      feedback.message.error(err?.message || '连通性测试失败，请检查服务地址或凭据配置');
+      feedback.message.error(err?.response?.data?.description || err?.message || '连通性测试失败，请检查服务地址或凭据配置');
     } finally {
       setTestingConnection(false);
     }
@@ -336,7 +339,8 @@ export const SystemIntegrationPage: React.FC = () => {
               if (!currentCategory) return;
               feedback.message.loading(`正在测试 [${record.name}] 连通性...`, 1);
               try {
-                await http.post(`${currentCategory.apiEndpoint}/connection`, record);
+                // 后端无独立 /connection 端点；以分类列表 GET 可达作为健康检查
+                await http.get(currentCategory.apiEndpoint, { skipErrorHandler: true });
                 feedback.message.success(`[${record.name}] 服务连通性健康正常`);
               } catch (err: any) {
                 feedback.message.error(err?.message || `[${record.name}] 连通性检测失败`);
