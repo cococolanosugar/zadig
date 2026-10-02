@@ -77,6 +77,35 @@ export const QualityCenterPage: React.FC = () => {
     }
   }, [projectName, buildRange]);
 
+  // 部署与回滚质量（stat/v2/quality/deploy|rollback，GET 查询形式）
+  const [deployHealth, setDeployHealth] = useState<{ success: number; failure: number }>({ success: 0, failure: 0 });
+  const [topDeployed, setTopDeployed] = useState<Array<{ service_name: string; env_name: string; count: number; success: number; failed: number }>>([]);
+  const [rollbackTotal, setRollbackTotal] = useState<number>(0);
+
+  const fetchDeployRollbackQuality = useCallback(async () => {
+    const end = Math.floor(Date.now() / 1000);
+    const start = end - (buildRange === '7d' ? 7 : buildRange === '30d' ? 30 : 90) * 86400;
+    const rangeQ = `startDate=${start}&endDate=${end}`;
+    try {
+      const [healthRes, topRes, rbRes] = await Promise.allSettled([
+        http.get<{ success: number; failure: number }>(
+          `/api/aslan/stat/v2/quality/deploy/health?${rangeQ}`, { skipErrorHandler: true }
+        ),
+        http.get<Array<{ service_name: string; env_name: string; count: number; success: number; failed: number }>>(
+          `/api/aslan/stat/v2/quality/deploy/service/top?${rangeQ}&top=5`, { skipErrorHandler: true }
+        ),
+        http.get<{ total: number }>(`/api/aslan/stat/v2/quality/rollback/total?${rangeQ}`, { skipErrorHandler: true }),
+      ]);
+      setDeployHealth(healthRes.status === 'fulfilled' && healthRes.value ? healthRes.value : { success: 0, failure: 0 });
+      setTopDeployed(topRes.status === 'fulfilled' && Array.isArray(topRes.value) ? topRes.value : []);
+      setRollbackTotal(rbRes.status === 'fulfilled' && rbRes.value ? Number(rbRes.value.total) || 0 : 0);
+    } catch {
+      setDeployHealth({ success: 0, failure: 0 });
+      setTopDeployed([]);
+      setRollbackTotal(0);
+    }
+  }, [buildRange]);
+
   // 测试详情抽屉（配置 + 任务历史）
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -139,7 +168,8 @@ export const QualityCenterPage: React.FC = () => {
 
   useEffect(() => {
     fetchBuildQuality();
-  }, [fetchBuildQuality]);
+    fetchDeployRollbackQuality();
+  }, [fetchBuildQuality, fetchDeployRollbackQuality]);
 
   useEffect(() => {
     if (routeTestName && tests.length > 0) {
@@ -363,6 +393,44 @@ export const QualityCenterPage: React.FC = () => {
         ) : (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无构建记录" />
         )}
+      </Card>
+
+      {/* Deploy & Rollback Quality (stat/v2/quality/deploy|rollback) */}
+      <Card
+        variant="borderless"
+        style={{ borderRadius: 8, border: '1px solid #ebeef5', marginBottom: 20 }}
+        title="部署与回滚质量"
+        extra={
+          <Button size="small" icon={<ReloadOutlined />} onClick={fetchDeployRollbackQuality}>
+            刷新
+          </Button>
+        }
+      >
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+          <Col xs={24} sm={8}>
+            <Statistic title="部署成功次数" value={deployHealth.success} valueStyle={{ color: '#52c41a' }} />
+          </Col>
+          <Col xs={24} sm={8}>
+            <Statistic title="部署失败次数" value={deployHealth.failure} valueStyle={{ color: '#ff4d4f' }} />
+          </Col>
+          <Col xs={24} sm={8}>
+            <Statistic title="回滚总次数" value={rollbackTotal} />
+          </Col>
+        </Row>
+        <Table
+          dataSource={topDeployed}
+          rowKey={(r) => `${r.service_name}-${r.env_name}`}
+          pagination={false}
+          size="small"
+          columns={[
+            { title: '服务', dataIndex: 'service_name', key: 'service_name', render: (n) => <Text strong>{String(n)}</Text> },
+            { title: '环境', dataIndex: 'env_name', key: 'env_name', render: (e) => <Tag color="geekblue">{String(e || '-')}</Tag> },
+            { title: '部署次数', dataIndex: 'count', key: 'count', render: (c) => <Tag color="blue">{String(c ?? 0)}</Tag> },
+            { title: '成功', dataIndex: 'success', key: 'success', render: (s) => <Text type="secondary">{String(s ?? 0)}</Text> },
+            { title: '失败', dataIndex: 'failed', key: 'failed', render: (f) => <Text type="secondary">{String(f ?? 0)}</Text> },
+          ]}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该时间范围暂无部署记录" /> }}
+        />
       </Card>
 
       {/* Main Table */}
