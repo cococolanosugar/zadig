@@ -114,7 +114,7 @@ export const UserProfilePage: React.FC = () => {
   // MFA 管理（对齐旧版安全设置；后端: /api/v1/users/:uid/mfa/*）
   const [mfaEnabled, setMfaEnabled] = useState<boolean | null>(null);
   const [mfaLoading, setMfaLoading] = useState(false);
-  const [mfaSetupData, setMfaSetupData] = useState<{ qrcode?: string; secret?: string } | null>(null);
+  const [mfaSetupData, setMfaSetupData] = useState<{ qrcode?: string; secret?: string; mfa_challenge_token?: string } | null>(null);
   const [mfaOtp, setMfaOtp] = useState('');
   const [mfaSubmitting, setMfaSubmitting] = useState(false);
   const [mfaRecoveryCodes, setMfaRecoveryCodes] = useState<string[]>([]);
@@ -145,7 +145,7 @@ export const UserProfilePage: React.FC = () => {
     if (!userInfo?.uid) return;
     setMfaLoading(true);
     try {
-      const res = await http.post<{ qrcode?: string; secret?: string }>(
+      const res = await http.post<{ qrcode?: string; secret?: string; mfa_challenge_token?: string }>(
         `/api/v1/users/${userInfo.uid}/mfa/setup`,
         {},
         { skipErrorHandler: true }
@@ -168,7 +168,10 @@ export const UserProfilePage: React.FC = () => {
     try {
       const res = await http.post<{ recovery_codes?: string[] }>(
         `/api/v1/users/${userInfo.uid}/mfa/enable`,
-        { otp_code: mfaOtp.trim() },
+        {
+          mfa_challenge_token: mfaSetupData?.mfa_challenge_token,
+          otp_code: mfaOtp.trim(),
+        },
         { skipErrorHandler: true }
       );
       feedback.message.success('MFA 已启用');
@@ -191,10 +194,12 @@ export const UserProfilePage: React.FC = () => {
       return;
     }
     setMfaSubmitting(true);
+    const code = mfaOtp.trim();
+    const payload = /^\d{6}$/.test(code) ? { otp_code: code } : { recovery_code: code };
     try {
       await http.post(
         `/api/v1/users/${userInfo.uid}/mfa/disable`,
-        { otp_code: mfaOtp.trim() },
+        payload,
         { skipErrorHandler: true }
       );
       feedback.message.success('MFA 已关闭');

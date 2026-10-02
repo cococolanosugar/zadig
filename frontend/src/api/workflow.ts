@@ -382,16 +382,19 @@ export const workflowApi = {
 
   /**
    * Job-level K8s events of a workflow task.
-   * GET /api/aslan/workflow/v4/taskV4/workflow/:workflowName/task/:taskID/job/:jobName/events
+   * GET /api/aslan/workflow/v4/workflowtask/workflow/:workflowName/task/:taskID/job/:jobName/events?projectName=
+   * Aligned with zadig-ee-portal getCustomWorkflowTaskJobEventsAPI
    */
   async getJobEvents(
     workflowName: string,
     taskId: number | string,
-    jobName: string
+    jobName: string,
+    projectName?: string
   ): Promise<Array<{ event_type: string; time: string; message: string }>> {
+    const query = projectName ? `?projectName=${encodeURIComponent(projectName)}` : '';
     try {
       const res = await http.get<Array<{ event_type: string; time: string; message: string }>>(
-        `/api/aslan/workflow/v4/taskV4/workflow/${encodeURIComponent(workflowName)}/task/${taskId}/job/${encodeURIComponent(jobName)}/events`,
+        `/api/aslan/workflow/v4/workflowtask/workflow/${encodeURIComponent(workflowName)}/task/${taskId}/job/${encodeURIComponent(jobName)}/events${query}`,
         { skipErrorHandler: true }
       );
       return Array.isArray(res) ? res : [];

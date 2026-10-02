@@ -138,12 +138,12 @@ export const PipelineExecutionPage: React.FC = () => {
     setEventsLoading(true);
     setJobEvents([]);
     try {
-      const list = await workflowApi.getJobEvents(workflowName, taskId, selectedJob);
+      const list = await workflowApi.getJobEvents(workflowName, taskId, selectedJob, activeProject);
       setJobEvents(list);
     } finally {
       setEventsLoading(false);
     }
-  }, [workflowName, taskId, selectedJob]);
+  }, [workflowName, taskId, selectedJob, activeProject]);
 
   useEffect(() => {
     loadTask();
