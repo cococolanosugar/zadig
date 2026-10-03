@@ -14,6 +14,7 @@ import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { workflowApi, type WorkflowParam } from '../../api/workflow';
 import { feedback } from '../../utils/feedback';
 import { useNavigate } from 'react-router-dom';
+import ChunkUploader, { type ChunkUploaderValue } from '../common/ChunkUploader';
 
 const { Text } = Typography;
 
@@ -128,10 +129,21 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
     setLoading(true);
     try {
       const values = await form.validateFields();
-      const updatedParams = params.map((p) => ({
-        ...p,
-        value: values[p.name] ?? p.value ?? '',
-      }));
+      const updatedParams = params.map((p) => {
+        const val = values[p.name] ?? p.value ?? '';
+        if (p.type === 'file' && typeof val === 'object' && val !== null) {
+          const fileVal = val as ChunkUploaderValue;
+          return {
+            ...p,
+            value: fileVal.file_name,
+            file_id: fileVal.file_id,
+          };
+        }
+        return {
+          ...p,
+          value: val,
+        };
+      });
       const res = await workflowApi.triggerWorkflow({
         ...(preset as Record<string, unknown>),
         project: projectName,
@@ -194,6 +206,12 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
       }
       case 'text':
         return <Input.TextArea rows={2} placeholder={p.description || '请输入'} />;
+      case 'file':
+        return (
+          <ChunkUploader
+            extraPrompt={`为参数 ${p.name} 上传大文件（最大 500MB），用于任务容器挂载`}
+          />
+        );
       default:
         return <Input placeholder={p.description || '请输入'} />;
     }
