@@ -149,11 +149,12 @@ export const QualityCenterPage: React.FC = () => {
       // 保留列表数据
     }
     try {
-      const res = await http.get<Array<Record<string, unknown>>>(
+      // 后端 ListTestTask 返回 {total, tasks:[TaskPreview]}（TestTaskList）
+      const res = await http.get<{ total?: number; tasks?: Array<Record<string, unknown>> }>(
         `/api/aslan/testing/testtask?projectName=${encodeURIComponent(test.product_name || '')}&testName=${encodeURIComponent(test.name)}&pageSize=10&pageNum=1`,
         { skipErrorHandler: true }
       );
-      setTestTasks(Array.isArray(res) ? res : []);
+      setTestTasks(Array.isArray(res?.tasks) ? res.tasks : []);
     } catch {
       setTestTasks([]);
     } finally {
