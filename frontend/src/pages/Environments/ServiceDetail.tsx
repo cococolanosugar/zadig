@@ -13,6 +13,7 @@ import {
   DownloadOutlined,
   CopyOutlined,
   HistoryOutlined,
+  DiffOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import http from '../../api/client';
@@ -21,6 +22,7 @@ import LogViewer from '../../components/Terminal/LogViewer';
 import PodTerminal from '../../components/Terminal/PodTerminal';
 import YamlEditor from '../../components/Editor/YamlEditor';
 import EnvServiceHistoryDrawer from './EnvServiceHistoryDrawer';
+import ServiceDiffModal from './ServiceDiffModal';
 import { feedback } from '../../utils/feedback';
 
 const { Title, Text } = Typography;
@@ -126,6 +128,7 @@ export const ServiceDetailPage: React.FC = () => {
   const [podDetailLoading, setPodDetailLoading] = useState(false);
   const [podEvents, setPodEvents] = useState<Array<{ type?: string; reason?: string; message?: string; last_timestamp?: string }>>([]);
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
+  const [diffModalOpen, setDiffModalOpen] = useState(false);
 
   // 当前环境是否生产环境（环境详情 ProductResp.is_prod）；pods/保存/导出按真实标志透传 production
   // 深链 /envs/detail/:service_name/production 时强制生产语境
@@ -456,6 +459,9 @@ export const ServiceDetailPage: React.FC = () => {
           <Button icon={<HistoryOutlined />} onClick={() => setHistoryDrawerOpen(true)}>
             版本历史
           </Button>
+          <Button icon={<DiffOutlined />} onClick={() => setDiffModalOpen(true)}>
+            服务差异
+          </Button>
           <Button icon={<ReloadOutlined />} onClick={() => { fetchPods(); fetchYaml(); fetchLiveYaml(); }}>
             刷新
           </Button>
@@ -702,6 +708,15 @@ export const ServiceDetailPage: React.FC = () => {
           fetchYaml();
           fetchLiveYaml();
         }}
+      />
+      {/* 服务模板差异对比弹窗 */}
+      <ServiceDiffModal
+        open={diffModalOpen}
+        onClose={() => setDiffModalOpen(false)}
+        projectName={projectName || ''}
+        envName={envName || ''}
+        serviceName={serviceName || ''}
+        production={envProduction}
       />
     </div>
   );
