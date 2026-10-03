@@ -38,6 +38,7 @@ import BuildsPage from '../pages/Projects/Builds';
 import ScannersPage from '../pages/Projects/Scanners';
 import ProjectWizardPage from '../pages/Projects/Wizard';
 import VarsGroupPage from '../pages/Projects/VarsGroup';
+import ProjectHostsPage from '../pages/Projects/Hosts';
 import SystemIntegrationPage from '../pages/Settings/Integration';
 import InstallationSignUpPage from '../pages/Installation/SignUp';
 import InstallationVersionPage from '../pages/Installation/Version';
@@ -148,6 +149,7 @@ export const AppRouter: React.FC = () => {
             <Route path="group/create" element={<VarsGroupPage />} />
             <Route path="secrets" element={<KeyVaultPage />} />
             <Route path="rbac" element={<ProjectRBACPage />} />
+            <Route path="hosts" element={<ProjectHostsPage />} />
             <Route path="integration" element={<SystemIntegrationPage />} />
             <Route path="integration/:category" element={<SystemIntegrationPage />} />
           </Route>

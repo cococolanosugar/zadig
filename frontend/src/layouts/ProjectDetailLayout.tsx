@@ -19,6 +19,7 @@ import {
   ApiOutlined,
   EditOutlined,
   DownOutlined,
+  HddOutlined,
 } from '@ant-design/icons';
 import { useProjectStore } from '../stores/project';
 
@@ -143,6 +144,13 @@ export const ProjectDetailLayout: React.FC = () => {
         </span>
       ),
     },
+    hosts: {
+      label: (
+        <span>
+          <HddOutlined /> 主机管理
+        </span>
+      ),
+    },
   };
 
   const isConfigTab = Object.keys(configTabs).includes(currentTab);
@@ -167,6 +175,12 @@ export const ProjectDetailLayout: React.FC = () => {
       icon: <KeyOutlined />,
       label: '共享变量',
       onClick: () => navigate(`/v1/projects/detail/${projectName}/secrets`),
+    },
+    {
+      key: 'hosts',
+      icon: <HddOutlined />,
+      label: '主机管理',
+      onClick: () => navigate(`/v1/projects/detail/${projectName}/hosts`),
     },
     {
       key: 'rbac',
