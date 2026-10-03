@@ -491,6 +491,79 @@ export const workflowApi = {
       onError,
     });
   },
+
+  /**
+   * List custom workflow view names for a project.
+   * GET /api/aslan/workflow/view?projectName=
+   */
+  async getWorkflowViews(projectName: string): Promise<string[]> {
+    return http.get<string[]>(`/api/aslan/workflow/view`, {
+      params: { projectName },
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * Get workflow view preset (including all project workflows with enabled states).
+   * GET /api/aslan/workflow/view/preset?projectName=&viewName=
+   */
+  async getWorkflowViewPreset(projectName: string, viewName = ''): Promise<WorkflowViewItem> {
+    return http.get<WorkflowViewItem>(`/api/aslan/workflow/view/preset`, {
+      params: { projectName, viewName },
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * Create a new custom workflow view.
+   * POST /api/aslan/workflow/view
+   */
+  async createWorkflowView(view: {
+    name: string;
+    project_name: string;
+    workflows: WorkflowViewDetail[];
+  }): Promise<void> {
+    return http.post(`/api/aslan/workflow/view`, view);
+  },
+
+  /**
+   * Update an existing custom workflow view.
+   * PUT /api/aslan/workflow/view
+   */
+  async updateWorkflowView(view: {
+    id?: string;
+    name: string;
+    project_name: string;
+    workflows: WorkflowViewDetail[];
+  }): Promise<void> {
+    return http.put(`/api/aslan/workflow/view`, view);
+  },
+
+  /**
+   * Delete a custom workflow view.
+   * DELETE /api/aslan/workflow/view?projectName=&viewName=
+   */
+  async deleteWorkflowView(projectName: string, viewName: string): Promise<void> {
+    return http.delete(`/api/aslan/workflow/view`, {
+      params: { projectName, viewName },
+    });
+  },
 };
+
+export interface WorkflowViewDetail {
+  workflow_name: string;
+  workflow_type: string;
+  workflow_display_name?: string;
+  enabled?: boolean;
+}
+
+export interface WorkflowViewItem {
+  id?: string;
+  name: string;
+  project_name: string;
+  workflows: WorkflowViewDetail[];
+  update_by?: string;
+  update_time?: number;
+}
 
 export default workflowApi;

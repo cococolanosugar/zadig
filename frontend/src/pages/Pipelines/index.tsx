@@ -13,6 +13,7 @@ import {
   Tabs,
   Empty,
   Badge,
+  Checkbox,
 } from 'antd';
 import {
   BranchesOutlined,
@@ -29,7 +30,12 @@ import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/project';
-import { workflowApi, type WorkflowV4Item, type WorkflowTaskPreview } from '../../api/workflow';
+import {
+  workflowApi,
+  type WorkflowV4Item,
+  type WorkflowTaskPreview,
+  type WorkflowViewDetail,
+} from '../../api/workflow';
 import WorkflowCanvas from '../../components/WorkflowDAG/WorkflowCanvas';
 import WorkflowTriggerModal from '../../components/WorkflowDAG/WorkflowTriggerModal';
 import { feedback } from '../../utils/feedback';
@@ -127,6 +133,154 @@ export const PipelinesPage: React.FC = () => {
       setSseConnected(false);
     };
   }, [activeTab]);
+
+  // 自定义视图状态管理（对齐后端 /api/aslan/workflow/view CRUD + preset）
+  const [viewList, setViewList] = useState<string[]>([]);
+  const [selectedView, setSelectedView] = useState<string>('all');
+  const [currentViewWorkflows, setCurrentViewWorkflows] = useState<Set<string> | null>(null);
+
+  const [viewModalVisible, setViewModalVisible] = useState(false);
+  const [viewModalMode, setViewModalMode] = useState<'create' | 'edit'>('create');
+  const [viewFormName, setViewFormName] = useState('');
+  const [viewCurrentId, setViewCurrentId] = useState<string | undefined>(undefined);
+  const [viewAvailableWorkflows, setViewAvailableWorkflows] = useState<WorkflowViewDetail[]>([]);
+  const [viewSelectedWorkflowNames, setViewSelectedWorkflowNames] = useState<string[]>([]);
+  const [viewSubmitting, setViewSubmitting] = useState(false);
+
+  const loadViews = useCallback(async () => {
+    if (!activeProject || isGlobalRoute) {
+      setViewList([]);
+      setSelectedView('all');
+      setCurrentViewWorkflows(null);
+      return;
+    }
+    try {
+      const list = await workflowApi.getWorkflowViews(activeProject);
+      setViewList(list || []);
+      if (selectedView !== 'all' && !list.includes(selectedView)) {
+        setSelectedView('all');
+        setCurrentViewWorkflows(null);
+      }
+    } catch {
+      setViewList([]);
+    }
+  }, [activeProject, isGlobalRoute, selectedView]);
+
+  useEffect(() => {
+    loadViews();
+  }, [loadViews]);
+
+  const handleSelectView = async (v: string) => {
+    setSelectedView(v);
+    if (v === 'all' || !activeProject) {
+      setCurrentViewWorkflows(null);
+      return;
+    }
+    try {
+      const preset = await workflowApi.getWorkflowViewPreset(activeProject, v);
+      const enabledSet = new Set(
+        (preset.workflows || [])
+          .filter((w) => w.enabled)
+          .map((w) => w.workflow_name)
+      );
+      setCurrentViewWorkflows(enabledSet);
+    } catch {
+      feedback.message.error('加载视图工作流失败');
+      setCurrentViewWorkflows(null);
+    }
+  };
+
+  const handleOpenCreateView = async () => {
+    if (!activeProject) return;
+    setViewModalMode('create');
+    setViewFormName('');
+    setViewCurrentId(undefined);
+    setViewSubmitting(false);
+    try {
+      const preset = await workflowApi.getWorkflowViewPreset(activeProject, '');
+      setViewAvailableWorkflows(preset.workflows || []);
+      setViewSelectedWorkflowNames([]);
+      setViewModalVisible(true);
+    } catch (err: unknown) {
+      const msg = (err as Error)?.message || '获取工作流预设失败';
+      feedback.message.error(msg);
+    }
+  };
+
+  const handleOpenEditView = async () => {
+    if (!activeProject || selectedView === 'all') return;
+    setViewModalMode('edit');
+    setViewFormName(selectedView);
+    setViewSubmitting(false);
+    try {
+      const preset = await workflowApi.getWorkflowViewPreset(activeProject, selectedView);
+      setViewCurrentId(preset.id);
+      setViewAvailableWorkflows(preset.workflows || []);
+      const checked = (preset.workflows || []).filter((w) => w.enabled).map((w) => w.workflow_name);
+      setViewSelectedWorkflowNames(checked);
+      setViewModalVisible(true);
+    } catch (err: unknown) {
+      const msg = (err as Error)?.message || '获取视图详情失败';
+      feedback.message.error(msg);
+    }
+  };
+
+  const handleDeleteView = async () => {
+    if (!activeProject || selectedView === 'all') return;
+    try {
+      await workflowApi.deleteWorkflowView(activeProject, selectedView);
+      feedback.message.success(`视图 [${selectedView}] 删除成功`);
+      setSelectedView('all');
+      setCurrentViewWorkflows(null);
+      await loadViews();
+    } catch (err: unknown) {
+      const msg = (err as Error)?.message || '删除视图失败';
+      feedback.message.error(msg);
+    }
+  };
+
+  const handleSaveView = async () => {
+    if (!viewFormName.trim()) {
+      feedback.message.warning('请输入视图名称');
+      return;
+    }
+    if (!activeProject) return;
+
+    setViewSubmitting(true);
+    const workflowsPayload: WorkflowViewDetail[] = viewAvailableWorkflows.map((w) => ({
+      workflow_name: w.workflow_name,
+      workflow_type: w.workflow_type,
+      workflow_display_name: w.workflow_display_name,
+      enabled: viewSelectedWorkflowNames.includes(w.workflow_name),
+    }));
+
+    try {
+      if (viewModalMode === 'create') {
+        await workflowApi.createWorkflowView({
+          name: viewFormName.trim(),
+          project_name: activeProject,
+          workflows: workflowsPayload,
+        });
+        feedback.message.success('创建视图成功');
+      } else {
+        await workflowApi.updateWorkflowView({
+          id: viewCurrentId,
+          name: viewFormName.trim(),
+          project_name: activeProject,
+          workflows: workflowsPayload,
+        });
+        feedback.message.success('更新视图成功');
+      }
+      setViewModalVisible(false);
+      await loadViews();
+      await handleSelectView(viewFormName.trim());
+    } catch (err: unknown) {
+      const msg = (err as Error)?.message || '保存视图失败';
+      feedback.message.error(msg);
+    } finally {
+      setViewSubmitting(false);
+    }
+  };
 
   // Trigger Modal
   const [triggerModalVisible, setTriggerModalVisible] = useState(false);
@@ -450,6 +604,50 @@ export const PipelinesPage: React.FC = () => {
                     />
                   </div>
                 )}
+                {!isGlobalRoute && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 12,
+                      borderBottom: '1px solid #f0f0f0',
+                      paddingBottom: 4,
+                    }}
+                  >
+                    <Tabs
+                      activeKey={selectedView}
+                      onChange={handleSelectView}
+                      style={{ marginBottom: 0, flex: 1 }}
+                      items={[
+                        { key: 'all', label: '全部工作流' },
+                        ...viewList.map((v) => ({ key: v, label: v })),
+                      ]}
+                    />
+                    <Space style={{ marginLeft: 16 }}>
+                      {selectedView !== 'all' && (
+                        <>
+                          <Button size="small" icon={<EditOutlined />} onClick={handleOpenEditView}>
+                            编辑视图
+                          </Button>
+                          <Popconfirm
+                            title={`确定删除自定义视图 [${selectedView}]？`}
+                            onConfirm={handleDeleteView}
+                            okText="删除"
+                            cancelText="取消"
+                          >
+                            <Button size="small" danger icon={<DeleteOutlined />}>
+                              删除视图
+                            </Button>
+                          </Popconfirm>
+                        </>
+                      )}
+                      <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={handleOpenCreateView}>
+                        新建视图
+                      </Button>
+                    </Space>
+                  </div>
+                )}
                 <ProTable<WorkflowV4Item>
                   rowKey="name"
                   search={false}
@@ -470,6 +668,9 @@ export const PipelinesPage: React.FC = () => {
                     if (favoriteOnly && !w.isFavorite) return false;
                     if (isGlobalRoute && selectedProjectFilter !== 'all') {
                       return (w.project || (w as any).project_name) === selectedProjectFilter;
+                    }
+                    if (selectedView !== 'all' && currentViewWorkflows) {
+                      return currentViewWorkflows.has(w.name);
                     }
                     return true;
                   })}
@@ -664,6 +865,92 @@ export const PipelinesPage: React.FC = () => {
             onChange={(e) => setNewWorkflowDesc(e.target.value)}
             rows={3}
           />
+        </div>
+      </Modal>
+
+      {/* Workflow View Management Modal */}
+      <Modal
+        title={viewModalMode === 'create' ? '新建工作流视图' : `编辑工作流视图 [${viewFormName}]`}
+        open={viewModalVisible}
+        onCancel={() => setViewModalVisible(false)}
+        onOk={handleSaveView}
+        confirmLoading={viewSubmitting}
+        width={680}
+        destroyOnClose
+        okText="保存视图"
+        cancelText="取消"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 8 }}>
+          <div>
+            <div style={{ marginBottom: 6, fontWeight: 500 }}>
+              <span style={{ color: '#ff4d4f' }}>* </span>视图名称:
+            </div>
+            <Input
+              placeholder="请输入视图名称 (如：生产流水线、前端工程)"
+              value={viewFormName}
+              onChange={(e) => setViewFormName(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontWeight: 500 }}>包含的工作流:</span>
+              <Space size="small">
+                <Button
+                  size="small"
+                  type="link"
+                  onClick={() =>
+                    setViewSelectedWorkflowNames(viewAvailableWorkflows.map((w) => w.workflow_name))
+                  }
+                >
+                  全选
+                </Button>
+                <Button
+                  size="small"
+                  type="link"
+                  onClick={() => setViewSelectedWorkflowNames([])}
+                >
+                  清空
+                </Button>
+              </Space>
+            </div>
+
+            <div
+              style={{
+                maxHeight: 320,
+                overflowY: 'auto',
+                border: '1px solid #d9d9d9',
+                borderRadius: 6,
+                padding: '12px 16px',
+              }}
+            >
+              {viewAvailableWorkflows.length > 0 ? (
+                <Checkbox.Group
+                  style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}
+                  value={viewSelectedWorkflowNames}
+                  onChange={(checkedValues) =>
+                    setViewSelectedWorkflowNames(checkedValues as string[])
+                  }
+                >
+                  {viewAvailableWorkflows.map((item) => (
+                    <Checkbox key={item.workflow_name} value={item.workflow_name}>
+                      <Space>
+                        <Text strong>{item.workflow_display_name || item.workflow_name}</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          ({item.workflow_name})
+                        </Text>
+                        <Tag color={item.workflow_type === 'common_workflow' ? 'geekblue' : 'purple'}>
+                          {item.workflow_type === 'common_workflow' ? '自定义工作流' : '经典工作流'}
+                        </Tag>
+                      </Space>
+                    </Checkbox>
+                  ))}
+                </Checkbox.Group>
+              ) : (
+                <Empty description="当前项目暂无可加入视图的工作流" style={{ padding: '24px 0' }} />
+              )}
+            </div>
+          </div>
         </div>
       </Modal>
     </div>
