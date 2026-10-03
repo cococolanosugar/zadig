@@ -31,6 +31,7 @@ import {
   ReloadOutlined,
   CheckCircleOutlined,
   CloudUploadOutlined,
+  FileSearchOutlined,
 } from '@ant-design/icons';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -38,6 +39,7 @@ import type { ColumnsType } from 'antd/es/table';
 import http from '../../api/client';
 import workflowApi from '../../api/workflow';
 import { feedback } from '../../utils/feedback';
+import { WorkspaceBrowserDrawer } from '../../components/Workspace/WorkspaceBrowserDrawer';
 
 const { Text, Title } = Typography;
 const { TextArea } = Input;
@@ -83,6 +85,15 @@ export const BuildsPage: React.FC = () => {
   const [editingBuild, setEditingBuild] = useState<BuildItem | null>(null);
   const [form] = Form.useForm();
   const [execForm] = Form.useForm();
+
+  // 工作区浏览器抽屉状态
+  const [workspaceDrawerOpen, setWorkspaceDrawerOpen] = useState<boolean>(false);
+  const [activeWorkspaceParams, setActiveWorkspaceParams] = useState<{
+    codehostId?: number;
+    owner?: string;
+    repo?: string;
+    branch?: string;
+  }>({});
 
   // 路由 /builds/create → 自动打开新建弹窗
   useEffect(() => {
@@ -363,9 +374,26 @@ export const BuildsPage: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 180,
+      width: 240,
       render: (_, record) => (
         <Space size="middle">
+          <Button
+            type="link"
+            size="small"
+            icon={<FileSearchOutlined />}
+            onClick={() => {
+              const repo = record.repos?.[0];
+              setActiveWorkspaceParams({
+                codehostId: repo?.codehost_id,
+                owner: repo?.repo_owner,
+                repo: repo?.repo_name,
+                branch: repo?.branch || 'master',
+              });
+              setWorkspaceDrawerOpen(true);
+            }}
+          >
+            工作区
+          </Button>
           <Button
             type="link"
             size="small"
@@ -472,6 +500,15 @@ export const BuildsPage: React.FC = () => {
           />
 
           <Space size="middle">
+            <Button
+              icon={<FileSearchOutlined />}
+              onClick={() => {
+                setActiveWorkspaceParams({});
+                setWorkspaceDrawerOpen(true);
+              }}
+            >
+              代码工作区
+            </Button>
             <Button icon={<ReloadOutlined />} onClick={fetchBuilds} loading={loading}>
               刷新
             </Button>
@@ -687,6 +724,16 @@ export const BuildsPage: React.FC = () => {
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未获取到构建详情" />
         )}
       </Drawer>
+
+      {/* 代码工作区浏览器抽屉 */}
+      <WorkspaceBrowserDrawer
+        open={workspaceDrawerOpen}
+        onClose={() => setWorkspaceDrawerOpen(false)}
+        defaultCodeHostId={activeWorkspaceParams.codehostId}
+        defaultOwner={activeWorkspaceParams.owner}
+        defaultRepo={activeWorkspaceParams.repo}
+        defaultBranch={activeWorkspaceParams.branch}
+      />
     </div>
   );
 };
