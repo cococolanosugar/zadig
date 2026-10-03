@@ -13,6 +13,7 @@ import {
   Alert,
   Row,
   Col,
+  Tag,
 } from 'antd';
 import {
   ProjectOutlined,
@@ -160,6 +161,11 @@ spec:
     const failures: string[] = [];
     const targetProject = projectName || projectKey;
 
+    // 仅原生 K8s 项目在向导中生成默认容器部署服务、环境与流水线；其他类型通过各模块配置
+    if (deployType !== 'k8s') {
+      return { ok: true, failures: [] };
+    }
+
     // 1. 创建服务
     if (serviceName.trim()) {
       try {
@@ -268,8 +274,16 @@ spec:
             {
               product_name: values.project_name,
               project_name: values.project_key || values.project_name,
-              create_from: values.deploy_type,
               desc: form.getFieldValue('desc') || '',
+              enabled: true,
+              product_feature: {
+                basic_facility:
+                  values.deploy_type === 'host' || values.deploy_type === 'pm'
+                    ? 'cloud_host'
+                    : 'kubernetes',
+                deploy_type: values.deploy_type === 'helm' ? 'helm' : 'k8s',
+                create_env_type: 'system',
+              },
             },
             { skipErrorHandler: true }
           );
@@ -283,6 +297,18 @@ spec:
           }
         } finally {
           setLoading(false);
+        }
+
+        // 非原生 K8s 项目：后端仅对 K8s 原生支持在此向导步骤生成默认 Deployment YAML 服务与环境；
+        // Helm 与 PM 主机项目已完成基础工程创建，直接导航至项目详情以便用户在专有抽屉中配置。
+        if (values.deploy_type !== 'k8s') {
+          feedback.message.success(
+            `项目 [${values.project_key || values.project_name}] 基础工程创建成功！请前往项目详情页配置 ${
+              values.deploy_type === 'helm' ? 'Helm Chart 服务' : 'PM 主机服务'
+            }。`
+          );
+          navigate(`/v1/projects/detail/${values.project_name}/detail`);
+          return;
         }
       }
 
@@ -359,7 +385,7 @@ spec:
             initialValues={{
               project_name: initialProjectName || '',
               project_key: initialProjectName || '',
-              deploy_type: 'k8s',
+              deploy_type: deployType || 'k8s',
             }}
           >
             <Row gutter={24}>
@@ -392,7 +418,14 @@ spec:
               label="项目部署交付类型"
               rules={[{ required: true }]}
             >
-              <Radio.Group style={{ width: '100%' }}>
+              <Radio.Group
+                style={{ width: '100%' }}
+                value={deployType}
+                onChange={(e) => {
+                  setDeployType(e.target.value);
+                  form.setFieldsValue({ deploy_type: e.target.value });
+                }}
+              >
                 <Row gutter={16}>
                   <Col span={8}>
                     <Card
@@ -401,14 +434,21 @@ spec:
                       style={{
                         border: deployType === 'k8s' ? '2px solid #0066ff' : '1px solid #d9d9d9',
                         borderRadius: 6,
+                        height: '100%',
                       }}
-                      onClick={() => setDeployType('k8s')}
+                      onClick={() => {
+                        setDeployType('k8s');
+                        form.setFieldsValue({ deploy_type: 'k8s' });
+                      }}
                     >
-                      <Radio value="k8s">
-                        <Text strong>K8s YAML 原生</Text>
-                      </Radio>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Radio value="k8s">
+                          <Text strong>K8s YAML 原生</Text>
+                        </Radio>
+                        <Tag color="blue">向导全流程</Tag>
+                      </div>
                       <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 8 }}>
-                        基于原生 Kubernetes YAML 清单管理微服务部署与发布。
+                        基于原生 Kubernetes YAML 清单，支持 4 步向导式快速初始化服务、环境与工作流。
                       </Paragraph>
                     </Card>
                   </Col>
@@ -419,14 +459,21 @@ spec:
                       style={{
                         border: deployType === 'helm' ? '2px solid #0066ff' : '1px solid #d9d9d9',
                         borderRadius: 6,
+                        height: '100%',
                       }}
-                      onClick={() => setDeployType('helm')}
+                      onClick={() => {
+                        setDeployType('helm');
+                        form.setFieldsValue({ deploy_type: 'helm' });
+                      }}
                     >
-                      <Radio value="helm">
-                        <Text strong>Helm Chart</Text>
-                      </Radio>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Radio value="helm">
+                          <Text strong>Helm Chart</Text>
+                        </Radio>
+                        <Tag color="cyan">基础工程创建</Tag>
+                      </div>
                       <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 8 }}>
-                        基于 Helm Chart 包管理规范发布多环境应用及 values 定制。
+                        创建 Helm 项目基础配置。创建完成后在项目详情通过「Helm 服务抽屉」导入与编辑 Chart。
                       </Paragraph>
                     </Card>
                   </Col>
@@ -437,14 +484,21 @@ spec:
                       style={{
                         border: deployType === 'host' ? '2px solid #0066ff' : '1px solid #d9d9d9',
                         borderRadius: 6,
+                        height: '100%',
                       }}
-                      onClick={() => setDeployType('host')}
+                      onClick={() => {
+                        setDeployType('host');
+                        form.setFieldsValue({ deploy_type: 'host' });
+                      }}
                     >
-                      <Radio value="host">
-                        <Text strong>主机 / 虚拟机</Text>
-                      </Radio>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Radio value="host">
+                          <Text strong>主机 / 虚拟机</Text>
+                        </Radio>
+                        <Tag color="purple">基础工程创建</Tag>
+                      </div>
                       <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 8 }}>
-                        针对非容器化物理机、ECS 或虚机主机的发布自动化交付。
+                        针对物理机/虚机服务的发布交付。创建后在项目服务模块配置 PM 主机服务与探活。
                       </Paragraph>
                     </Card>
                   </Col>
