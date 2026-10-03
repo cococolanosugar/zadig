@@ -389,7 +389,30 @@ export const environmentApi = {
       { skipErrorHandler: true }
     );
   },
+
+  /**
+   * Get available cluster namespaces (for hosting / binding existing namespaces).
+   * GET /api/aslan/environment/kube/available_namespaces?clusterId=&type=
+   */
+  async getAvailableNamespaces(
+    clusterId: string,
+    type = 'create'
+  ): Promise<AvailableNamespace[]> {
+    return http.get<AvailableNamespace[]>(
+      `/api/aslan/environment/kube/available_namespaces?clusterId=${encodeURIComponent(clusterId)}&type=${encodeURIComponent(type)}`,
+      { skipErrorHandler: true }
+    );
+  },
 };
+
+export interface AvailableNamespace {
+  name: string;
+  status?: string;
+  age?: string;
+  labels?: Record<string, string>;
+  current?: boolean;
+  used_by_other_env?: boolean;
+}
 
 export interface CommonEnvCfgHistoryItem {
   id?: string;
