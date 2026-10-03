@@ -14,6 +14,7 @@ import {
   CopyOutlined,
   HistoryOutlined,
   DiffOutlined,
+  RocketOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import http from '../../api/client';
@@ -23,6 +24,7 @@ import PodTerminal from '../../components/Terminal/PodTerminal';
 import YamlEditor from '../../components/Editor/YamlEditor';
 import EnvServiceHistoryDrawer from './EnvServiceHistoryDrawer';
 import ServiceDiffModal from './ServiceDiffModal';
+import UpdateImageModal from './UpdateImageModal';
 import { feedback } from '../../utils/feedback';
 
 const { Title, Text } = Typography;
@@ -129,6 +131,7 @@ export const ServiceDetailPage: React.FC = () => {
   const [podEvents, setPodEvents] = useState<Array<{ type?: string; reason?: string; message?: string; last_timestamp?: string }>>([]);
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const [diffModalOpen, setDiffModalOpen] = useState(false);
+  const [updateImageModalOpen, setUpdateImageModalOpen] = useState(false);
 
   // 当前环境是否生产环境（环境详情 ProductResp.is_prod）；pods/保存/导出按真实标志透传 production
   // 深链 /envs/detail/:service_name/production 时强制生产语境
@@ -456,6 +459,11 @@ export const ServiceDetailPage: React.FC = () => {
             </Space>
           </div>
           <div style={{ flex: 1 }} />
+          {serviceType !== 'pm' && (
+            <Button icon={<RocketOutlined />} onClick={() => setUpdateImageModalOpen(true)}>
+              更新镜像
+            </Button>
+          )}
           <Button icon={<HistoryOutlined />} onClick={() => setHistoryDrawerOpen(true)}>
             版本历史
           </Button>
@@ -716,6 +724,29 @@ export const ServiceDetailPage: React.FC = () => {
         projectName={projectName || ''}
         envName={envName || ''}
         serviceName={serviceName || ''}
+        production={envProduction}
+      />
+      {/* 更新镜像弹窗 */}
+      <UpdateImageModal
+        open={updateImageModalOpen}
+        onClose={() => setUpdateImageModalOpen(false)}
+        onSuccess={() => {
+          fetchPods();
+          fetchLiveYaml();
+        }}
+        projectName={projectName || ''}
+        envName={envName || ''}
+        serviceName={serviceName || ''}
+        workloadType="Deployment"
+        workloadName={serviceName || ''}
+        containers={
+          pods.length > 0
+            ? Array.from(new Set(pods.map((p) => p.container_name || serviceName || ''))).map((cName) => ({
+                name: cName,
+                image: '',
+              }))
+            : [{ name: serviceName || '', image: '' }]
+        }
         production={envProduction}
       />
     </div>

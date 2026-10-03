@@ -334,7 +334,37 @@ export const environmentApi = {
       { skipErrorHandler: true }
     );
   },
+
+  /**
+   * Update container image for workload (Deployment, DaemonSet, StatefulSet, Job, CronJob).
+   * POST /api/aslan/environment/image/{deployment,daemonset,statefulset,job,cronjob}/:envName?production=
+   */
+  async updateContainerImage(
+    workloadType: string,
+    envName: string,
+    payload: UpdateContainerImagePayload,
+    production = false
+  ): Promise<void> {
+    const prodParam = production ? '?production=true' : '';
+    const cleanType = workloadType.toLowerCase();
+    return http.post<void>(
+      `/api/aslan/environment/image/${cleanType}/${encodeURIComponent(envName)}${prodParam}`,
+      payload,
+      { skipErrorHandler: true }
+    );
+  },
 };
+
+export interface UpdateContainerImagePayload {
+  type: string; // e.g. 'Deployment', 'DaemonSet', 'StatefulSet', 'Job', 'CronJob'
+  product_name: string;
+  env_name: string;
+  service_name: string;
+  name: string; // workload name
+  container_name: string;
+  image: string;
+  production?: boolean;
+}
 
 export interface EnvServiceVersionItem {
   service_name: string;
