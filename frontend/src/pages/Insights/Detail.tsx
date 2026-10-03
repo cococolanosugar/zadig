@@ -25,6 +25,7 @@ import {
   FieldTimeOutlined,
   TrophyOutlined,
   RollbackOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Line, Column } from '@ant-design/plots';
@@ -35,6 +36,7 @@ import statApi, {
   type TestHealthResp,
   type RollbackStatItem,
 } from '../../api/stat';
+import { AiAnalysisDrawer } from '../../components/InsightAI/AiAnalysisDrawer';
 import { useProjectStore } from '../../stores/project';
 
 const { Title, Text } = Typography;
@@ -92,6 +94,7 @@ export const InsightDetailPage: React.FC = () => {
   const [testData, setTestData] = useState<TestDashboardResp>({});
   const [releaseData, setReleaseData] = useState<ReleaseDashboardResp>({});
 
+  const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
   const [buildAverageData, setBuildAverageData] = useState<DailyAverageDurationItem[]>([]);
   const [buildTenDurationData, setBuildTenDurationData] = useState<BuildTenDurationItem[]>([]);
   const [testAverageData, setTestAverageData] = useState<DailyAverageDurationItem[]>([]);
@@ -646,6 +649,14 @@ export const InsightDetailPage: React.FC = () => {
           </Col>
           <Col>
             <Space orientation="horizontal" size={12}>
+              <Button
+                type="primary"
+                icon={<RobotOutlined />}
+                onClick={() => setAiDrawerOpen(true)}
+                style={{ background: 'linear-gradient(135deg, #1677ff 0%, #722ed1 100%)', border: 'none' }}
+              >
+                AI 效能洞察分析
+              </Button>
               <Radio.Group value={timeRange} onChange={(e) => setTimeRange(e.target.value)} size="middle">
                 <Radio.Button value="7d">近 7 天</Radio.Button>
                 <Radio.Button value="30d">近 30 天</Radio.Button>
@@ -666,6 +677,12 @@ export const InsightDetailPage: React.FC = () => {
       ) : (
         renderDimension()
       )}
+
+      <AiAnalysisDrawer
+        open={aiDrawerOpen}
+        onClose={() => setAiDrawerOpen(false)}
+        defaultProject={currentProject}
+      />
     </div>
   );
 };

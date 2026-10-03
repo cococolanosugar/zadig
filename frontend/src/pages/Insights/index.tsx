@@ -18,11 +18,13 @@ import {
   ThunderboltOutlined,
   DeploymentUnitOutlined,
   ReloadOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import { Line, Pie, Column } from '@ant-design/plots';
 import http from '../../api/client';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/project';
+import { AiAnalysisDrawer } from '../../components/InsightAI/AiAnalysisDrawer';
 
 const { Title, Text } = Typography;
 
@@ -54,6 +56,7 @@ export const InsightsPage: React.FC = () => {
   const navigate = useNavigate();
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('7d');
   const [loading, setLoading] = useState<boolean>(false);
+  const [aiDrawerOpen, setAiDrawerOpen] = useState<boolean>(false);
 
   const [kpiMetrics, setKpiMetrics] = useState({
     successRate: 0,
@@ -202,6 +205,14 @@ export const InsightsPage: React.FC = () => {
           </Col>
           <Col>
             <Space orientation="horizontal" size={12}>
+              <Button
+                type="primary"
+                icon={<RobotOutlined />}
+                onClick={() => setAiDrawerOpen(true)}
+                style={{ background: 'linear-gradient(135deg, #1677ff 0%, #722ed1 100%)', border: 'none' }}
+              >
+                AI 效能洞察分析
+              </Button>
               <Select
                 value={undefined}
                 placeholder="维度详情"
@@ -336,6 +347,12 @@ export const InsightsPage: React.FC = () => {
           </Card>
         </Col>
       </Row>
+
+      <AiAnalysisDrawer
+        open={aiDrawerOpen}
+        onClose={() => setAiDrawerOpen(false)}
+        defaultProject={currentProject}
+      />
     </div>
   );
 };
