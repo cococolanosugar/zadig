@@ -22,12 +22,14 @@ import {
   HddOutlined,
 } from '@ant-design/icons';
 import { useProjectStore } from '../stores/project';
+import { CollaborationDrawer } from '../pages/Projects/CollaborationDrawer';
 
 export const ProjectDetailLayout: React.FC = () => {
   const { projectName } = useParams<{ projectName: string }>();
   const location = useLocation();
   const navigate = useNavigate();
   const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
+  const [collaborationDrawerOpen, setCollaborationDrawerOpen] = React.useState<boolean>(false);
 
   React.useEffect(() => {
     if (projectName) {
@@ -183,6 +185,12 @@ export const ProjectDetailLayout: React.FC = () => {
       onClick: () => navigate(`/v1/projects/detail/${projectName}/hosts`),
     },
     {
+      key: 'collaboration',
+      icon: <TeamOutlined />,
+      label: '协同模式',
+      onClick: () => setCollaborationDrawerOpen(true),
+    },
+    {
       key: 'rbac',
       icon: <TeamOutlined />,
       label: '项目权限',
@@ -235,6 +243,12 @@ export const ProjectDetailLayout: React.FC = () => {
       <div style={{ padding: '16px 24px', flex: 1 }}>
         <Outlet />
       </div>
+
+      <CollaborationDrawer
+        open={collaborationDrawerOpen}
+        projectName={projectName || ''}
+        onClose={() => setCollaborationDrawerOpen(false)}
+      />
     </div>
   );
 };
