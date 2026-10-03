@@ -16,6 +16,7 @@ import {
   Table,
   Popconfirm,
   Select,
+  Dropdown,
 } from 'antd';
 import {
   PlusOutlined,
@@ -25,6 +26,9 @@ import {
   CodeOutlined,
   ReloadOutlined,
   HistoryOutlined,
+  DownOutlined,
+  CloudSyncOutlined,
+  FileAddOutlined,
 } from '@ant-design/icons';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/project';
@@ -32,6 +36,8 @@ import YamlEditor from '../../components/Editor/YamlEditor';
 import YamlDiffEditor from '../../components/Editor/YamlDiffEditor';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
+import { serviceApi, ServiceDetail } from '../../api/service';
+import ImportFromRepoModal, { SyncServiceInfo } from './ImportFromRepoModal';
 
 const { Title, Text } = Typography;
 
@@ -66,6 +72,11 @@ export const ServicesPage: React.FC = () => {
   const [versions, setVersions] = useState<Array<{ revision: number; create_time: number; create_by: string }>>([]);
   const [versionLoading, setVersionLoading] = useState(false);
   const [versionYaml, setVersionYaml] = useState<{ revision: number; yaml: string } | null>(null);
+
+  // 代码库导入 / 同步状态
+  const [serviceDetail, setServiceDetail] = useState<ServiceDetail | null>(null);
+  const [repoModalOpen, setRepoModalOpen] = useState(false);
+  const [syncServiceInfo, setSyncServiceInfo] = useState<SyncServiceInfo | null>(null);
 
   const loadServices = useCallback(async () => {
     if (!activeProject) {
@@ -106,6 +117,27 @@ export const ServicesPage: React.FC = () => {
   useEffect(() => {
     loadServices();
   }, [loadServices]);
+
+  const loadServiceDetail = useCallback(async (serviceName: string) => {
+    if (!activeProject || !serviceName) {
+      setServiceDetail(null);
+      return;
+    }
+    try {
+      const detail = await serviceApi.getServiceDetail(serviceName, activeProject, isProduction);
+      setServiceDetail(detail);
+    } catch {
+      setServiceDetail(null);
+    }
+  }, [activeProject, isProduction]);
+
+  useEffect(() => {
+    if (selectedService) {
+      loadServiceDetail(selectedService);
+    } else {
+      setServiceDetail(null);
+    }
+  }, [selectedService, loadServiceDetail]);
 
   const handleSaveYaml = async () => {
     if (!selectedService || !activeProject) return;
@@ -363,6 +395,26 @@ spec:
               >
                 版本历史
               </Button>
+              {Boolean(serviceDetail?.codehost_id) && (
+                <Button
+                  icon={<CloudSyncOutlined />}
+                  onClick={() => {
+                    setSyncServiceInfo({
+                      service_name: serviceDetail!.service_name,
+                      codehost_id: serviceDetail!.codehost_id,
+                      repo_name: serviceDetail!.repo_name,
+                      repo_owner: serviceDetail!.repo_owner,
+                      repo_namespace: serviceDetail!.repo_namespace,
+                      branch_name: serviceDetail!.branch_name,
+                      load_path: serviceDetail!.load_path,
+                      is_dir: serviceDetail!.is_dir,
+                    });
+                    setRepoModalOpen(true);
+                  }}
+                >
+                  从代码库同步
+                </Button>
+              )}
               <Button
                 type="primary"
                 icon={<SaveOutlined />}
@@ -383,13 +435,31 @@ spec:
             variant="borderless"
             title="服务组件列表"
             extra={
-              <Button
-                type="link"
-                icon={<PlusOutlined />}
-                onClick={() => setCreateModalVisible(true)}
+              <Dropdown
+                menu={{
+                  items: [
+                    {
+                      key: 'blank',
+                      icon: <FileAddOutlined />,
+                      label: '新建空白服务',
+                      onClick: () => setCreateModalVisible(true),
+                    },
+                    {
+                      key: 'repo',
+                      icon: <CloudSyncOutlined />,
+                      label: '从代码库导入服务',
+                      onClick: () => {
+                        setSyncServiceInfo(null);
+                        setRepoModalOpen(true);
+                      },
+                    },
+                  ],
+                }}
               >
-                新建服务
-              </Button>
+                <Button type="link" icon={<PlusOutlined />}>
+                  新建服务 <DownOutlined style={{ fontSize: 10 }} />
+                </Button>
+              </Dropdown>
             }
             styles={{ body: { padding: 0 } }}
             style={{ borderRadius: 8, height: 600, overflowY: 'auto' }}
@@ -628,6 +698,21 @@ spec:
           )}
         </Card>
       </Drawer>
+
+      {/* Import / Sync from Git Codehost Modal */}
+      <ImportFromRepoModal
+        open={repoModalOpen}
+        onClose={() => setRepoModalOpen(false)}
+        projectName={activeProject || ''}
+        isProduction={isProduction}
+        syncService={syncServiceInfo}
+        onSuccess={(names) => {
+          loadServices();
+          if (names.length > 0) {
+            setSelectedService(names[0]);
+          }
+        }}
+      />
     </div>
   );
 };
