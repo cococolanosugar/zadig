@@ -17,6 +17,7 @@ import {
   Select,
   Badge,
   Spin,
+  Dropdown,
 } from 'antd';
 import {
   HistoryOutlined,
@@ -28,16 +29,19 @@ import {
   CheckCircleOutlined,
   ClusterOutlined,
   ReloadOutlined,
+  DownOutlined,
+  CloudDownloadOutlined,
 } from '@ant-design/icons';
 import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
 import { useProjectStore } from '../../stores/project';
+import { deliveryApi, DeliveryVersionItem } from '../../api/delivery';
+import CreateHelmReleaseModal from './CreateHelmReleaseModal';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
-const { Option } = Select;
 
 interface ArtifactItem {
   id?: string;
@@ -58,11 +62,12 @@ interface ReleaseVersionItem {
   id?: string;
   version: string;
   product_name: string;
-  created_at?: string;
+  created_at?: string | number;
   create_by?: string;
   desc?: string;
   status?: string;
-  services?: Array<{ service_name: string; image?: string }>;
+  type?: 'k8s' | 'helm' | string;
+  services?: Array<{ service_name: string; chart_name?: string; chart_version?: string; image?: string }>;
 }
 
 export const DeliveryPage: React.FC = () => {
@@ -110,18 +115,14 @@ export const DeliveryPage: React.FC = () => {
     setServiceImagesLoading(true);
     setServiceImages([]);
     try {
-      const res = await http.get<{
-        productEnvInfo?: { services?: Array<Array<{ service_name: string; containers?: Array<{ image?: string; name?: string }> }>> };
-      }>(`/api/aslan/delivery/releases/${record.id}?projectName=${encodeURIComponent(record.product_name)}`, {
-        skipErrorHandler: true,
-      });
+      const proj = record.product_name;
+      const res = await deliveryApi.getDeliveryVersion(record.id || '', proj);
       const list: Array<{ service: string; image: string }> = [];
-      (res?.productEnvInfo?.services || []).forEach((group) =>
-        (group || []).forEach((svc) => {
-          const image = svc.containers?.[0]?.image || '';
-          list.push({ service: svc.service_name, image });
-        })
-      );
+      (res?.services || []).forEach((svc) => {
+        (svc.images || []).forEach((img) => {
+          list.push({ service: svc.service_name, image: img.target_image || img.source_image || img.image_name || '' });
+        });
+      });
       setServiceImages(list);
     } catch {
       setServiceImages([]);
@@ -133,7 +134,7 @@ export const DeliveryPage: React.FC = () => {
   // Version detail drawer state (GET /api/aslan/delivery/releases/:id?projectName=)
   const [versionDetailOpen, setVersionDetailOpen] = useState(false);
   const [versionDetailLoading, setVersionDetailLoading] = useState(false);
-  const [versionDetail, setVersionDetail] = useState<Record<string, unknown> | null>(null);
+  const [versionDetail, setVersionDetail] = useState<DeliveryVersionItem | null>(null);
   const [versionDetailImages, setVersionDetailImages] = useState<Array<{ service: string; image: string }>>([]);
 
   const openVersionDetail = async (record: ReleaseVersionItem) => {
@@ -142,34 +143,59 @@ export const DeliveryPage: React.FC = () => {
     setVersionDetail(null);
     setVersionDetailImages([]);
     try {
-      const res = await http.get<{
-        version?: string;
-        productName?: string;
-        workflowName?: string;
-        workflowDisplayName?: string;
-        desc?: string;
-        status?: string;
-        type?: string;
-        taskId?: number;
-        labels?: string[];
-        createdBy?: string;
-        createdAt?: number;
-        productEnvInfo?: { services?: Array<Array<{ service_name: string; containers?: Array<{ image?: string; name?: string }> }>> };
-      }>(`/api/aslan/delivery/releases/${record.id}?projectName=${encodeURIComponent(record.product_name)}`, {
-        skipErrorHandler: true,
-      });
+      const proj = record.product_name;
+      const res = await deliveryApi.getDeliveryVersion(record.id || '', proj);
       setVersionDetail(res || null);
       const list: Array<{ service: string; image: string }> = [];
-      (res?.productEnvInfo?.services || []).forEach((group) =>
-        (group || []).forEach((svc) => {
-          list.push({ service: svc.service_name, image: svc.containers?.[0]?.image || '' });
-        })
-      );
+      (res?.services || []).forEach((svc) => {
+        (svc.images || []).forEach((img) => {
+          list.push({ service: svc.service_name, image: img.target_image || img.source_image || img.image_name || '' });
+        });
+      });
       setVersionDetailImages(list);
     } catch {
       setVersionDetail(null);
     } finally {
       setVersionDetailLoading(false);
+    }
+  };
+
+  // Helm Release Modal state
+  const [createHelmModalVisible, setCreateHelmModalVisible] = useState(false);
+
+  // Download Chart Selection Modal state
+  const [downloadChartModalVisible, setDownloadChartModalVisible] = useState(false);
+  const [downloadChartOptions, setDownloadChartOptions] = useState<{
+    projectName: string;
+    version: string;
+    charts: string[];
+  } | null>(null);
+
+  const handleDownloadChart = async (record: ReleaseVersionItem) => {
+    try {
+      feedback.message.loading({ content: `正在获取版本 [${record.version}] Chart 信息...`, key: 'downloadChart' });
+      const detail = await deliveryApi.getDeliveryVersion(record.id || '', record.product_name);
+      const charts = (detail.services || []).filter((s) => s.chart_name);
+      if (charts.length === 1 && charts[0].chart_name) {
+        feedback.message.loading({ content: `正在下载 Chart [${charts[0].chart_name}]...`, key: 'downloadChart' });
+        await deliveryApi.downloadDeliveryChart(record.product_name, record.version, charts[0].chart_name);
+        feedback.message.success({ content: `Chart [${charts[0].chart_name}] 下载已触发`, key: 'downloadChart' });
+      } else if (charts.length > 1) {
+        feedback.message.destroy('downloadChart');
+        setDownloadChartOptions({
+          projectName: record.product_name,
+          version: record.version,
+          charts: charts.map((c) => c.chart_name),
+        });
+        setDownloadChartModalVisible(true);
+      } else {
+        const defaultChart = record.services?.[0]?.chart_name || record.services?.[0]?.service_name || record.product_name;
+        await deliveryApi.downloadDeliveryChart(record.product_name, record.version, defaultChart);
+        feedback.message.success({ content: `Chart [${defaultChart}] 下载已触发`, key: 'downloadChart' });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '下载 Chart 失败';
+      feedback.message.error({ content: msg, key: 'downloadChart' });
     }
   };
 
@@ -187,10 +213,21 @@ export const DeliveryPage: React.FC = () => {
         });
         setArtifacts(Array.isArray(res) ? res : []);
       } else {
-        const res = await http.get<ReleaseVersionItem[]>('/api/aslan/delivery/releases', {
-          skipErrorHandler: true,
-        });
-        setReleases(Array.isArray(res) ? res : []);
+        const res = await deliveryApi.listDeliveryVersions();
+        const list = Array.isArray(res)
+          ? res.map((r) => ({
+              id: r.id,
+              version: r.version,
+              product_name: r.project_name || '',
+              create_by: r.created_by || '',
+              create_time: r.created_at || '',
+              desc: r.desc || '',
+              status: r.status || '',
+              type: r.type || 'k8s',
+              services: r.services || [],
+            }))
+          : [];
+        setReleases(list);
       }
     } catch {
       if (activeTab === 'artifacts') setArtifacts([]);
@@ -204,13 +241,35 @@ export const DeliveryPage: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
+  const createReleaseMenu = {
+    items: [
+      {
+        key: 'k8s',
+        label: '创建 Kubernetes 版本',
+        icon: <ClusterOutlined />,
+        onClick: () => {
+          form.resetFields();
+          setCreateModalVisible(true);
+        },
+      },
+      {
+        key: 'helm',
+        label: '创建 Helm Chart 版本',
+        icon: <DropboxOutlined />,
+        onClick: () => {
+          setCreateHelmModalVisible(true);
+        },
+      },
+    ],
+  };
+
   const handleCreateRelease = async () => {
     try {
       const values = await form.validateFields();
       setCreatingRelease(true);
-      await http.post('/api/aslan/delivery/releases/k8s', {
+      await deliveryApi.createK8sDeliveryVersion({
         version: values.version,
-        product_name: values.product_name,
+        project_name: values.product_name,
         desc: values.desc || '',
       });
       feedback.message.success(`版本 [${values.version}] 创建成功！`);
@@ -324,6 +383,11 @@ export const DeliveryPage: React.FC = () => {
             <Text strong style={{ cursor: 'pointer' }} onClick={() => openVersionDetail(record)}>
               {v}
             </Text>
+            {record.type === 'helm' ? (
+              <Tag color="blue" style={{ fontSize: 10 }}>Helm</Tag>
+            ) : (
+              <Tag color="cyan" style={{ fontSize: 10 }}>K8s</Tag>
+            )}
           </Space>
           {record.desc && (
             <Text type="secondary" style={{ fontSize: 12 }}>
@@ -344,7 +408,7 @@ export const DeliveryPage: React.FC = () => {
       title: '发布状态',
       dataIndex: 'status',
       key: 'status',
-      width: 140,
+      width: 120,
       render: (status) => {
         if (status === 'success') {
           return <Badge status="success" text="已发布" />;
@@ -356,7 +420,7 @@ export const DeliveryPage: React.FC = () => {
       title: '创建人',
       dataIndex: 'create_by',
       key: 'create_by',
-      width: 140,
+      width: 120,
       render: (by) => by || 'admin',
     },
     {
@@ -364,16 +428,36 @@ export const DeliveryPage: React.FC = () => {
       dataIndex: 'create_time',
       key: 'create_time',
       width: 160,
-      render: (t) => (t ? String(t) : '刚刚'),
+      render: (t) => {
+        if (!t) return '刚刚';
+        const num = Number(t);
+        if (!isNaN(num) && num > 0) {
+          const date = num > 1e11 ? new Date(num) : new Date(num * 1000);
+          return date.toLocaleString();
+        }
+        return String(t);
+      },
     },
     {
       title: '操作',
       key: 'action',
-      width: 140,
+      width: 180,
       render: (_, record) => (
-        <Button type="link" size="small" onClick={() => handleShowServiceImages(record)}>
-          服务镜像清单
-        </Button>
+        <Space size={0}>
+          <Button type="link" size="small" onClick={() => handleShowServiceImages(record)}>
+            镜像清单
+          </Button>
+          {(record.type === 'helm' || (record.services && record.services.some((s) => s.chart_name))) && (
+            <Button
+              type="link"
+              size="small"
+              icon={<CloudDownloadOutlined />}
+              onClick={() => handleDownloadChart(record)}
+            >
+              下载 Chart
+            </Button>
+          )}
+        </Space>
       ),
     },
   ];
@@ -431,17 +515,11 @@ export const DeliveryPage: React.FC = () => {
           <Button icon={<ReloadOutlined />} onClick={fetchData} loading={loading}>
             刷新
           </Button>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            style={{ borderRadius: 4 }}
-            onClick={() => {
-              form.resetFields();
-              setCreateModalVisible(true);
-            }}
-          >
-            创建版本发布
-          </Button>
+          <Dropdown menu={createReleaseMenu}>
+            <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 4 }}>
+              创建版本发布 <DownOutlined />
+            </Button>
+          </Dropdown>
         </Space>
       </div>
 
@@ -486,16 +564,11 @@ export const DeliveryPage: React.FC = () => {
                   description="暂无发布版本快照，点击上方“创建版本发布”生成新版本"
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
                 >
-                  <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={() => {
-                      form.resetFields();
-                      setCreateModalVisible(true);
-                    }}
-                  >
-                    创建版本发布
-                  </Button>
+                  <Dropdown menu={createReleaseMenu}>
+                    <Button type="primary" icon={<PlusOutlined />}>
+                      创建版本发布 <DownOutlined />
+                    </Button>
+                  </Dropdown>
                 </Empty>
               ),
             }}
@@ -624,7 +697,7 @@ export const DeliveryPage: React.FC = () => {
 
       {/* Version Detail Drawer */}
       <Drawer
-        title={`版本详情: ${String((versionDetail as { version?: string })?.version || '')}`}
+        title={`版本详情: ${versionDetail?.version || ''}`}
         placement="right"
         open={versionDetailOpen}
         onClose={() => {
@@ -641,39 +714,96 @@ export const DeliveryPage: React.FC = () => {
           <div>
             <Descriptions bordered column={1} size="small">
               <Descriptions.Item label="版本号">
-                <Text strong>{String(versionDetail.version || '-')}</Text>
+                <Text strong>{versionDetail.version || '-'}</Text>
               </Descriptions.Item>
               <Descriptions.Item label="归属项目">
-                <Tag color="blue">{String(versionDetail.productName || '-')}</Tag>
+                <Tag color="blue">{versionDetail.project_name || '-'}</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="版本类型">
-                <Tag color="geekblue">{String(versionDetail.type || '-')}</Tag>
+                <Tag color="geekblue">{versionDetail.type || 'k8s'}</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="来源工作流">
-                {String(versionDetail.workflowDisplayName || versionDetail.workflowName || '-')}
-                {versionDetail.taskId ? <Text type="secondary"> (Task #{String(versionDetail.taskId)})</Text> : null}
+                {versionDetail.workflow_name || '-'}
+                {versionDetail.task_id ? <Text type="secondary"> (Task #{versionDetail.task_id})</Text> : null}
               </Descriptions.Item>
               <Descriptions.Item label="状态">
-                {String(versionDetail.status || '-') === 'success' || String(versionDetail.status || '') === 'passed' ? (
-                  <Tag color="success">{String(versionDetail.status)}</Tag>
+                {versionDetail.status === 'success' || versionDetail.status === 'passed' ? (
+                  <Tag color="success">{versionDetail.status}</Tag>
                 ) : (
-                  <Tag color="default">{String(versionDetail.status || '-')}</Tag>
+                  <Tag color="default">{versionDetail.status || '-'}</Tag>
                 )}
               </Descriptions.Item>
               <Descriptions.Item label="标签">
                 <Space orientation="horizontal" size={4} wrap>
-                  {(versionDetail.labels as string[])?.length
-                    ? (versionDetail.labels as string[]).map((l) => <Tag key={l} color="orange">{l}</Tag>)
+                  {versionDetail.labels?.length
+                    ? versionDetail.labels.map((l) => <Tag key={l} color="orange">{l}</Tag>)
                     : '-'}
                 </Space>
               </Descriptions.Item>
-              <Descriptions.Item label="描述">{String(versionDetail.desc || '-')}</Descriptions.Item>
+              <Descriptions.Item label="描述">{versionDetail.desc || '-'}</Descriptions.Item>
               <Descriptions.Item label="创建">
-                {versionDetail.createdAt
-                  ? `${new Date(Number(versionDetail.createdAt) * 1000).toLocaleString()} · ${String(versionDetail.createdBy || '-')}`
+                {versionDetail.created_at
+                  ? `${new Date(Number(versionDetail.created_at) * 1000).toLocaleString()} · ${versionDetail.created_by || '-'}`
                   : '-'}
               </Descriptions.Item>
             </Descriptions>
+
+            {/* Helm Chart 清单 */}
+            {versionDetail.services && versionDetail.services.some((s) => s.chart_name) && (
+              <div style={{ marginTop: 20 }}>
+                <Title level={5} style={{ marginBottom: 8 }}>
+                  Chart 清单 ({versionDetail.services.filter((s) => s.chart_name).length})
+                </Title>
+                <Table
+                  dataSource={versionDetail.services.filter((s) => s.chart_name)}
+                  rowKey="service_name"
+                  pagination={false}
+                  size="small"
+                  columns={[
+                    {
+                      title: '服务名',
+                      dataIndex: 'service_name',
+                      key: 'service_name',
+                      render: (s) => <Text strong>{s}</Text>,
+                    },
+                    {
+                      title: 'Chart 包名',
+                      dataIndex: 'chart_name',
+                      key: 'chart_name',
+                    },
+                    {
+                      title: '版本号',
+                      dataIndex: 'chart_version',
+                      key: 'chart_version',
+                      render: (v) => <Tag color="blue">{v}</Tag>,
+                    },
+                    {
+                      title: '操作',
+                      key: 'action',
+                      width: 100,
+                      render: (_, svc) => (
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<CloudDownloadOutlined />}
+                          onClick={() => {
+                            if (versionDetail.project_name && versionDetail.version && svc.chart_name) {
+                              deliveryApi.downloadDeliveryChart(
+                                versionDetail.project_name,
+                                versionDetail.version,
+                                svc.chart_name
+                              );
+                            }
+                          }}
+                        >
+                          下载
+                        </Button>
+                      ),
+                    },
+                  ]}
+                />
+              </div>
+            )}
 
             <Title level={5} style={{ margin: '20px 0 8px' }}>
               服务镜像清单 ({versionDetailImages.length})
@@ -720,13 +850,10 @@ export const DeliveryPage: React.FC = () => {
             rules={[{ required: true, message: '请选择归属项目' }]}
             initialValue={projects[0]?.name}
           >
-            <Select placeholder="选择关联项目">
-              {projects.map((p) => (
-                <Option key={p.name} value={p.name}>
-                  {p.name}
-                </Option>
-              ))}
-            </Select>
+            <Select
+              placeholder="选择关联项目"
+              options={projects.map((p) => ({ value: p.name, label: p.name }))}
+            />
           </Form.Item>
 
           <Form.Item
@@ -744,6 +871,67 @@ export const DeliveryPage: React.FC = () => {
             <TextArea rows={3} placeholder="简述本次发布的特性功能或 Bug 修复" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Create Helm Release Modal */}
+      <CreateHelmReleaseModal
+        open={createHelmModalVisible}
+        onClose={() => setCreateHelmModalVisible(false)}
+        onSuccess={fetchData}
+        initialProjectName={projects[0]?.name}
+      />
+
+      {/* Download Chart Selection Modal */}
+      <Modal
+        title={`选择要下载的 Helm Chart (${downloadChartOptions?.version || ''})`}
+        open={downloadChartModalVisible}
+        onCancel={() => {
+          setDownloadChartModalVisible(false);
+          setDownloadChartOptions(null);
+        }}
+        footer={null}
+        width={500}
+      >
+        <div style={{ marginBottom: 12 }}>
+          <Text type="secondary">该版本包含多个 Helm Chart 组件包，请选择需要下载导出的 Chart：</Text>
+        </div>
+        <Table
+          dataSource={downloadChartOptions?.charts.map((c) => ({ chartName: c })) || []}
+          rowKey="chartName"
+          size="small"
+          pagination={false}
+          columns={[
+            {
+              title: 'Chart 名称',
+              dataIndex: 'chartName',
+              key: 'chartName',
+              render: (name) => <Text strong>{name}</Text>,
+            },
+            {
+              title: '操作',
+              key: 'action',
+              width: 100,
+              render: (_, item) => (
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<CloudDownloadOutlined />}
+                  onClick={() => {
+                    if (downloadChartOptions) {
+                      deliveryApi.downloadDeliveryChart(
+                        downloadChartOptions.projectName,
+                        downloadChartOptions.version,
+                        item.chartName
+                      );
+                    }
+                  }}
+                >
+                  下载
+                </Button>
+              ),
+            },
+          ]}
+        />
       </Modal>
     </div>
   );
