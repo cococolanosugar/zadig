@@ -35,12 +35,14 @@ import {
   SearchOutlined,
   CloseOutlined,
   EditOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { projectApi } from '../../api/project';
 import { useProjectStore, type ProjectItem } from '../../stores/project';
 import { feedback } from '../../utils/feedback';
+import { ProjectHierarchyDrawer } from './ProjectHierarchyDrawer';
 
 const { Title, Text } = Typography;
 
@@ -54,6 +56,7 @@ export const ProjectsPage: React.FC = () => {
   const [activeGroup, setActiveGroup] = useState<string>('all');
   const [groups, setGroups] = useState<Array<{ id: string; name: string }>>([]);
   const [searchText, setSearchText] = useState('');
+  const [hierarchyDrawerOpen, setHierarchyDrawerOpen] = useState<boolean>(false);
 
   const fetchProjects = useCallback(async () => {
     setLoading(true);
@@ -278,6 +281,15 @@ export const ProjectsPage: React.FC = () => {
               </Radio.Button>
             </Tooltip>
           </Radio.Group>
+
+          {/* Template Hierarchy Drawer Trigger */}
+          <Button
+            icon={<ApartmentOutlined />}
+            onClick={() => setHierarchyDrawerOpen(true)}
+            style={{ borderRadius: 4 }}
+          >
+            模板层级拓扑
+          </Button>
 
           {/* Create Project Modal */}
           <ModalForm
@@ -587,6 +599,12 @@ export const ProjectsPage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* 项目模板层级拓扑抽屉 */}
+      <ProjectHierarchyDrawer
+        open={hierarchyDrawerOpen}
+        onClose={() => setHierarchyDrawerOpen(false)}
+      />
     </div>
   );
 };
