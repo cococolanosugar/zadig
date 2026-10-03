@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Card,
   Row,
@@ -49,10 +49,19 @@ const findPendingApproval = (task: WorkflowTaskExecution | null) => {
 };
 
 export const PipelineExecutionPage: React.FC = () => {
-  const { name: workflowName, taskId, projectName } = useParams<{ name: string; taskId: string; projectName?: string }>();
+  const { name: routeWorkflowName, taskId: routeTaskId, projectName } = useParams<{ name: string; taskId: string; projectName?: string }>();
   const { currentProject } = useProjectStore();
   const activeProject = projectName || currentProject || 'default';
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // 深链承接（旧版路由参数名不匹配导致空壳）：
+  //  - /pipelines/custom/testcase/:workflow_name/:task_id/:test_name/:test_job_name
+  //  - 语义为「查看某工作流任务的测试报告」→ 解析出 workflow_name/task_id 后按任务执行视图承接
+  const testcaseSplat = location.pathname.split('/pipelines/custom/testcase/')[1];
+  const testcaseParts = testcaseSplat ? testcaseSplat.split('/').filter(Boolean) : [];
+  const effWorkflowName = routeWorkflowName || (testcaseParts.length >= 2 ? testcaseParts[0] : undefined);
+  const effTaskId = routeTaskId || (testcaseParts.length >= 2 ? testcaseParts[1] : undefined);
 
   const [task, setTask] = useState<WorkflowTaskExecution | null>(null);
   const [loading, setLoading] = useState(false);
@@ -90,12 +99,12 @@ export const PipelineExecutionPage: React.FC = () => {
   };
 
   const loadTask = useCallback(async () => {
-    if (!workflowName || !taskId) return;
+    if (!effWorkflowName || !effTaskId) return;
     setLoading(true);
     try {
       const res = await workflowApi.getWorkflowTask(
-        workflowName,
-        taskId,
+        effWorkflowName,
+        effTaskId,
         activeProject
       );
       if (res && res.task_id) {
@@ -120,12 +129,12 @@ export const PipelineExecutionPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [workflowName, taskId, activeProject]);
+  }, [effWorkflowName, effTaskId, activeProject]);
 
   const sseStreamUrl = useMemo(() => {
-    if (!workflowName || !taskId || !selectedJob) return undefined;
-    return `/api/logs/sse/v4/workflow/${encodeURIComponent(workflowName)}/${taskId}/${encodeURIComponent(selectedJob)}/1000`;
-  }, [workflowName, taskId, selectedJob]);
+    if (!effWorkflowName || !effTaskId || !selectedJob) return undefined;
+    return `/api/logs/sse/v4/workflow/${encodeURIComponent(effWorkflowName)}/${effTaskId}/${encodeURIComponent(selectedJob)}/1000`;
+  }, [effWorkflowName, effTaskId, selectedJob]);
 
   // Job 级 K8s 事件查看（对齐旧版执行详情）
   const [eventsOpen, setEventsOpen] = useState(false);
@@ -162,10 +171,10 @@ export const PipelineExecutionPage: React.FC = () => {
   };
 
   const handleRevertJob = async () => {
-    if (!workflowName || !taskId || !selectedJob) return;
+    if (!effWorkflowName || !effTaskId || !selectedJob) return;
     setRetrying(true);
     try {
-      await workflowApi.revertJob(workflowName, selectedJob, taskId);
+      await workflowApi.revertJob(effWorkflowName, selectedJob, effTaskId);
       feedback.message.success(`Job [${selectedJob}] 已重新入队`);
       await loadTask();
     } catch (err: unknown) {
@@ -177,17 +186,17 @@ export const PipelineExecutionPage: React.FC = () => {
   };
 
   const loadJobEvents = useCallback(async () => {
-    if (!workflowName || !taskId || !selectedJob) return;
+    if (!effWorkflowName || !effTaskId || !selectedJob) return;
     setEventsOpen(true);
     setEventsLoading(true);
     setJobEvents([]);
     try {
-      const list = await workflowApi.getJobEvents(workflowName, taskId, selectedJob, activeProject);
+      const list = await workflowApi.getJobEvents(effWorkflowName, effTaskId, selectedJob, activeProject);
       setJobEvents(list);
     } finally {
       setEventsLoading(false);
     }
-  }, [workflowName, taskId, selectedJob, activeProject]);
+  }, [effWorkflowName, effTaskId, selectedJob, activeProject]);
 
   useEffect(() => {
     loadTask();
@@ -253,7 +262,7 @@ export const PipelineExecutionPage: React.FC = () => {
               <BranchesOutlined style={{ fontSize: 20, color: '#0066ff' }} />
               <div>
                 <Title level={4} style={{ margin: 0 }}>
-                  {workflowName} #{taskId} 任务详情
+                  {effWorkflowName} #{effTaskId} 任务详情
                 </Title>
                 <Space orientation="horizontal" style={{ marginTop: 4 }}>
                   <Text type="secondary" style={{ fontSize: 13 }}>
@@ -278,10 +287,10 @@ export const PipelineExecutionPage: React.FC = () => {
                 <Popconfirm
                   title="确定取消正在运行的任务？"
                   onConfirm={async () => {
-                    if (!workflowName || !taskId) return;
+                    if (!effWorkflowName || !effTaskId) return;
                     setCancelling(true);
                     try {
-                      await workflowApi.cancelWorkflowTask(workflowName, taskId, activeProject);
+                      await workflowApi.cancelWorkflowTask(effWorkflowName, effTaskId, activeProject);
                       feedback.message.success('任务已取消');
                       await loadTask();
                     } catch (err: unknown) {
@@ -304,10 +313,10 @@ export const PipelineExecutionPage: React.FC = () => {
                   icon={<SyncOutlined />}
                   loading={retrying}
                   onClick={async () => {
-                    if (!workflowName || !taskId) return;
+                    if (!effWorkflowName || !effTaskId) return;
                     setRetrying(true);
                     try {
-                      await workflowApi.retryWorkflowTask(workflowName, taskId, activeProject);
+                      await workflowApi.retryWorkflowTask(effWorkflowName, effTaskId, activeProject);
                       feedback.message.success('任务已重新入队执行');
                       await loadTask();
                     } catch (err: unknown) {
@@ -325,13 +334,13 @@ export const PipelineExecutionPage: React.FC = () => {
                 <Popconfirm
                   title="以本次参数重新触发任务？"
                   onConfirm={async () => {
-                    if (!workflowName || !taskId) return;
+                    if (!effWorkflowName || !effTaskId) return;
                     setCloning(true);
                     try {
-                      const body = await workflowApi.cloneWorkflowTask(workflowName, taskId, activeProject);
+                      const body = await workflowApi.cloneWorkflowTask(effWorkflowName, effTaskId, activeProject);
                       const res = await workflowApi.triggerWorkflow(body);
                       feedback.message.success(`已按原参数重新触发 (新任务 #${res.task_id || 1})`);
-                      navigate(`/v1/pipelines/${workflowName}/task/${res.task_id || 1}`);
+                      navigate(`/v1/pipelines/${effWorkflowName}/task/${res.task_id || 1}`);
                     } catch (err: unknown) {
                       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '克隆触发失败';
                       feedback.message.error(msg);
