@@ -207,14 +207,14 @@ export const EnvironmentsPage: React.FC = () => {
     try {
       // 后端实际端点为 kube/pods（environments/:name/workloads/pods 不存在）
       const res = await http.get<PodItem[]>(
-        `/api/aslan/environment/kube/pods?projectName=${activeProject}&envName=${currentEnv}&production=false`
+        `/api/aslan/environment/kube/pods?projectName=${activeProject}&envName=${currentEnv}&production=${currentEnvObj?.production ?? false}`
       );
       setPods(Array.isArray(res) ? res : []);
     } catch {
       setPods([]);
       feedback.message.error('获取 Pod 列表失败，请稍后重试');
     }
-  }, [activeProject, currentEnv]);
+  }, [activeProject, currentEnv, currentEnvObj?.production]);
 
   // 全局变量加载（candidates + 环境当前 revision）
   const loadGlobalVariables = useCallback(async () => {
@@ -250,7 +250,7 @@ export const EnvironmentsPage: React.FC = () => {
     setGvSaving(true);
     try {
       await http.put(
-        `/api/aslan/environment/environments/${currentEnv}/k8s/globalVariables?projectName=${activeProject}&production=${currentEnvIsSleeping ? 'false' : 'false'}`,
+        `/api/aslan/environment/environments/${currentEnv}/k8s/globalVariables?projectName=${activeProject}&production=${currentEnvObj?.production ?? false}`,
         {
           current_revision: envRevision,
           global_variables: gvRows.map((r) => ({
