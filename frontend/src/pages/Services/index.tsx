@@ -15,6 +15,7 @@ import {
   Drawer,
   Table,
   Popconfirm,
+  Select,
 } from 'antd';
 import {
   PlusOutlined,
@@ -144,6 +145,41 @@ export const ServicesPage: React.FC = () => {
       setVersionLoading(false);
     }
   }, [selectedService, activeProject, isProduction]);
+
+  // 版本对比（GET /service/version/:name/diff?revisionA=&revisionB=）
+  const [diffA, setDiffA] = useState<number | null>(null);
+  const [diffB, setDiffB] = useState<number | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffResult, setDiffResult] = useState<{
+    yamlA: string; yamlB: string; variableA: string; variableB: string; type: string;
+  } | null>(null);
+
+  const handleCompare = async () => {
+    if (!selectedService || !activeProject || !diffA || !diffB) return;
+    setDiffLoading(true);
+    setDiffResult(null);
+    try {
+      const res = await http.get<{
+        type?: string; yaml_a?: string; yaml_b?: string; variable_yaml_a?: string; variable_yaml_b?: string;
+      }>(
+        `/api/aslan/service/version/${encodeURIComponent(selectedService)}/diff?projectName=${activeProject}&production=${isProduction}&revisionA=${diffA}&revisionB=${diffB}`,
+        { skipErrorHandler: true }
+      );
+      setDiffResult({
+        yamlA: res?.yaml_a || '',
+        yamlB: res?.yaml_b || '',
+        variableA: res?.variable_yaml_a || '',
+        variableB: res?.variable_yaml_b || '',
+        type: res?.type || 'k8s',
+      });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data
+        ?.message || '获取版本对比失败';
+      feedback.message.error(msg);
+    } finally {
+      setDiffLoading(false);
+    }
+  };
 
   const handleViewRevision = async (revision: number) => {
     if (!selectedService || !activeProject) return;
@@ -516,6 +552,56 @@ spec:
             <YamlEditor value={versionYaml.yaml} theme="light" height={320} />
           </Card>
         )}
+
+        {/* 版本对比（对齐旧版 DiffServiceVersions） */}
+        <Card size="small" style={{ marginTop: 16 }} title="版本对比">
+          <Space style={{ marginBottom: 12 }} wrap>
+            <Select
+              placeholder="版本 A"
+              style={{ width: 140 }}
+              value={diffA}
+              onChange={setDiffA}
+              options={versions.map((v) => ({ value: v.revision, label: `v${v.revision}` }))}
+            />
+            <Text type="secondary">→</Text>
+            <Select
+              placeholder="版本 B"
+              style={{ width: 140 }}
+              value={diffB}
+              onChange={setDiffB}
+              options={versions.map((v) => ({ value: v.revision, label: `v${v.revision}` }))}
+            />
+            <Button type="primary" loading={diffLoading} disabled={!diffA || !diffB || diffA === diffB} onClick={handleCompare}>
+              对比
+            </Button>
+          </Space>
+          {diffResult && (
+            <div>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {diffResult.type === 'helm' ? 'Helm 服务：对比 values.yaml' : 'K8s 服务：对比服务 YAML'}
+              </Text>
+              {diffResult.type === 'helm' ? (
+                <div style={{ marginTop: 8 }}>
+                  <YamlDiffEditor original={diffResult.variableA} modified={diffResult.variableB} theme="light" height={360} />
+                </div>
+              ) : (
+                <>
+                  <div style={{ marginTop: 8 }}>
+                    <YamlDiffEditor original={diffResult.yamlA} modified={diffResult.yamlB} theme="light" height={360} />
+                  </div>
+                  {(diffResult.variableA || diffResult.variableB) && (
+                    <>
+                      <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>变量 YAML 对比</Text>
+                      <div style={{ marginTop: 8 }}>
+                        <YamlDiffEditor original={diffResult.variableA} modified={diffResult.variableB} theme="light" height={240} />
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </Card>
       </Drawer>
     </div>
   );
