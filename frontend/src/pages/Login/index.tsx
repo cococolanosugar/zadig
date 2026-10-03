@@ -12,7 +12,7 @@ import {
   RocketOutlined,
   DownloadOutlined,
 } from '@ant-design/icons';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { authApi } from '../../api/auth';
 import { useAuthStore } from '../../stores/auth';
 import { feedback } from '../../utils/feedback';
@@ -91,6 +91,7 @@ export const LoginPage: React.FC = () => {
     phone?: string;
     identityType?: string;
   } | null>(null);
+  const [registerEnabled, setRegisterEnabled] = useState(false);
 
   // 第三方登录（Dex）：/api/v1/login-enabled 为公开端点；enabled 时入口跳转 /api/v1/login（Dex 连接器列表页）
   useEffect(() => {
@@ -103,6 +104,15 @@ export const LoginPage: React.FC = () => {
         }
       })
       .catch(() => setConnectors([]));
+
+    authApi
+      .getFeature('RegisterTrigger')
+      .then((res) => {
+        if (res?.enabled) {
+          setRegisterEnabled(true);
+        }
+      })
+      .catch(() => setRegisterEnabled(false));
   }, [resetMode]);
 
   const navigate = useNavigate();
@@ -679,7 +689,12 @@ export const LoginPage: React.FC = () => {
               </Button>
             </Form.Item>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
+            <div style={{ display: 'flex', justifyContent: registerEnabled ? 'space-between' : 'flex-end', alignItems: 'center', marginBottom: 24 }}>
+              {registerEnabled && (
+                <Link to="/signup" style={{ fontSize: 13, color: '#38bdf8' }}>
+                  注册新账号
+                </Link>
+              )}
               <a
                 onClick={() => {
                   setRetrieveResult(null);

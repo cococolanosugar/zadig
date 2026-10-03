@@ -12,6 +12,7 @@ export type JobType =
   | 'approval'
   | 'custom-deploy'
   | 'freestyle'
+  | 'sql'
   | 'plugin'
   | (string & {});
 
@@ -23,6 +24,9 @@ export interface WorkflowJobSpec {
   branch?: string;
   image?: string;
   script?: string;
+  sql?: string;
+  type?: string;
+  id?: string;
   dockerfile?: string;
   [key: string]: unknown;
 }
@@ -643,6 +647,30 @@ export const workflowApi = {
         skipErrorHandler: true,
       }
     );
+  },
+
+  /**
+   * 校验 SQL 脚本语法（支持 MySQL / MariaDB）
+   * POST /api/aslan/workflow/v4/sql/validate (pkg/microservice/aslan/core/workflow/handler/router.go:123)
+   */
+  async validateSQL(payload: {
+    type: 'mysql' | 'mariadb';
+    sql: string;
+  }): Promise<Array<{ message: string }>> {
+    try {
+      const res = await http.post<Array<{ message: string }>>(
+        '/api/aslan/workflow/v4/sql/validate',
+        payload,
+        { skipErrorHandler: true }
+      );
+      return Array.isArray(res) ? res : [];
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string; description?: string } } })?.response?.data?.description ||
+        (err as { message?: string })?.message ||
+        'SQL 校验失败';
+      return [{ message: msg }];
+    }
   },
 };
 
