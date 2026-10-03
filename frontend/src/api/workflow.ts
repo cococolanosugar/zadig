@@ -1,4 +1,5 @@
 import http from './client';
+import { subscribeSSE } from '../utils/sse';
 
 // 与后端 pkg/microservice/aslan/config/consts.go JobType 常量对齐（常用子集）
 export type JobType =
@@ -461,6 +462,34 @@ export const workflowApi = {
       `/api/aslan/workflow/v4/workflowtask/debug/${encodeURIComponent(workflowName)}/${encodeURIComponent(jobName)}/task/${taskId}/${encodeURIComponent(position)}${q}`,
       { skipErrorHandler: true }
     );
+  },
+
+  /**
+   * Subscribe to running workflow tasks SSE stream.
+   * GET /api/aslan/workflow/sse/workflowTasks/running
+   */
+  subscribeRunningWorkflowTasksSSE(
+    onMessage: (tasks: WorkflowTaskPreview[]) => void,
+    onError?: (err: unknown) => void
+  ): () => void {
+    return subscribeSSE<WorkflowTaskPreview[]>('/api/aslan/workflow/sse/workflowTasks/running', {
+      onMessage,
+      onError,
+    });
+  },
+
+  /**
+   * Subscribe to pending workflow tasks SSE stream.
+   * GET /api/aslan/workflow/sse/workflowTasks/pending
+   */
+  subscribePendingWorkflowTasksSSE(
+    onMessage: (tasks: WorkflowTaskPreview[]) => void,
+    onError?: (err: unknown) => void
+  ): () => void {
+    return subscribeSSE<WorkflowTaskPreview[]>('/api/aslan/workflow/sse/workflowTasks/pending', {
+      onMessage,
+      onError,
+    });
   },
 };
 
