@@ -34,7 +34,13 @@ export const QualityCenterPage: React.FC = () => {
 
   // Extract test name and task id from routes
   const match = location.pathname.match(/\/test\/(?:detail\/)?(?:function\/)?([^/]+)(?:\/([^/]+))?/);
-  const routeTestName = match?.[1];
+  // 深链承接：
+  //  - /test/add/function → 打开「新建测试」弹窗（旧版语义），'add' 不是测试名
+  //  - /test/testcase/function/:workflow/:task_id/:test_name → 重定向到工作流任务执行视图
+  const isAddDeepLink = /\/test\/add(\/|$)/.test(location.pathname);
+  const isTestcaseDeepLink = location.pathname.includes('/test/testcase/function/');
+  const routeTestName =
+    match?.[1] && !['add', 'testcase'].includes(match[1]) ? match[1] : undefined;
   const routeTaskId = match?.[2];
 
   const [loading, setLoading] = useState(false);
@@ -307,6 +313,25 @@ export const QualityCenterPage: React.FC = () => {
       }
     }
   }, [routeTestName, tests, openTestDetail, projectName]);
+
+  // 深链：/test/add/function → 自动打开新建测试弹窗
+  useEffect(() => {
+    if (isAddDeepLink) {
+      setCreateModalVisible(true);
+    }
+  }, [isAddDeepLink]);
+
+  // 深链：/test/testcase/function/:workflow_name/:task_id/:test_name → 工作流任务执行视图
+  useEffect(() => {
+    if (!isTestcaseDeepLink) return;
+    const parts = location.pathname.split('/test/testcase/function/')[1]?.split('/') || [];
+    if (parts.length >= 2) {
+      navigate(`/v1/pipelines/${parts[0]}/task/${parts[1]}`, { replace: true });
+    } else if (projectName) {
+      navigate(projectName ? `/v1/projects/detail/${projectName}/test` : '/v1/tests', { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTestcaseDeepLink]);
 
   const handleRunTest = async (record: TestItem) => {
     feedback.message.loading(`正在对 [${record.name}] 触发自动化测试任务...`, 1);
