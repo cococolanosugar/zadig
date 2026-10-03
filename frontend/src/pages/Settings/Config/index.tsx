@@ -35,11 +35,15 @@ import {
   RobotOutlined,
   ClearOutlined,
   ReloadOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import http from '../../../api/client';
-import systemConfigApi, { type CleanCacheState } from '../../../api/systemConfig';
+import systemConfigApi, {
+  type CleanCacheState,
+  type SecurityAndPrivacySettings,
+} from '../../../api/systemConfig';
 import { feedback } from '../../../utils/feedback';
 
 const { Title, Text } = Typography;
@@ -128,6 +132,10 @@ export const SystemConfigPage: React.FC = () => {
   const [cronForm] = Form.useForm();
   const [cleaningOneClick, setCleaningOneClick] = useState(false);
   const [cleaningShared, setCleaningShared] = useState(false);
+
+  // 安全与隐私 (Security)
+  const [securityForm] = Form.useForm();
+  const [savingSecurity, setSavingSecurity] = useState(false);
 
   // Data states
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
@@ -218,13 +226,26 @@ export const SystemConfigPage: React.FC = () => {
         } finally {
           setCleanLoading(false);
         }
+      } else if (tab === 'security') {
+        try {
+          const res = await systemConfigApi.getSecuritySettings();
+          if (res) {
+            securityForm.setFieldsValue({
+              token_expiration_time: res.token_expiration_time ?? 24,
+              mfa_enabled: res.mfa_enabled ?? false,
+              improvement_plan: res.improvement_plan ?? true,
+            });
+          }
+        } catch {
+          // ignore
+        }
       }
     } catch {
       // Graceful fallback
     } finally {
       setLoading(false);
     }
-  }, [emailForm, concurrencyForm, proxyForm, aiReviewForm, cronForm]);
+  }, [emailForm, concurrencyForm, proxyForm, aiReviewForm, cronForm, securityForm]);
 
   useEffect(() => {
     loadTabData(activeTab);
@@ -308,6 +329,24 @@ export const SystemConfigPage: React.FC = () => {
         }
       },
     });
+  };
+
+  const handleSaveSecurity = async (values: SecurityAndPrivacySettings) => {
+    setSavingSecurity(true);
+    try {
+      await systemConfigApi.updateSecuritySettings({
+        token_expiration_time: Number(values.token_expiration_time) || 24,
+        mfa_enabled: Boolean(values.mfa_enabled),
+        improvement_plan: Boolean(values.improvement_plan),
+      });
+      feedback.message.success('安全与隐私设置已保存');
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '保存安全设置失败';
+      feedback.message.error(msg);
+    } finally {
+      setSavingSecurity(false);
+    }
   };
 
   const handleTabChange = (key: string) => {
@@ -511,6 +550,14 @@ export const SystemConfigPage: React.FC = () => {
       label: (
         <span>
           <ClearOutlined /> 缓存清理
+        </span>
+      ),
+    },
+    {
+      key: 'security',
+      label: (
+        <span>
+          <SafetyCertificateOutlined /> 安全与隐私
         </span>
       ),
     },
@@ -1060,6 +1107,97 @@ export const SystemConfigPage: React.FC = () => {
                 </Button>
               </div>
             </Card>
+          </div>
+        ) : activeTab === 'security' ? (
+          <div style={{ maxWidth: 760 }}>
+            <Alert
+              type="info"
+              showIcon
+              title={
+                <span>
+                  配置系统认证令牌有效期与全局双因子认证策略。详情请参考{' '}
+                  <a
+                    href="https://docs.koderover.com/zadig/settings/system-settings/#安全与隐私"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    安全与隐私文档
+                  </a>
+                </span>
+              }
+              style={{ marginBottom: 20 }}
+            />
+
+            <Form
+              form={securityForm}
+              layout="vertical"
+              onFinish={handleSaveSecurity}
+              initialValues={{
+                token_expiration_time: 24,
+                mfa_enabled: false,
+                improvement_plan: true,
+              }}
+            >
+              <Card
+                title="会话与认证安全"
+                variant="borderless"
+                style={{ marginBottom: 20, background: '#fafbfc', border: '1px solid #f0f0f0', borderRadius: 8 }}
+              >
+                <Form.Item
+                  name="token_expiration_time"
+                  label="登录 Token 有效期（小时）"
+                  rules={[
+                    { required: true, message: '请输入 Token 有效期' },
+                    {
+                      type: 'number',
+                      min: 1,
+                      max: 8640,
+                      message: '有效期范围为 1 ~ 8640 小时 (最长 360 天)',
+                    },
+                  ]}
+                  extra="用户登录令牌超时未活动后需重新认证，默认 24 小时，最大不得超过 8640 小时（360 天）。"
+                >
+                  <InputNumber min={1} max={8640} style={{ width: 220 }} />
+                </Form.Item>
+
+                <Divider style={{ margin: '16px 0' }} />
+
+                <Form.Item
+                  name="mfa_enabled"
+                  label={
+                    <Space size={8}>
+                      <span>全员强制多因素认证 (MFA)</span>
+                      <Tag color="gold">需专业版/企业版许可</Tag>
+                    </Space>
+                  }
+                  valuePropName="checked"
+                  extra="启用后，所有账号登录时均须完成基于 TOTP 的多因子认证绑定与校验。若当前集群未授权专业版，开启将受后端鉴权保护拦截。"
+                >
+                  <Switch />
+                </Form.Item>
+              </Card>
+
+              <Card
+                title="数据与体验改进"
+                variant="borderless"
+                style={{ marginBottom: 24, background: '#fafbfc', border: '1px solid #f0f0f0', borderRadius: 8 }}
+              >
+                <Form.Item
+                  name="improvement_plan"
+                  label="参与 Zadig 用户体验改进计划"
+                  valuePropName="checked"
+                  extra="开启后向 KodeRover 发送脱敏的产品基础使用统计，帮助我们持续优化系统稳定性与性能（绝不采集业务代码与敏感数据）。"
+                >
+                  <Switch />
+                </Form.Item>
+              </Card>
+
+              <Form.Item>
+                <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={savingSecurity}>
+                  保存安全设置
+                </Button>
+              </Form.Item>
+            </Form>
           </div>
         ) : activeTab === 'aiCodeReview' ? (
           <div style={{ maxWidth: 720 }}>
