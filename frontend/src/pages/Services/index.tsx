@@ -30,6 +30,7 @@ import {
   CloudSyncOutlined,
   FileAddOutlined,
   AppstoreAddOutlined,
+  AppstoreOutlined,
 } from '@ant-design/icons';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/project';
@@ -40,6 +41,7 @@ import { feedback } from '../../utils/feedback';
 import { serviceApi, ServiceDetail } from '../../api/service';
 import ImportFromRepoModal, { SyncServiceInfo } from './ImportFromRepoModal';
 import ImportFromTemplateModal, { SyncTemplateServiceInfo } from './ImportFromTemplateModal';
+import ServiceModulesDrawer from './ServiceModulesDrawer';
 
 const { Title, Text } = Typography;
 
@@ -83,6 +85,9 @@ export const ServicesPage: React.FC = () => {
   // 模板导入 / 同步状态
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [syncTemplateInfo, setSyncTemplateInfo] = useState<SyncTemplateServiceInfo | null>(null);
+
+  // 组件模块管理抽屉
+  const [modulesDrawerOpen, setModulesDrawerOpen] = useState(false);
 
   const loadServices = useCallback(async () => {
     if (!activeProject) {
@@ -439,6 +444,13 @@ spec:
                 </Button>
               )}
               <Button
+                icon={<AppstoreOutlined />}
+                disabled={!selectedService}
+                onClick={() => setModulesDrawerOpen(true)}
+              >
+                组件模块
+              </Button>
+              <Button
                 type="primary"
                 icon={<SaveOutlined />}
                 onClick={handleSaveYaml}
@@ -759,6 +771,15 @@ spec:
             setSelectedService(name);
           }
         }}
+      />
+
+      {/* Service Modules Management Drawer */}
+      <ServiceModulesDrawer
+        open={modulesDrawerOpen}
+        onClose={() => setModulesDrawerOpen(false)}
+        serviceName={selectedService || ''}
+        projectName={activeProject || ''}
+        isProduction={isProduction}
       />
     </div>
   );
