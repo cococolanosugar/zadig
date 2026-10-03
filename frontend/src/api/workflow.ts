@@ -431,6 +431,37 @@ export const workflowApi = {
       { skipErrorHandler: true }
     );
   },
+
+  /**
+   * Enable debug mode for a running workflow task.
+   * POST /api/aslan/workflow/v4/workflowtask/debug/:workflowName/task/:taskID?projectName=
+   */
+  async enableWorkflowTaskDebug(workflowName: string, taskId: number | string, projectName?: string): Promise<unknown> {
+    const q = projectName ? `?projectName=${encodeURIComponent(projectName)}` : '';
+    return http.post(
+      `/api/aslan/workflow/v4/workflowtask/debug/${encodeURIComponent(workflowName)}/task/${taskId}${q}`,
+      {},
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Finish / stop debug shell for a workflow job task.
+   * DELETE /api/aslan/workflow/v4/workflowtask/debug/:workflowName/:jobName/task/:taskID/:position?projectName=
+   */
+  async stopWorkflowTaskJobDebug(
+    workflowName: string,
+    jobName: string,
+    taskId: number | string,
+    position = 'before',
+    projectName?: string
+  ): Promise<unknown> {
+    const q = projectName ? `?projectName=${encodeURIComponent(projectName)}` : '';
+    return http.delete(
+      `/api/aslan/workflow/v4/workflowtask/debug/${encodeURIComponent(workflowName)}/${encodeURIComponent(jobName)}/task/${taskId}/${encodeURIComponent(position)}${q}`,
+      { skipErrorHandler: true }
+    );
+  },
 };
 
 export default workflowApi;
