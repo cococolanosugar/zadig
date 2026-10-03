@@ -17,6 +17,7 @@ import {
   Tag,
   Empty,
   AutoComplete,
+  Alert,
 } from 'antd';
 import {
   ClusterOutlined,
@@ -32,7 +33,6 @@ import { feedback } from '../../utils/feedback';
 import { useProjectStore } from '../../stores/project';
 
 const { Title, Text, Paragraph } = Typography;
-const { Option } = Select;
 
 interface ClusterItem {
   id: string;
@@ -53,6 +53,7 @@ export const EnvironmentWizardPage: React.FC = () => {
   const projectName = routeProject || currentProject || '';
   const navigate = useNavigate();
 
+  const [envType, setEnvType] = useState<'k8s' | 'helm' | 'pm' | 'external'>('k8s');
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [loadingResources, setLoadingResources] = useState<boolean>(false);
@@ -81,8 +82,29 @@ export const EnvironmentWizardPage: React.FC = () => {
     }
   }, []);
 
-  // Load clusters and project services
+  // Load project deploy type, clusters and services
   useEffect(() => {
+    if (!projectName) return;
+    // 探测项目部署架构类型 (k8s / helm / pm / external)
+    http
+      .get<{ product_feature?: { basic_facility?: string; deploy_type?: string; create_env_type?: string } }>(
+        `/api/aslan/project/products/${encodeURIComponent(projectName)}`,
+        { skipErrorHandler: true }
+      )
+      .then((res) => {
+        const feature = res?.product_feature;
+        if (feature?.basic_facility === 'cloud_host') {
+          setEnvType('pm');
+        } else if (feature?.deploy_type === 'helm') {
+          setEnvType('helm');
+        } else if (feature?.create_env_type === 'external') {
+          setEnvType('external');
+        } else {
+          setEnvType('k8s');
+        }
+      })
+      .catch(() => setEnvType('k8s'));
+
     const fetchResources = async () => {
       setLoadingResources(true);
       try {
@@ -92,7 +114,7 @@ export const EnvironmentWizardPage: React.FC = () => {
           }),
           projectName
             ? http.get<ServiceItem[] | { data: ServiceItem[] }>(
-                `/api/aslan/service/services?projectName=${projectName}`,
+                `/api/aslan/service/services?projectName=${encodeURIComponent(projectName)}`,
                 { skipErrorHandler: true }
               )
             : Promise.resolve([]),
@@ -128,7 +150,11 @@ export const EnvironmentWizardPage: React.FC = () => {
   const handleNext = async () => {
     try {
       if (currentStep === 0) {
-        await form.validateFields(['env_name', 'cluster_id', 'namespace']);
+        if (envType === 'pm') {
+          await form.validateFields(['env_name', 'alias']);
+        } else {
+          await form.validateFields(['env_name', 'cluster_id', 'namespace']);
+        }
       }
       if (currentStep < 2) {
         setCurrentStep((prev) => prev + 1);
@@ -149,28 +175,52 @@ export const EnvironmentWizardPage: React.FC = () => {
       const values = await form.validateFields();
       setSubmitting(true);
 
-      const payload = [
-        {
-          product_name: projectName,
-          env_name: values.env_name,
-          alias: values.alias || values.env_name,
-          namespace: values.namespace || `${projectName}-env-${values.env_name}`,
-          cluster_id: values.cluster_id,
-          production: Boolean(values.production),
-          services: selectedServices.map((name) => [
-            {
-              service_name: name,
-              type: 'k8s',
-            },
-          ]),
-        },
-      ];
+      // 主机 (PM) 环境采用 /init/type/pm 端点；容器环境 (K8s/Helm) 采用 /environments?type= 端点
+      if (envType === 'pm') {
+        const payload = [
+          {
+            product_name: projectName,
+            env_name: values.env_name,
+            alias: values.alias || values.env_name,
+            services: selectedServices.map((name) => [
+              {
+                service_name: name,
+              },
+            ]),
+          },
+        ];
+        await http.post(
+          `/api/aslan/environment/init/type/pm?projectName=${encodeURIComponent(projectName)}`,
+          payload
+        );
+      } else {
+        const payload = [
+          {
+            product_name: projectName,
+            env_name: values.env_name,
+            alias: values.alias || values.env_name,
+            namespace: values.namespace || `${projectName}-env-${values.env_name}`,
+            cluster_id: values.cluster_id,
+            production: Boolean(values.production),
+            services: selectedServices.map((name) => [
+              {
+                service_name: name,
+                type: envType === 'helm' ? 'helm' : 'k8s',
+              },
+            ]),
+          },
+        ];
 
-      await http.post(`/api/aslan/environment/environments?projectName=${projectName}&type=k8s`, payload);
-      feedback.message.success(`环境 [${values.env_name}] 创建成功！正在调度集群初始化...`);
+        await http.post(
+          `/api/aslan/environment/environments?projectName=${encodeURIComponent(projectName)}&type=${envType}`,
+          payload
+        );
+      }
+
+      feedback.message.success(`环境 [${values.env_name}] 创建成功！正在调度初始化...`);
       navigate(`/v1/projects/detail/${projectName}/envs`);
     } catch (err: any) {
-      feedback.message.error(err?.message || '环境创建失败，请检查集群资源配额与命名空间');
+      feedback.message.error(err?.message || '环境创建失败，请检查参数与集群配额');
     } finally {
       setSubmitting(false);
     }
@@ -209,6 +259,9 @@ export const EnvironmentWizardPage: React.FC = () => {
             </Title>
             <Text type="secondary" style={{ fontSize: 13 }}>
               所属项目: <Tag color="blue">{projectName || '默认项目'}</Tag>
+              <Tag color={envType === 'helm' ? 'cyan' : envType === 'pm' ? 'purple' : 'geekblue'} style={{ marginLeft: 8 }}>
+                {envType === 'pm' ? '主机 (PM) 环境' : envType === 'helm' ? 'Helm Chart 环境' : 'Kubernetes 原生环境'}
+              </Tag>
             </Text>
           </div>
           <Button
@@ -259,83 +312,95 @@ export const EnvironmentWizardPage: React.FC = () => {
                 <Input placeholder="例如: 日常研发联调环境" />
               </Form.Item>
 
-              <Form.Item
-                name="cluster_id"
-                label="目标 Kubernetes 集群"
-                rules={[{ required: true, message: '请选择部署集群' }]}
-              >
-                <Select
-                  placeholder="选择集群"
-                  loading={loadingResources}
-                  onChange={(val) => fetchNamespaces(val)}
-                >
-                  {clusters.map((c) => (
-                    <Option key={c.id} value={c.id}>
-                      {c.name} {c.is_local ? '(当前控制面集群)' : ''}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
+              {envType === 'pm' && (
+                <Alert
+                  type="info"
+                  showIcon
+                  title="主机 (PM) 交付架构环境"
+                  description="当前项目为物理机/虚拟机架构。创建主机环境时将与主机探活服务直接关联，无需选择或分配 Kubernetes 集群和命名空间。"
+                  style={{ marginBottom: 16 }}
+                />
+              )}
 
-              <Form.Item
-                name="namespace"
-                label="Kubernetes Namespace (命名空间)"
-                rules={[{ required: true, message: '请输入命名空间' }]}
-                extra={
-                  <div>
-                    <div>系统将在选定集群中自动创建或托管该 Namespace（支持自由输入或选择集群现有命名空间）。</div>
-                    {loadingNamespaces && (
-                      <div style={{ marginTop: 4 }}>
-                        <Text type="secondary" style={{ fontSize: 12 }}>正在从目标集群检测命名空间...</Text>
-                      </div>
-                    )}
-                    {availableNamespaces.length > 0 && (
-                      <div style={{ marginTop: 6 }}>
-                        <Text type="secondary" style={{ fontSize: 12 }}>集群已发现命名空间快捷填入: </Text>
-                        <Space size={[4, 4]} wrap style={{ marginTop: 4 }}>
-                          {availableNamespaces.map((ns) => (
-                            <Tag
-                              key={ns.name}
-                              color={ns.used_by_other_env ? 'default' : 'geekblue'}
-                              style={{
-                                cursor: ns.used_by_other_env ? 'not-allowed' : 'pointer',
-                                opacity: ns.used_by_other_env ? 0.6 : 1,
-                              }}
-                              onClick={() => {
-                                if (!ns.used_by_other_env) {
-                                  form.setFieldsValue({ namespace: ns.name });
-                                }
-                              }}
-                            >
-                              {ns.name} {ns.used_by_other_env ? '(已占用)' : ''}
-                            </Tag>
-                          ))}
-                        </Space>
-                      </div>
-                    )}
-                  </div>
-                }
-              >
-                <AutoComplete
-                  placeholder={`例如: ${projectName}-env-dev 或从下拉列表中选择`}
-                  options={availableNamespaces.map((ns) => ({
-                    value: ns.name,
-                    disabled: ns.used_by_other_env,
-                    label: (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontWeight: ns.used_by_other_env ? 'normal' : 500 }}>{ns.name}</span>
-                        {ns.used_by_other_env ? (
-                          <Tag color="warning" style={{ marginInlineEnd: 0 }}>已被其他环境占用</Tag>
-                        ) : (
-                          <Tag color="success" style={{ marginInlineEnd: 0 }}>集群可用</Tag>
+              {envType !== 'pm' && (
+                <>
+                  <Form.Item
+                    name="cluster_id"
+                    label="目标 Kubernetes 集群"
+                    rules={[{ required: true, message: '请选择部署集群' }]}
+                  >
+                    <Select
+                      placeholder="选择集群"
+                      loading={loadingResources}
+                      onChange={(val) => fetchNamespaces(val)}
+                      options={clusters.map((c) => ({
+                        value: c.id,
+                        label: `${c.name} ${c.is_local ? '(当前控制面集群)' : ''}`,
+                      }))}
+                    />
+                  </Form.Item>
+
+                  <Form.Item
+                    name="namespace"
+                    label="Kubernetes Namespace (命名空间)"
+                    rules={[{ required: true, message: '请输入命名空间' }]}
+                    extra={
+                      <div>
+                        <div>系统将在选定集群中自动创建或托管该 Namespace（支持自由输入或选择集群现有命名空间）。</div>
+                        {loadingNamespaces && (
+                          <div style={{ marginTop: 4 }}>
+                            <Text type="secondary" style={{ fontSize: 12 }}>正在从目标集群检测命名空间...</Text>
+                          </div>
+                        )}
+                        {availableNamespaces.length > 0 && (
+                          <div style={{ marginTop: 6 }}>
+                            <Text type="secondary" style={{ fontSize: 12 }}>集群已发现命名空间快捷填入: </Text>
+                            <Space size={[4, 4]} wrap style={{ marginTop: 4 }}>
+                              {availableNamespaces.map((ns) => (
+                                <Tag
+                                  key={ns.name}
+                                  color={ns.used_by_other_env ? 'default' : 'geekblue'}
+                                  style={{
+                                    cursor: ns.used_by_other_env ? 'not-allowed' : 'pointer',
+                                    opacity: ns.used_by_other_env ? 0.6 : 1,
+                                  }}
+                                  onClick={() => {
+                                    if (!ns.used_by_other_env) {
+                                      form.setFieldsValue({ namespace: ns.name });
+                                    }
+                                  }}
+                                >
+                                  {ns.name} {ns.used_by_other_env ? '(已占用)' : ''}
+                                </Tag>
+                              ))}
+                            </Space>
+                          </div>
                         )}
                       </div>
-                    ),
-                  }))}
-                >
-                  <Input placeholder={`例如: ${projectName}-env-dev`} />
-                </AutoComplete>
-              </Form.Item>
+                    }
+                  >
+                    <AutoComplete
+                      placeholder={`例如: ${projectName}-env-dev 或从下拉列表中选择`}
+                      options={availableNamespaces.map((ns) => ({
+                        value: ns.name,
+                        disabled: ns.used_by_other_env,
+                        label: (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontWeight: ns.used_by_other_env ? 'normal' : 500 }}>{ns.name}</span>
+                            {ns.used_by_other_env ? (
+                              <Tag color="warning" style={{ marginInlineEnd: 0 }}>已被其他环境占用</Tag>
+                            ) : (
+                              <Tag color="success" style={{ marginInlineEnd: 0 }}>集群可用</Tag>
+                            )}
+                          </div>
+                        ),
+                      }))}
+                    >
+                      <Input placeholder={`例如: ${projectName}-env-dev`} />
+                    </AutoComplete>
+                  </Form.Item>
+                </>
+              )}
 
               <Form.Item
                 name="production"
@@ -414,12 +479,21 @@ export const EnvironmentWizardPage: React.FC = () => {
                 <Descriptions.Item label="显示别名">
                   {form.getFieldValue('alias') || '-'}
                 </Descriptions.Item>
-                <Descriptions.Item label="目标集群 ID">
-                  {form.getFieldValue('cluster_id')}
+                <Descriptions.Item label="交付架构类型">
+                  <Tag color={envType === 'helm' ? 'cyan' : envType === 'pm' ? 'purple' : 'geekblue'}>
+                    {envType === 'pm' ? '主机 (PM) 架构' : envType === 'helm' ? 'Helm Chart 架构' : 'Kubernetes 原生'}
+                  </Tag>
                 </Descriptions.Item>
-                <Descriptions.Item label="K8s 命名空间">
-                  <Text code>{form.getFieldValue('namespace')}</Text>
-                </Descriptions.Item>
+                {envType !== 'pm' && (
+                  <>
+                    <Descriptions.Item label="目标集群 ID">
+                      {form.getFieldValue('cluster_id')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="K8s 命名空间">
+                      <Text code>{form.getFieldValue('namespace')}</Text>
+                    </Descriptions.Item>
+                  </>
+                )}
                 <Descriptions.Item label="环境类型">
                   {form.getFieldValue('production') ? (
                     <Tag color="red">生产环境</Tag>
