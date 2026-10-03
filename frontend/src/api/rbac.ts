@@ -36,6 +36,23 @@ export interface RoleBindingResp {
   roles: string[];
 }
 
+// types.RoleTemplate — GET /api/v1/policy/role-templates (pkg/microservice/user/core/handler/router.go:111-118)
+export interface RoleTemplate {
+  id: number;
+  name: string;
+  desc: string;
+  type: number; // 0: Custom, 1: Predefined (内置模板不可编辑/删除)
+}
+
+// types.DetailedRoleTemplate — GET /api/v1/policy/role-templates/:name
+export interface DetailedRoleTemplate {
+  id: number;
+  name: string;
+  namespace?: string;
+  desc: string;
+  rules?: Array<{ resource: string; verbs: string[] }>;
+}
+
 // ---------- API ----------
 
 const nsQuery = (projectName: string) => `namespace=${encodeURIComponent(projectName)}`;
@@ -131,6 +148,56 @@ export const rbacApi = {
     } catch {
       return [];
     }
+  },
+
+  /**
+   * 角色模板列表。
+   * GET /api/v1/policy/role-templates (pkg/microservice/user/core/handler/router.go:115)
+   */
+  async listRoleTemplates(): Promise<RoleTemplate[]> {
+    try {
+      const res = await http.get<RoleTemplate[]>('/api/v1/policy/role-templates', {
+        skipErrorHandler: true,
+      });
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  /**
+   * 角色模板详情（含规则 actions）。
+   * GET /api/v1/policy/role-templates/:name (pkg/microservice/user/core/handler/router.go:116)
+   */
+  async getRoleTemplate(name: string): Promise<DetailedRoleTemplate> {
+    return http.get<DetailedRoleTemplate>(
+      `/api/v1/policy/role-templates/${encodeURIComponent(name)}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * 创建角色模板。
+   * POST /api/v1/policy/role-templates (pkg/microservice/user/core/handler/router.go:113)
+   */
+  async createRoleTemplate(payload: { name: string; desc?: string; actions: string[] }): Promise<unknown> {
+    return http.post('/api/v1/policy/role-templates', payload, { skipErrorHandler: true });
+  },
+
+  /**
+   * 更新自定义角色模板。
+   * PUT /api/v1/policy/role-templates/:name (pkg/microservice/user/core/handler/router.go:114)
+   */
+  async updateRoleTemplate(name: string, payload: { desc?: string; actions: string[] }): Promise<unknown> {
+    return http.put(`/api/v1/policy/role-templates/${encodeURIComponent(name)}`, { ...payload, name }, { skipErrorHandler: true });
+  },
+
+  /**
+   * 删除自定义角色模板（预定义模板不可删）。
+   * DELETE /api/v1/policy/role-templates/:name (pkg/microservice/user/core/handler/router.go:117)
+   */
+  async deleteRoleTemplate(name: string): Promise<unknown> {
+    return http.delete(`/api/v1/policy/role-templates/${encodeURIComponent(name)}`, { skipErrorHandler: true });
   },
 };
 
