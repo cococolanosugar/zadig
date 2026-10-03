@@ -403,7 +403,7 @@ export const EnvWorkloadsDrawer: React.FC<EnvWorkloadsDrawerProps> = ({
         placement="right"
         open={open}
         onClose={onClose}
-        width={1000}
+        size={1000}
         extra={
           <Button icon={<ReloadOutlined spin={loading} />} size="small" onClick={loadData}>
             刷新
@@ -459,7 +459,7 @@ export const EnvWorkloadsDrawer: React.FC<EnvWorkloadsDrawerProps> = ({
         }
         open={yamlDrawerOpen}
         onClose={() => setYamlDrawerOpen(false)}
-        width={780}
+        size={780}
         extra={
           <Button
             size="small"

@@ -43,6 +43,8 @@ import PodTerminal from '../../components/Terminal/PodTerminal';
 import EnvConfigDrawer from './EnvConfigDrawer';
 import EnvWorkloadsDrawer from './EnvWorkloadsDrawer';
 import HelmReleasesDrawer from './HelmReleasesDrawer';
+import EnvNodesDrawer from './EnvNodesDrawer';
+import EnvEventsDrawer from './EnvEventsDrawer';
 import LogViewer from '../../components/Terminal/LogViewer';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
@@ -156,6 +158,10 @@ export const EnvironmentsPage: React.FC = () => {
   const [changeLogsLoading, setChangeLogsLoading] = useState<boolean>(false);
   const [changeLogsTotal, setChangeLogsTotal] = useState<number>(0);
   const [changeLogsPage, setChangeLogsPage] = useState<number>(1);
+
+  // 节点列表与环境级事件抽屉状态
+  const [nodesDrawerOpen, setNodesDrawerOpen] = useState(false);
+  const [eventsDrawerOpen, setEventsDrawerOpen] = useState(false);
 
   const fetchChangeLogs = useCallback(
     async (page = 1) => {
@@ -639,6 +645,20 @@ export const EnvironmentsPage: React.FC = () => {
               >
                 资源视图
               </Button>
+              <Button
+                icon={<HistoryOutlined />}
+                onClick={() => setEventsDrawerOpen(true)}
+                disabled={!currentEnv}
+              >
+                环境事件
+              </Button>
+              <Button
+                icon={<ClusterOutlined />}
+                onClick={() => setNodesDrawerOpen(true)}
+                disabled={!currentEnv}
+              >
+                节点列表
+              </Button>
               <Dropdown
                 menu={{
                   items: [
@@ -920,6 +940,23 @@ export const EnvironmentsPage: React.FC = () => {
         envName={currentEnv || ''}
         projectName={activeProject || ''}
         production={environments.find((e) => e.name === currentEnv)?.production ?? false}
+      />
+
+      {/* 节点列表抽屉 (对齐旧版 kube GET /nodes 节点健康与 IP) */}
+      <EnvNodesDrawer
+        open={nodesDrawerOpen}
+        onClose={() => setNodesDrawerOpen(false)}
+        clusterId={currentEnvObj?.cluster_id || ''}
+        envName={currentEnv || ''}
+      />
+
+      {/* 环境级与资源级实时事件抽屉 (对齐旧版 kube GET /events) */}
+      <EnvEventsDrawer
+        open={eventsDrawerOpen}
+        onClose={() => setEventsDrawerOpen(false)}
+        projectName={activeProject || ''}
+        envName={currentEnv || ''}
+        production={currentEnvObj?.production ?? false}
       />
 
       {/* Global Variables Edit Modal (对齐旧版「更新全局变量」) */}
