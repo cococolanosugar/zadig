@@ -108,6 +108,79 @@ export const systemConfigApi = {
   async updateWorkflowHook(payload: WorkflowHookSettings): Promise<void> {
     return http.put('/api/aslan/system/workflowHook', payload);
   },
+
+  // --- 6. 工作流参数与密钥库 (KeyVault) ---
+  async listKeyVaultItems(projectName?: string, isSystem = true): Promise<KeyVaultListResponse> {
+    const params: Record<string, string> = {};
+    if (isSystem) {
+      params.isSystem = 'true';
+    } else if (projectName) {
+      params.projectName = projectName;
+    }
+    const res = await http.get<KeyVaultListResponse>('/api/aslan/system/keyvault/items', { params });
+    return res || { groups: [] };
+  },
+  async getKeyVaultItem(id: string): Promise<KeyVaultKVItem> {
+    return http.get<KeyVaultKVItem>(`/api/aslan/system/keyvault/items/${id}`);
+  },
+  async createKeyVaultItem(payload: CreateKeyVaultArgs): Promise<void> {
+    return http.post('/api/aslan/system/keyvault/items', payload);
+  },
+  async updateKeyVaultItem(id: string, payload: Partial<CreateKeyVaultArgs>): Promise<void> {
+    return http.put(`/api/aslan/system/keyvault/items/${id}`, payload);
+  },
+  async deleteKeyVaultItem(id: string): Promise<void> {
+    return http.delete(`/api/aslan/system/keyvault/items/${id}`);
+  },
+  async deleteKeyVaultGroup(group: string): Promise<void> {
+    return http.delete(`/api/aslan/system/keyvault/groups/${encodeURIComponent(group)}`);
+  },
+  async listWorkflowParameters(
+    scope: 'system' | 'project' = 'system',
+    projectName?: string
+  ): Promise<WorkflowParameterItem[]> {
+    const params: Record<string, string> = { scope };
+    if (projectName) params.projectName = projectName;
+    const res = await http.get<WorkflowParameterItem[]>('/api/aslan/system/workflow_parameter', { params });
+    return Array.isArray(res) ? res : [];
+  },
 };
+
+export interface KeyVaultKVItem {
+  id: string;
+  group: string;
+  key: string;
+  value?: string;
+  sensitive?: boolean;
+  description?: string;
+  project_name?: string;
+  created_at?: number;
+  updated_at?: number;
+  created_by?: string;
+  updated_by?: string;
+}
+
+export interface KeyVaultGroupItem {
+  group: string;
+  kvs: KeyVaultKVItem[];
+}
+
+export interface KeyVaultListResponse {
+  groups: KeyVaultGroupItem[];
+}
+
+export interface CreateKeyVaultArgs {
+  group: string;
+  key: string;
+  value: string;
+  sensitive?: boolean;
+  description?: string;
+  project_name?: string;
+}
+
+export interface WorkflowParameterItem {
+  key: string;
+  description: string;
+}
 
 export default systemConfigApi;
