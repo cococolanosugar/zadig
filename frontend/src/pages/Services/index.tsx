@@ -31,6 +31,7 @@ import {
   FileAddOutlined,
   AppstoreAddOutlined,
   AppstoreOutlined,
+  ControlOutlined,
 } from '@ant-design/icons';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/project';
@@ -42,6 +43,7 @@ import { serviceApi, ServiceDetail } from '../../api/service';
 import ImportFromRepoModal, { SyncServiceInfo } from './ImportFromRepoModal';
 import ImportFromTemplateModal, { SyncTemplateServiceInfo } from './ImportFromTemplateModal';
 import ServiceModulesDrawer from './ServiceModulesDrawer';
+import ServiceVariablesDrawer from './ServiceVariablesDrawer';
 
 const { Title, Text } = Typography;
 
@@ -88,6 +90,9 @@ export const ServicesPage: React.FC = () => {
 
   // 组件模块管理抽屉
   const [modulesDrawerOpen, setModulesDrawerOpen] = useState(false);
+
+  // 变量配置与转换抽屉
+  const [variablesDrawerOpen, setVariablesDrawerOpen] = useState(false);
 
   const loadServices = useCallback(async () => {
     if (!activeProject) {
@@ -451,6 +456,13 @@ spec:
                 组件模块
               </Button>
               <Button
+                icon={<ControlOutlined />}
+                disabled={!selectedService}
+                onClick={() => setVariablesDrawerOpen(true)}
+              >
+                变量配置
+              </Button>
+              <Button
                 type="primary"
                 icon={<SaveOutlined />}
                 onClick={handleSaveYaml}
@@ -780,6 +792,26 @@ spec:
         serviceName={selectedService || ''}
         projectName={activeProject || ''}
         isProduction={isProduction}
+      />
+
+      {/* Service Variables Configuration & Convert Drawer */}
+      <ServiceVariablesDrawer
+        open={variablesDrawerOpen}
+        onClose={() => setVariablesDrawerOpen(false)}
+        serviceName={selectedService || ''}
+        projectName={activeProject || ''}
+        isProduction={isProduction}
+        initialKvs={serviceDetail?.service_variable_kvs || []}
+        initialYaml={serviceDetail?.variable_yaml || ''}
+        onSaved={(newKvs, newYaml) => {
+          if (serviceDetail) {
+            setServiceDetail({
+              ...serviceDetail,
+              service_variable_kvs: newKvs,
+              variable_yaml: newYaml,
+            });
+          }
+        }}
       />
     </div>
   );
