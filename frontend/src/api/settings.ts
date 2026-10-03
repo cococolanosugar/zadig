@@ -280,8 +280,34 @@ export const settingsApi = {
 
   async getUserGroups(): Promise<UserGroupItem[]> {
     try {
-      const res = await http.get<UserGroupItem[]>('/api/v1/user-group', { skipErrorHandler: true });
-      return Array.isArray(res) ? res : [];
+      // 后端 listUserGroupResp {group_list, total}（user_group.go:93-96）；该接口无管理员限制
+      const res = await http.get<{ group_list?: UserGroupItem[]; total?: number } | UserGroupItem[]>(
+        '/api/v1/user-group',
+        { skipErrorHandler: true }
+      );
+      if (Array.isArray(res)) return res;
+      return Array.isArray(res?.group_list) ? res.group_list : [];
+    } catch {
+      return [];
+    }
+  },
+
+  /** 用户简表：POST /api/v1/users/brief 无管理员限制（区别于 /users/search 仅系统管理员） */
+  async getUsersBrief(): Promise<UserManagementItem[]> {
+    try {
+      const res = await http.post<{ users?: Array<{ uid?: string; name?: string; account?: string; email?: string; identity_type?: string }> }>(
+        '/api/v1/users/brief',
+        { page: 1, per_page: 200 },
+        { skipErrorHandler: true }
+      );
+      const users = Array.isArray(res?.users) ? res.users : [];
+      return users.map((u) => ({
+        uid: u.uid || '',
+        account: u.account || '',
+        name: u.name || '',
+        email: u.email || '',
+        identity_type: u.identity_type,
+      }));
     } catch {
       return [];
     }
