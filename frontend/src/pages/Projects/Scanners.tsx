@@ -319,10 +319,15 @@ export const ScannersPage: React.FC = () => {
   };
 
   const handleTriggerScan = async (record: ScannerItem) => {
+    if (!record.id) {
+      feedback.message.error('该扫描模块缺少 ID，无法触发');
+      return;
+    }
     feedback.message.loading(`正在对 [${record.name}] 触发代码安全扫描...`, 1);
     try {
+      // 后端按 ObjectID 查库（FindScanningProjectNameFromID → GetByID），必须用列表项 id
       await http.post(
-        `/api/aslan/testing/scanning/${record.name}/task?projectName=${projectName}`,
+        `/api/aslan/testing/scanning/${record.id}/task?projectName=${projectName}`,
         {}
       );
       feedback.message.success(`代码审查任务 [${record.name}] 已在后台成功启动，检测完成后将同步质量门禁`);
@@ -333,9 +338,10 @@ export const ScannersPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (name: string) => {
+  const handleDelete = async (id: string) => {
     try {
-      await http.delete(`/api/aslan/testing/scanning/${name}?projectName=${projectName}`);
+      // 后端按 ObjectID 删除（GetByID）
+      await http.delete(`/api/aslan/testing/scanning/${id}?projectName=${projectName}`);
       feedback.message.success('代码审查模块已删除');
       fetchScanners();
     } catch (err: unknown) {
@@ -454,7 +460,7 @@ export const ScannersPage: React.FC = () => {
           </Button>
           <Popconfirm
             title="确认删除该代码审查配置？"
-            onConfirm={() => handleDelete(record.name)}
+            onConfirm={() => record.id && handleDelete(record.id)}
             okText="删除"
             cancelText="取消"
             okButtonProps={{ danger: true }}
