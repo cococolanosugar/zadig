@@ -11,9 +11,11 @@ import {
   ExclamationCircleOutlined,
   SaveOutlined,
   DownloadOutlined,
+  CopyOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import http from '../../api/client';
+import environmentApi from '../../api/environment';
 import LogViewer from '../../components/Terminal/LogViewer';
 import PodTerminal from '../../components/Terminal/PodTerminal';
 import YamlEditor from '../../components/Editor/YamlEditor';
@@ -47,11 +49,12 @@ interface PodDetailInfo {
 /**
  * 环境服务详情页 (对应旧版 envs/detail/:service_name)
  * 数据源:
- *  - 工作负载 YAML: GET /api/aslan/environment/kube/yaml?type=&name=&envName=&projectName=
- *  - Pod 列表: GET /api/aslan/environment/environments/:env/workloads/pods?projectName= (按服务过滤)
+ *  - Pod 列表: GET /api/aslan/environment/kube/pods?projectName=&envName=&production= (按服务名过滤)
  *  - Pod 详情: GET /api/aslan/environment/kube/pods/:podName?projectName=&envName=
  *  - Pod 事件: GET /api/aslan/environment/kube/pods/:podName/events?projectName=&envName=
  *  - 实时日志: SSE /api/aslan/logs/sse/pods/:podName/containers/:containerName?envName=&projectName=
+ *  - 服务配置 YAML (可编辑): GET /api/aslan/environment/environments/:envName (读取环境服务变量 variable_yaml 与 revision)
+ *  - 实时 K8s YAML (只读): GET /api/aslan/environment/kube/yaml?type=deployment&name=&envName=&projectName=&production= (从集群 API Server 提取 live 资源定义)
  */
 export const ServiceDetailPage: React.FC = () => {
   const { envName: paramEnvName, serviceType: paramServiceType, serviceName: paramServiceName } = useParams<{
@@ -166,6 +169,35 @@ export const ServiceDetailPage: React.FC = () => {
     }
   }, [envName, projectName, serviceName, envProduction]);
 
+  // 实时 K8s 资源 YAML（只读，直接从集群拉取 live 资源定义）
+  const [liveYamlContent, setLiveYamlContent] = useState<string>('');
+  const [liveYamlLoading, setLiveYamlLoading] = useState<boolean>(false);
+
+  const fetchLiveYaml = useCallback(async () => {
+    if (!envName || !projectName || !serviceName) return;
+    const resourceType = serviceType === 'pm' ? '' : 'deployment';
+    if (!resourceType) {
+      setLiveYamlContent('// 主机 (PM) 服务没有集群 K8s 实时资源 YAML');
+      return;
+    }
+    setLiveYamlLoading(true);
+    try {
+      const live = await environmentApi.getK8sResourceYaml(
+        projectName,
+        envName,
+        resourceType,
+        serviceName,
+        envProduction
+      );
+      setLiveYamlContent(live || '// 未获取到集群实时资源 YAML');
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || '获取实时 YAML 失败';
+      setLiveYamlContent(`// 获取集群实时 YAML 失败: ${msg}`);
+    } finally {
+      setLiveYamlLoading(false);
+    }
+  }, [envName, projectName, serviceName, serviceType, envProduction]);
+
   const fetchYaml = useCallback(async () => {
     if (!envName || !projectName || !serviceName) return;
     // k8s 服务的工作负载类型为 Deployment；helm 同理
@@ -277,7 +309,8 @@ export const ServiceDetailPage: React.FC = () => {
   useEffect(() => {
     fetchPods();
     fetchYaml();
-  }, [fetchPods, fetchYaml]);
+    fetchLiveYaml();
+  }, [fetchPods, fetchYaml, fetchLiveYaml]);
 
   const openLogs = async (pod: PodItem) => {
     // kube/pods 不返回容器名，先取 Pod 详情中的容器列表
@@ -417,13 +450,13 @@ export const ServiceDetailPage: React.FC = () => {
             </Space>
           </div>
           <div style={{ flex: 1 }} />
-          <Button icon={<ReloadOutlined />} onClick={() => { fetchPods(); fetchYaml(); }}>
+          <Button icon={<ReloadOutlined />} onClick={() => { fetchPods(); fetchYaml(); fetchLiveYaml(); }}>
             刷新
           </Button>
         </Space>
       </Card>
 
-      {/* Tabs: 实例 / 工作负载 YAML */}
+      {/* Tabs: 实例 / 服务配置 YAML / 实时 K8s YAML */}
       <Card variant="borderless" style={{ borderRadius: 8 }} styles={{ body: { padding: '8px 24px 16px' } }}>
         <Tabs
           defaultActiveKey="instances"
@@ -451,8 +484,8 @@ export const ServiceDetailPage: React.FC = () => {
               ),
             },
             {
-              key: 'yaml',
-              label: '服务 YAML（可编辑）',
+              key: 'config_yaml',
+              label: '服务配置 YAML（可编辑）',
               children: yamlLoading ? (
                 <div style={{ textAlign: 'center', padding: '60px 0' }}>
                   <Spin />
@@ -477,13 +510,46 @@ export const ServiceDetailPage: React.FC = () => {
                       重启生效
                     </Button>
                     <Button type="primary" size="small" icon={<SaveOutlined />} loading={savingYaml} onClick={handleSaveSvcYaml}>
-                      保存 YAML
+                      保存配置
                     </Button>
                   </div>
                   <YamlEditor value={yamlContent} onChange={setYamlContent} theme="light" height={460} />
                 </div>
               ) : (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未获取到服务 YAML（可能为只读托管资源）" />
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未获取到服务配置 YAML（可能为只读托管资源）" />
+              ),
+            },
+            {
+              key: 'live_yaml',
+              label: '实时 K8s YAML（只读）',
+              children: liveYamlLoading ? (
+                <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                  <Spin size="large" />
+                  <div style={{ marginTop: 12, color: '#64748b' }}>
+                    正在从 Kubernetes 集群实时提取 {serviceName} 运行态资源定义...
+                  </div>
+                </div>
+              ) : liveYamlContent ? (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
+                    <Button
+                      size="small"
+                      icon={<CopyOutlined />}
+                      onClick={() => {
+                        navigator.clipboard.writeText(liveYamlContent);
+                        feedback.message.success('实时 YAML 已复制到剪贴板');
+                      }}
+                    >
+                      复制实时 YAML
+                    </Button>
+                    <Button size="small" icon={<ReloadOutlined />} onClick={fetchLiveYaml}>
+                      刷新实时状态
+                    </Button>
+                  </div>
+                  <YamlEditor value={liveYamlContent} readOnly theme="light" height={460} />
+                </div>
+              ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未获取到实时 K8s 资源 YAML" />
               ),
             },
           ]}
