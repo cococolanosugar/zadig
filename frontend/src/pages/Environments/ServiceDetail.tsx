@@ -68,15 +68,37 @@ export const ServiceDetailPage: React.FC = () => {
   const projectName = routeProjectName || searchParams.get('projectName') || '';
   const envName = paramEnvName || searchParams.get('envName') || '';
   const serviceName = paramServiceName || searchParams.get('serviceName') || searchParams.get('service') || '';
+  // 深链尾段（旧版路由 envs/detail/:service_name/{config,pm,production} 与 envs/detail/:env_name/envConfig）：
+  //  - /config  → 本页默认即服务 YAML 配置视图，无需额外处理
+  //  - /pm      → 主机 (PM) 服务详情（旧版以 '/pm/' 判断，尾段无斜杠时不命中，改为正则）
+  //  - /production → 生产环境语境（production 透传 + 生产环境数据）
+  //  - /envConfig  → 首段是环境名而非服务名，重定向到环境页并打开配置管理
+  const detailTail = location.pathname.match(/\/envs\/detail\/[^/]+\/([^/?]+)$/)?.[1] || '';
+  const isProductionDeepLink = detailTail === 'production';
+  const isPmDeepLink = detailTail === 'pm';
   const serviceType =
     paramServiceType ||
-    (location.pathname.includes('/helm/')
+    (isPmDeepLink
+      ? 'pm'
+      : /\/helm(\/|$)/.test(location.pathname)
       ? 'helm'
-      : location.pathname.includes('/pm/')
+      : /\/k8s(\/|$)/.test(location.pathname)
+      ? 'k8s'
+      : /\/pm(\/|$)/.test(location.pathname)
       ? 'pm'
       : 'k8s');
 
   const [loading, setLoading] = useState(false);
+  // 深链 envs/detail/:env_name/envConfig → 重定向到环境页并打开配置管理抽屉（首段为环境名，本页语义不适用）
+  const [envConfigRedirected, setEnvConfigRedirected] = useState(false);
+  useEffect(() => {
+    if (detailTail === 'envConfig') {
+      const target = `/v1/projects/detail/${projectName}/envs${envName ? `/${envName}` : ''}?open=config`;
+      navigate(target, { replace: true });
+      setEnvConfigRedirected(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailTail, envName, projectName]);
   const [pods, setPods] = useState<PodItem[]>([]);
   const [yamlContent, setYamlContent] = useState<string>('');
   const [yamlLoading, setYamlLoading] = useState(false);
@@ -100,28 +122,29 @@ export const ServiceDetailPage: React.FC = () => {
   const [podEvents, setPodEvents] = useState<Array<{ type?: string; reason?: string; message?: string; last_timestamp?: string }>>([]);
 
   // 当前环境是否生产环境（环境详情 ProductResp.is_prod）；pods/保存/导出按真实标志透传 production
-  const [envProduction, setEnvProduction] = useState(false);
+  // 深链 /envs/detail/:service_name/production 时强制生产语境
+  const [envProduction, setEnvProduction] = useState(isProductionDeepLink);
   useEffect(() => {
     if (!envName || !projectName) {
-      setEnvProduction(false);
+      setEnvProduction(isProductionDeepLink);
       return;
     }
     let cancelled = false;
     http
       .get<{ is_prod?: boolean }>(
-        `/api/aslan/environment/environments/${envName}?projectName=${projectName}`,
+        `/api/aslan/environment/environments/${envName}?projectName=${projectName}&production=${isProductionDeepLink}`,
         { skipErrorHandler: true }
       )
       .then((d) => {
-        if (!cancelled) setEnvProduction(!!d?.is_prod);
+        if (!cancelled) setEnvProduction(isProductionDeepLink || !!d?.is_prod);
       })
       .catch(() => {
-        if (!cancelled) setEnvProduction(false);
+        if (!cancelled) setEnvProduction(isProductionDeepLink);
       });
     return () => {
       cancelled = true;
     };
-  }, [envName, projectName]);
+  }, [envName, projectName, isProductionDeepLink]);
 
   const fetchPods = useCallback(async () => {
     if (!envName || !projectName) return;
@@ -157,7 +180,7 @@ export const ServiceDetailPage: React.FC = () => {
       const detail = await http.get<{
         services?: Array<Array<{ service_name?: string; revision?: number; variable_yaml?: string }>>;
       }>(
-        `/api/aslan/environment/environments/${envName}?projectName=${projectName}`,
+        `/api/aslan/environment/environments/${envName}?projectName=${projectName}&production=${envProduction}`,
         { skipErrorHandler: true }
       );
       const svcEntry = (detail?.services || [])
@@ -368,6 +391,11 @@ export const ServiceDetailPage: React.FC = () => {
       ),
     },
   ];
+
+  if (envConfigRedirected) {
+    // envConfig 深链已重定向到环境页配置管理，不再渲染本页
+    return null;
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
