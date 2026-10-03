@@ -10,7 +10,20 @@ export interface PodTerminalProps {
   projectName: string;
   envName: string;
   clusterId?: string;
+  // 生产环境走 /api/podexec/production/ 变体（对齐旧版 isProd 分支）
+  production?: boolean;
   height?: number | string;
+}
+
+// WS 消息协议对齐 pkg/microservice/podexec/core/service/ws_terminal.go 的 TerminalMessage：
+//   客户端 → 服务端：{operation:'stdin',data} / {operation:'resize',rows,cols}
+//   服务端 → 客户端：{operation:'stdout',data}
+// 非 JSON 消息会被服务端直接断开（Read 中 Unmarshal 失败即 EndOfTransmission）
+interface TerminalMessage {
+  operation: 'stdin' | 'resize' | 'stdout' | 'heartbeat' | string;
+  data?: string;
+  rows?: number;
+  cols?: number;
 }
 
 export const PodTerminal: React.FC<PodTerminalProps> = ({
@@ -19,6 +32,7 @@ export const PodTerminal: React.FC<PodTerminalProps> = ({
   projectName,
   envName,
   clusterId = '',
+  production = false,
   height = 480,
 }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -51,10 +65,20 @@ export const PodTerminal: React.FC<PodTerminalProps> = ({
 
     // Build WebSocket URL
     // 后端 podexec WS: /api/podexec/:productName/:podName/:containerName/podExec/:envName
+    //                 /api/podexec/production/:productName/.../:envName（生产环境变体）
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
+    const prefix = production ? 'production/' : '';
     const token = useAuthStore.getState().token || '';
-    const wsUrl = `${protocol}//${host}/api/podexec/${encodeURIComponent(projectName)}/${encodeURIComponent(podName)}/${encodeURIComponent(containerName)}/podExec/${encodeURIComponent(envName)}?projectName=${encodeURIComponent(projectName)}&token=${encodeURIComponent(token)}`;
+    const wsUrl = `${protocol}//${host}/api/podexec/${prefix}${encodeURIComponent(projectName)}/${encodeURIComponent(podName)}/${encodeURIComponent(containerName)}/podExec/${encodeURIComponent(envName)}?projectName=${encodeURIComponent(projectName)}&token=${encodeURIComponent(token)}`;
+
+    const sendResize = (ws: WebSocket) => {
+      const dims = fitAddon.proposeDimensions();
+      if (dims && dims.cols > 0 && dims.rows > 0) {
+        const msg: TerminalMessage = { operation: 'resize', rows: dims.rows, cols: dims.cols };
+        ws.send(JSON.stringify(msg));
+      }
+    };
 
     let ws: WebSocket;
     try {
@@ -62,19 +86,35 @@ export const PodTerminal: React.FC<PodTerminalProps> = ({
       socketRef.current = ws;
 
       ws.onopen = () => {
+        // 先同步终端尺寸，再请求 bash（对齐旧版 bundle：服务端起 /bin/sh，成功时升级为 bash）
+        sendResize(ws);
+        const shellMsg: TerminalMessage = { operation: 'stdin', data: 'bash \r' };
+        ws.send(JSON.stringify(shellMsg));
         term.writeln('\x1b[32m[Connected] 终端已就绪。\x1b[0m\r\n');
-        // Notify window resize
-        const dims = fitAddon.proposeDimensions();
-        if (dims) {
-          ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
-        }
       };
 
       ws.onmessage = (event) => {
+        // 服务端只回 {operation:'stdout',data} 的 JSON 文本帧
         if (typeof event.data === 'string') {
-          term.write(event.data);
+          try {
+            const msg = JSON.parse(event.data) as TerminalMessage;
+            if (msg.operation === 'stdout' && typeof msg.data === 'string') {
+              term.write(msg.data);
+            }
+          } catch {
+            term.write(event.data);
+          }
         } else if (event.data instanceof Blob) {
-          event.data.text().then((text) => term.write(text));
+          event.data.text().then((text) => {
+            try {
+              const msg = JSON.parse(text) as TerminalMessage;
+              if (msg.operation === 'stdout' && typeof msg.data === 'string') {
+                term.write(msg.data);
+              }
+            } catch {
+              term.write(text);
+            }
+          });
         }
       };
 
@@ -88,7 +128,8 @@ export const PodTerminal: React.FC<PodTerminalProps> = ({
 
       term.onData((data) => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(data);
+          const msg: TerminalMessage = { operation: 'stdin', data };
+          ws.send(JSON.stringify(msg));
         }
       });
     } catch {
@@ -97,9 +138,8 @@ export const PodTerminal: React.FC<PodTerminalProps> = ({
 
     const handleResize = () => {
       fitAddon.fit();
-      const dims = fitAddon.proposeDimensions();
-      if (dims && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        sendResize(ws);
       }
     };
 
@@ -112,7 +152,7 @@ export const PodTerminal: React.FC<PodTerminalProps> = ({
       }
       term.dispose();
     };
-  }, [podName, containerName, projectName, envName, clusterId]);
+  }, [podName, containerName, projectName, envName, clusterId, production]);
 
   return (
     <div

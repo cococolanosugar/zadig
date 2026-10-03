@@ -715,6 +715,7 @@ export const EnvironmentsPage: React.FC = () => {
             containerName={activePod.containerName}
             projectName={activeProject}
             envName={currentEnv}
+            production={environments.find((e) => e.name === currentEnv)?.production ?? false}
             height={540}
           />
         )}
