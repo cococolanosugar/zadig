@@ -38,6 +38,7 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
   const [scanOptions, setScanOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [deployType, setDeployType] = useState<'k8s' | 'helm'>('k8s');
   const [mergingImage, setMergingImage] = useState(false);
+  const [validatingSQL, setValidatingSQL] = useState(false);
 
   useEffect(() => {
     if (job) {
@@ -58,6 +59,9 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         test_name: job.spec?.test_name || '',
         scanning_id: job.spec?.scanning_id || '',
         target_env: job.spec?.target_env || '',
+        sql_type: (job.spec?.type as string) || 'mysql',
+        sql: (job.spec?.sql as string) || 'CREATE TABLE example (\n  id INT PRIMARY KEY AUTO_INCREMENT,\n  name VARCHAR(64) NOT NULL\n);',
+        db_instance_id: (job.spec?.id as string) || '',
       });
     }
   }, [job, form]);
@@ -144,6 +148,29 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
     }
   };
 
+  const handleValidateSQL = async () => {
+    const sqlType = (form.getFieldValue('sql_type') as 'mysql' | 'mariadb') || 'mysql';
+    const sqlText = form.getFieldValue('sql') || '';
+    if (!sqlText.trim()) {
+      feedback.message.warning('请输入待校验的 SQL 脚本语句');
+      return;
+    }
+    setValidatingSQL(true);
+    try {
+      const errs = await workflowApi.validateSQL({
+        type: sqlType,
+        sql: sqlText,
+      });
+      if (errs.length === 0) {
+        feedback.message.success('SQL 语法校验通过，未发现语法错误');
+      } else {
+        feedback.message.error(`SQL 语法校验失败: ${errs.map((e) => e.message).join('; ')}`);
+      }
+    } finally {
+      setValidatingSQL(false);
+    }
+  };
+
   const handleFinish = (values: Record<string, unknown>) => {
     if (!job) return;
     const isHelm = job.type === 'helm-deploy' || values.deploy_type === 'helm';
@@ -165,6 +192,9 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         test_name: values.test_name as string,
         scanning_id: values.scanning_id as string,
         target_env: values.target_env as string,
+        sql: values.sql as string,
+        type: (values.sql_type as string) || (job.spec?.type as string) || 'mysql',
+        id: values.db_instance_id as string,
       },
     };
     onSave(updated);
@@ -270,20 +300,20 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
                   tooltip="修改镜像输入时自动调用 /api/aslan/workflow/v4/deploy/mergeImage 合并至 Helm Values YAML"
                   extra="输入或修改镜像后失焦或点击右侧按钮，自动联动合并"
                 >
-                  <Input
-                    placeholder="例如: ccr.ccs.tencentyun.com/ns/service:v1.0.0"
-                    onBlur={() => handleMergeImage()}
-                    addonAfter={
-                      <Button
-                        type="link"
-                        size="small"
-                        loading={mergingImage}
-                        onClick={() => handleMergeImage()}
-                      >
-                        合并镜像至 Values
-                      </Button>
-                    }
-                  />
+                  <Space.Compact block>
+                    <Input
+                      placeholder="例如: ccr.ccs.tencentyun.com/ns/service:v1.0.0"
+                      onBlur={() => handleMergeImage()}
+                    />
+                    <Button
+                      type="primary"
+                      ghost
+                      loading={mergingImage}
+                      onClick={() => handleMergeImage()}
+                    >
+                      合并镜像至 Values
+                    </Button>
+                  </Space.Compact>
                 </Form.Item>
 
                 <Form.Item
@@ -319,6 +349,60 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
               height={280}
             />
           </Form.Item>
+        )}
+
+        {job?.type === 'sql' && (
+          <>
+            <Form.Item
+              name="sql_type"
+              label="数据库引擎类型"
+              initialValue="mysql"
+              rules={[{ required: true, message: '请选择数据库类型' }]}
+            >
+              <Radio.Group
+                options={[
+                  { label: 'MySQL', value: 'mysql' },
+                  { label: 'MariaDB', value: 'mariadb' },
+                ]}
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="db_instance_id"
+              label="目标数据库实例标识 (可选)"
+              tooltip="项目中预先配置的 DB 实例标识或连接串引用"
+            >
+              <Input placeholder="例如: default-mysql 或 db-prod-instance" />
+            </Form.Item>
+
+            <Form.Item
+              name="sql"
+              label="SQL 执行脚本"
+              rules={[{ required: true, message: '请输入要执行的 SQL 脚本' }]}
+              extra={
+                <div style={{ marginTop: 8 }}>
+                  <Button
+                    size="small"
+                    type="primary"
+                    ghost
+                    loading={validatingSQL}
+                    onClick={handleValidateSQL}
+                  >
+                    校验 SQL 语法
+                  </Button>
+                  <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+                    基于 TiDB 解析引擎实时验证 DDL/DML 语法准确性
+                  </Typography.Text>
+                </div>
+              }
+            >
+              <YamlEditor
+                value={form.getFieldValue('sql') || ''}
+                onChange={(val) => form.setFieldsValue({ sql: val })}
+                height={260}
+              />
+            </Form.Item>
+          </>
         )}
 
         {job?.type === 'zadig-test' && (

@@ -10,6 +10,7 @@ import {
   SyncOutlined,
   CloseCircleOutlined,
   DeleteOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons';
 import type { JobType } from '../../api/workflow';
 
@@ -35,6 +36,8 @@ export const JobNode = memo(({ data }: { data: JobNodeData }) => {
         return <CloudUploadOutlined style={{ color: '#52c41a' }} />;
       case 'freestyle':
         return <CodeOutlined style={{ color: '#722ed1' }} />;
+      case 'sql':
+        return <DatabaseOutlined style={{ color: '#fa8c16' }} />;
       default:
         return <CheckCircleOutlined style={{ color: '#13c2c2' }} />;
     }

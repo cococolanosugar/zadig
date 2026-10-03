@@ -136,6 +136,20 @@ export const authApi = {
       { skipErrorHandler: true }
     );
   },
+
+  /**
+   * 获取系统特性开关 (如 RegisterTrigger 注册开关)
+   * GET /api/v1/features/:name (pkg/microservice/systemconfig/core/features/handler/router.go:30)
+   */
+  async getFeature(name: string): Promise<{ name: string; enabled: boolean }> {
+    try {
+      return await http.get<{ name: string; enabled: boolean }>(`/api/v1/features/${encodeURIComponent(name)}`, {
+        skipErrorHandler: true,
+      });
+    } catch {
+      return { name, enabled: false };
+    }
+  },
 };
 
 export default authApi;
