@@ -28,6 +28,7 @@ import {
   FileSearchOutlined,
   HistoryOutlined,
   AppstoreOutlined,
+  RocketOutlined,
   EyeOutlined,
   EditOutlined,
   DeleteOutlined,
@@ -41,6 +42,7 @@ import { useProjectStore } from '../../stores/project';
 import PodTerminal from '../../components/Terminal/PodTerminal';
 import EnvConfigDrawer from './EnvConfigDrawer';
 import EnvWorkloadsDrawer from './EnvWorkloadsDrawer';
+import HelmReleasesDrawer from './HelmReleasesDrawer';
 import LogViewer from '../../components/Terminal/LogViewer';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
@@ -105,6 +107,7 @@ export const EnvironmentsPage: React.FC = () => {
 
   // Env config management drawer (configmaps/secrets/ingresses/pvcs)
   const [configDrawerOpen, setConfigDrawerOpen] = useState(false);
+  const [helmReleasesOpen, setHelmReleasesOpen] = useState(false);
   // Resource view drawer (workloads by type)
   const [workloadsDrawerOpen, setWorkloadsDrawerOpen] = useState(false);
   // Alias edit modal
@@ -568,6 +571,13 @@ export const EnvironmentsPage: React.FC = () => {
                 管理服务
               </Button>
               <Button
+                icon={<RocketOutlined />}
+                onClick={() => setHelmReleasesOpen(true)}
+                disabled={!currentEnv}
+              >
+                Helm Releases
+              </Button>
+              <Button
                 icon={<AppstoreOutlined />}
                 onClick={() => setConfigDrawerOpen(true)}
                 disabled={!currentEnv}
@@ -849,6 +859,15 @@ export const EnvironmentsPage: React.FC = () => {
       <EnvWorkloadsDrawer
         open={workloadsDrawerOpen}
         onClose={() => setWorkloadsDrawerOpen(false)}
+        envName={currentEnv || ''}
+        projectName={activeProject || ''}
+        production={environments.find((e) => e.name === currentEnv)?.production ?? false}
+      />
+
+      {/* Helm Releases Drawer (对齐旧版 Helm 环境的 Release 状态与 diff) */}
+      <HelmReleasesDrawer
+        open={helmReleasesOpen}
+        onClose={() => setHelmReleasesOpen(false)}
         envName={currentEnv || ''}
         projectName={activeProject || ''}
         production={environments.find((e) => e.name === currentEnv)?.production ?? false}
