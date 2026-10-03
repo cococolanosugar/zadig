@@ -140,6 +140,289 @@ export const environmentApi = {
       { skipErrorHandler: true }
     );
   },
+
+  /**
+   * List environment service version history.
+   * GET /api/aslan/environment/environments/:name/version/:serviceName?projectName=&isHelmChart=&production=
+   */
+  async listServiceVersions(
+    projectName: string,
+    envName: string,
+    serviceName: string,
+    isHelmChart = false,
+    production = false
+  ): Promise<EnvServiceVersionItem[]> {
+    const prodParam = production ? '&production=true' : '';
+    return http.get<EnvServiceVersionItem[]>(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/version/${encodeURIComponent(serviceName)}?projectName=${encodeURIComponent(projectName)}&isHelmChart=${isHelmChart}${prodParam}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Get environment service version YAML.
+   * GET /api/aslan/environment/environments/:name/version/:serviceName/revision/:revision?projectName=&isHelmChart=&production=
+   */
+  async getServiceVersionYaml(
+    projectName: string,
+    envName: string,
+    serviceName: string,
+    revision: number,
+    isHelmChart = false,
+    production = false
+  ): Promise<EnvServiceVersionYaml> {
+    const prodParam = production ? '&production=true' : '';
+    return http.get<EnvServiceVersionYaml>(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/version/${encodeURIComponent(serviceName)}/revision/${revision}?projectName=${encodeURIComponent(projectName)}&isHelmChart=${isHelmChart}${prodParam}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Diff two service versions.
+   * GET /api/aslan/environment/environments/:name/version/:serviceName/diff?projectName=&revisionA=&revisionB=&isHelmChart=&production=
+   */
+  async diffServiceVersions(
+    projectName: string,
+    envName: string,
+    serviceName: string,
+    revisionA: number,
+    revisionB: number,
+    isHelmChart = false,
+    production = false
+  ): Promise<EnvServiceVersionDiff> {
+    const prodParam = production ? '&production=true' : '';
+    return http.get<EnvServiceVersionDiff>(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/version/${encodeURIComponent(serviceName)}/diff?projectName=${encodeURIComponent(projectName)}&revisionA=${revisionA}&revisionB=${revisionB}&isHelmChart=${isHelmChart}${prodParam}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Check images availability before rollback.
+   * GET /api/aslan/environment/environments/:name/version/:serviceName/rollback/check?projectName=&revision=&isHelmChart=&production=&workflowName=
+   */
+  async checkServiceVersionRollback(
+    projectName: string,
+    envName: string,
+    serviceName: string,
+    revision: number,
+    isHelmChart = false,
+    production = false,
+    workflowName = ''
+  ): Promise<CheckRollbackResponse> {
+    const prodParam = production ? '&production=true' : '';
+    const wfParam = workflowName ? `&workflowName=${encodeURIComponent(workflowName)}` : '';
+    return http.get<CheckRollbackResponse>(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/version/${encodeURIComponent(serviceName)}/rollback/check?projectName=${encodeURIComponent(projectName)}&revision=${revision}&isHelmChart=${isHelmChart}${prodParam}${wfParam}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Rollback environment service version.
+   * POST /api/aslan/environment/environments/:name/version/:serviceName/rollback?projectName=&revision=&isHelmChart=&production=&overrideResource=
+   */
+  async rollbackServiceVersion(
+    projectName: string,
+    envName: string,
+    serviceName: string,
+    revision: number,
+    detail = '',
+    isHelmChart = false,
+    production = false,
+    overrideResource = false
+  ): Promise<void> {
+    const prodParam = production ? '&production=true' : '';
+    const orParam = overrideResource ? '&overrideResource=true' : '';
+    return http.post<void>(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/version/${encodeURIComponent(serviceName)}/rollback?projectName=${encodeURIComponent(projectName)}&revision=${revision}&isHelmChart=${isHelmChart}${prodParam}${orParam}`,
+      { detail },
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Helm rendersets: Get render charts.
+   * POST /api/aslan/environment/rendersets/renderchart?projectName=&envName=&production=
+   */
+  async getRenderCharts(
+    projectName: string,
+    envName: string,
+    args: unknown[] = [],
+    production = false
+  ): Promise<HelmRenderChartArg[]> {
+    const prodParam = production ? '&production=true' : '';
+    return http.post<HelmRenderChartArg[]>(
+      `/api/aslan/environment/rendersets/renderchart?projectName=${encodeURIComponent(projectName)}&envName=${encodeURIComponent(envName)}${prodParam}`,
+      { get_svc_render_args: args },
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Helm rendersets: Get environment default values.
+   * GET /api/aslan/environment/rendersets/default-values?projectName=&envName=&production=
+   */
+  async getProductDefaultValues(
+    projectName: string,
+    envName: string,
+    production = false
+  ): Promise<{ default_variable: string }> {
+    const prodParam = production ? '&production=true' : '';
+    return http.get<{ default_variable: string }>(
+      `/api/aslan/environment/rendersets/default-values?projectName=${encodeURIComponent(projectName)}&envName=${encodeURIComponent(envName)}${prodParam}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Helm/K8s rendersets: Get environment global variables.
+   * GET /api/aslan/environment/rendersets/globalVariables?projectName=&envName=&production=
+   */
+  async getGlobalVariables(
+    projectName: string,
+    envName: string,
+    production = false
+  ): Promise<{ global_variables: Array<{ key: string; value: string; type?: string; desc?: string }>; revision: number }> {
+    const prodParam = production ? '&production=true' : '';
+    return http.get<{ global_variables: Array<{ key: string; value: string; type?: string; desc?: string }>; revision: number }>(
+      `/api/aslan/environment/rendersets/globalVariables?projectName=${encodeURIComponent(projectName)}&envName=${encodeURIComponent(envName)}${prodParam}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Rendersets: Get service variables (compatible with GET on live server and fallback POST).
+   */
+  async getServiceVariables(
+    projectName: string,
+    envName: string,
+    serviceName: string,
+    production = false
+  ): Promise<K8sServiceVariableItem[]> {
+    const prodParam = production ? '&production=true' : '';
+    try {
+      // Live server uses GET
+      return await http.get<K8sServiceVariableItem[]>(
+        `/api/aslan/environment/rendersets/variables?projectName=${encodeURIComponent(projectName)}&envName=${encodeURIComponent(envName)}&serviceName=${encodeURIComponent(serviceName)}${prodParam}`,
+        { skipErrorHandler: true }
+      );
+    } catch {
+      // Fallback to POST for repo HEAD compatibility
+      return await http.post<K8sServiceVariableItem[]>(
+        `/api/aslan/environment/rendersets/variables?projectName=${encodeURIComponent(projectName)}&envName=${encodeURIComponent(envName)}${prodParam}`,
+        { serviceName },
+        { skipErrorHandler: true }
+      );
+    }
+  },
+
+  /**
+   * Service Diff: Compare environment rendered YAML vs template latest rendered YAML.
+   * GET /api/aslan/environment/diff/products/:productName/service/:serviceName?envName=&production=
+   */
+  async getServiceDiff(
+    projectName: string,
+    envName: string,
+    serviceName: string,
+    production = false
+  ): Promise<SvcDiffResult> {
+    const prodParam = production ? '&production=true' : '';
+    return http.get<SvcDiffResult>(
+      `/api/aslan/environment/diff/products/${encodeURIComponent(projectName)}/service/${encodeURIComponent(serviceName)}?envName=${encodeURIComponent(envName)}${prodParam}`,
+      { skipErrorHandler: true }
+    );
+  },
 };
+
+export interface EnvServiceVersionItem {
+  service_name: string;
+  revision: number;
+  containers: Array<{ name: string; type?: string; image: string; image_name?: string }>;
+  operation: string;
+  deploy_type: string;
+  deploy_strategy: string;
+  detail: string;
+  create_time: number;
+  create_by: string;
+}
+
+export interface EnvServiceVersionYaml {
+  type: string;
+  yaml: string;
+  variable_yaml: string;
+  override_kvs?: string;
+  containers?: Array<{ name: string; type?: string; image: string }>;
+  detail?: string;
+  create_time?: number;
+  create_by?: string;
+  chart_repo?: string;
+  chart_name?: string;
+  chart_version?: string;
+}
+
+export interface EnvServiceVersionDiff {
+  type: string;
+  create_time_a: number;
+  create_time_b: number;
+  create_by_a: string;
+  create_by_b: string;
+  yaml_a: string;
+  yaml_b: string;
+  variable_yaml_a: string;
+  variable_yaml_b: string;
+  containers_a?: Array<{ name: string; image: string }>;
+  containers_b?: Array<{ name: string; image: string }>;
+}
+
+export interface CheckRollbackResponse {
+  available: boolean;
+  unavailable_images: string[];
+}
+
+export interface HelmRenderChartArg {
+  envName: string;
+  serviceName: string;
+  is_chart_deploy?: boolean;
+  release_name?: string;
+  chart_repo?: string;
+  chart_name?: string;
+  chartVersion?: string;
+  overrideValues?: Array<{ key: string; value: string }>;
+  overrideYaml?: string;
+  variable_yaml?: string;
+  deploy_strategy?: string;
+  yaml_data?: {
+    yaml_content?: string;
+    source?: string;
+  };
+}
+
+export interface K8sServiceVariableItem {
+  service_name: string;
+  variable_yaml: string;
+  variable_kvs: Array<{ key: string; value: string }>;
+  latest_variable_yaml: string;
+  latest_variable_kvs: Array<{ key: string; value: string }>;
+}
+
+export interface SvcDiffResult {
+  release_name?: string;
+  service_name: string;
+  chart_name?: string;
+  deployed_from_chart?: boolean;
+  current: {
+    yaml: string;
+    update_by: string;
+    revision: number;
+  };
+  latest: {
+    yaml: string;
+    update_by: string;
+    revision: number;
+  };
+  error?: string;
+}
 
 export default environmentApi;
