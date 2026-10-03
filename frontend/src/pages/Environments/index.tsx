@@ -86,8 +86,28 @@ export const EnvironmentsPage: React.FC = () => {
   const location = useLocation();
   const { currentProject } = useProjectStore();
   const activeProject = projectName || currentProject;
+  const searchParams = new URLSearchParams(location.search);
+
+  // 深链承接（旧版路由 envs/{podDetail,resourceDetail,externalConfig} 被当作环境名导致假死）：
+  //  podDetail      → 环境页 Pod 区并按 ?podName= 打开该 Pod 实时日志（无参时提示选择 Pod）
+  //  resourceDetail → 自动打开「资源视图」抽屉（EnvWorkloadsDrawer）
+  //  externalConfig → 自动打开「配置管理」抽屉（EnvConfigDrawer）
+  // 真实环境名经 ?envName= 传入；无参数时落在安全列表态并明确提示
+  const DEEP_LINK_MODES = ['podDetail', 'resourceDetail', 'externalConfig'];
+  const deepLinkMode = DEEP_LINK_MODES.includes(routeEnvName || '')
+    ? (routeEnvName as string)
+    : searchParams.get('open') === 'config'
+    ? 'externalConfig'
+    : searchParams.get('open') === 'resources'
+    ? 'resourceDetail'
+    : searchParams.get('open') === 'podDetail'
+    ? 'podDetail'
+    : '';
+  const deepLinkEnv = searchParams.get('envName') || '';
+  const deepLinkPod = searchParams.get('podName') || '';
+
   const [environments, setEnvironments] = useState<EnvironmentItem[]>([]);
-  const [currentEnv, setCurrentEnv] = useState<string>(routeEnvName || '');
+  const [currentEnv, setCurrentEnv] = useState<string>(deepLinkMode ? '' : routeEnvName || '');
   const [pods, setPods] = useState<PodItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -184,7 +204,12 @@ export const EnvironmentsPage: React.FC = () => {
       );
       const list = Array.isArray(res) ? res : ('data' in res && Array.isArray(res.data) ? res.data : []);
       setEnvironments(list);
-      if (routeEnvName) {
+      if (deepLinkMode) {
+        // 深链模式：环境名来自 ?envName=，不在路径段上；缺失时落到默认环境或安全列表态
+        const target = deepLinkEnv ? list.find((e) => e.name === deepLinkEnv) : undefined;
+        if (target) setCurrentEnv(target.name);
+        else if (list.length > 0 && !currentEnv) setCurrentEnv(list[0].name);
+      } else if (routeEnvName) {
         setCurrentEnv(routeEnvName);
       } else if (list.length > 0 && !currentEnv) {
         setCurrentEnv(list[0].name);
@@ -196,7 +221,7 @@ export const EnvironmentsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeProject, routeEnvName, currentEnv]);
+  }, [activeProject, routeEnvName, currentEnv, deepLinkMode, deepLinkEnv]);
 
   useEffect(() => {
     loadEnvironments();
@@ -390,6 +415,29 @@ export const EnvironmentsPage: React.FC = () => {
       setLogDrawerVisible(true);
     });
   };
+
+  // 深链承接 effect：环境与 Pod 列表就绪后，按 deepLinkMode 打开对应视图
+  useEffect(() => {
+    if (!deepLinkMode) return;
+    if (!currentEnv) {
+      // 未指定环境且列表为空 → 安全提示，不渲染假死态
+      feedback.message.warning('该链接未指定环境，请从环境列表选择环境后再查看');
+      return;
+    }
+    if (deepLinkMode === 'resourceDetail') {
+      setWorkloadsDrawerOpen(true);
+    } else if (deepLinkMode === 'externalConfig') {
+      setConfigDrawerOpen(true);
+    } else if (deepLinkMode === 'podDetail') {
+      const pod = deepLinkPod ? pods.find((p) => p.name === deepLinkPod || p.name.startsWith(`${deepLinkPod}-`)) : undefined;
+      if (pod) {
+        openLogs(pod);
+      } else {
+        feedback.message.info(deepLinkPod ? `未在环境 [${currentEnv}] 中找到 Pod ${deepLinkPod}，请在 Pod 实例列表中选择` : '请在「Pod 实例」列表中选择要查看的 Pod');
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkMode, currentEnv, pods]);
 
   const handleScaleReplicas = async () => {
     if (!activeProject || !currentEnv) return;
