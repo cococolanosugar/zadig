@@ -18,6 +18,7 @@ import {
   DatePicker,
   Alert,
   Divider,
+  Checkbox,
 } from 'antd';
 import {
   MailOutlined,
@@ -40,6 +41,8 @@ import {
   LinkOutlined,
   EditOutlined,
   ExportOutlined,
+  ApartmentOutlined,
+  KeyOutlined,
 } from '@ant-design/icons';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -49,6 +52,7 @@ import systemConfigApi, {
   type SecurityAndPrivacySettings,
   type SystemServerURL,
   type ExternalLinkItem,
+  type WorkflowHookSettings,
 } from '../../../api/systemConfig';
 import { feedback } from '../../../utils/feedback';
 
@@ -168,6 +172,11 @@ export const SystemConfigPage: React.FC = () => {
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
   const [savingLink, setSavingLink] = useState(false);
 
+  // 全局工作流 Hook 状态
+  const [workflowHookForm] = Form.useForm();
+  const [savingHook, setSavingHook] = useState(false);
+  const [hookLicenseBlocked, setHookLicenseBlocked] = useState(false);
+
   const loadTabData = useCallback(async (tab: string) => {
     setLoading(true);
     try {
@@ -274,13 +283,36 @@ export const SystemConfigPage: React.FC = () => {
         } catch {
           // ignore
         }
+      } else if (tab === 'workflowHook') {
+        try {
+          const res = await systemConfigApi.getWorkflowHook();
+          if (res) {
+            setHookLicenseBlocked(false);
+            workflowHookForm.setFieldsValue({
+              enable: res.enable ?? false,
+              hook_address: res.hook_address || '',
+              hook_secret: res.hook_secret || '',
+              hook_events: res.hook_events || [],
+            });
+          }
+        } catch (err: unknown) {
+          const msg =
+            (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '';
+          if (
+            msg.toLowerCase().includes('license') ||
+            msg.toLowerCase().includes('enterprise') ||
+            msg.includes('企业')
+          ) {
+            setHookLicenseBlocked(true);
+          }
+        }
       }
     } catch {
       // Graceful fallback
     } finally {
       setLoading(false);
     }
-  }, [emailForm, concurrencyForm, proxyForm, aiReviewForm, cronForm, securityForm, serverUrlForm]);
+  }, [emailForm, concurrencyForm, proxyForm, aiReviewForm, cronForm, securityForm, serverUrlForm, workflowHookForm]);
 
   useEffect(() => {
     loadTabData(activeTab);
@@ -460,6 +492,35 @@ export const SystemConfigPage: React.FC = () => {
         }
       },
     });
+  };
+
+  const handleGenerateHookSecret = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    let result = '';
+    for (let i = 0; i < 32; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    workflowHookForm.setFieldsValue({ hook_secret: result });
+    feedback.message.success('已随机生成 32 位 Webhook 签名密钥');
+  };
+
+  const handleSaveWorkflowHook = async (values: WorkflowHookSettings) => {
+    setSavingHook(true);
+    try {
+      await systemConfigApi.updateWorkflowHook({
+        enable: Boolean(values.enable),
+        hook_address: (values.hook_address || '').trim(),
+        hook_secret: (values.hook_secret || '').trim(),
+        hook_events: values.hook_events || [],
+      });
+      feedback.message.success('全局工作流 Hook 配置已保存');
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '保存全局工作流 Hook 失败';
+      feedback.message.error(msg);
+    } finally {
+      setSavingHook(false);
+    }
   };
 
   const handleTabChange = (key: string) => {
@@ -687,6 +748,14 @@ export const SystemConfigPage: React.FC = () => {
       label: (
         <span>
           <LinkOutlined /> 外部链接
+        </span>
+      ),
+    },
+    {
+      key: 'workflowHook',
+      label: (
+        <span>
+          <ApartmentOutlined /> 全局工作流 Hook
         </span>
       ),
     },
@@ -1456,6 +1525,122 @@ export const SystemConfigPage: React.FC = () => {
                 emptyText: <Empty description="暂无外部链接配置" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
               }}
             />
+          </div>
+        ) : activeTab === 'workflowHook' ? (
+          <div style={{ maxWidth: 720 }}>
+            {hookLicenseBlocked ? (
+              <Alert
+                title="企业版专有特性"
+                description="全局工作流 Hook 是 Zadig 企业版专有特性。检测到当前系统尚未激活企业版许可证，该配置已降级为只读预览模式。如需向企业统一监控平台、审批流或事件总线广播全量工作流执行事件，请升级或联系管理员导入企业版 License。"
+                type="warning"
+                showIcon
+                style={{ marginBottom: 20 }}
+              />
+            ) : (
+              <Alert
+                title="全局工作流 Hook 说明"
+                description="开启后，系统内所有通用工作流与自定义工作流执行时，将在指定任务生命周期事件触发时向配置的回调地址推送 JSON 格式 Webhook 消息。可通过签名密钥 (Secret) 校验来源合法性。"
+                type="info"
+                showIcon
+                style={{ marginBottom: 20 }}
+              />
+            )}
+
+            <Form
+              form={workflowHookForm}
+              layout="vertical"
+              onFinish={handleSaveWorkflowHook}
+              disabled={hookLicenseBlocked}
+            >
+              <Card
+                title="Webhook 基本配置"
+                variant="borderless"
+                style={{ marginBottom: 24, background: '#fafbfc', border: '1px solid #f0f0f0', borderRadius: 8 }}
+              >
+                <Form.Item
+                  name="enable"
+                  label="启用全局工作流 Hook"
+                  valuePropName="checked"
+                  extra="开启后将在全局范围内对所有工作流流水线生效"
+                >
+                  <Switch />
+                </Form.Item>
+
+                <Form.Item
+                  name="hook_address"
+                  label="Webhook 回调地址 (Hook Address)"
+                  rules={[
+                    { required: true, message: '请输入 Webhook 回调地址' },
+                    {
+                      pattern: /^https?:\/\/.+/,
+                      message: '回调地址必须以 http:// 或 https:// 开头',
+                    },
+                  ]}
+                  extra="例如: https://api.example.com/webhook/zadig-workflow"
+                >
+                  <Input placeholder="http(s)://..." />
+                </Form.Item>
+
+                <Form.Item
+                  label="签名密钥 (Hook Secret)"
+                  extra="用于对 Webhook 请求 Payload 进行 HMAC-SHA256 签名，接收方通过 HTTP Header 校验安全性（可选）"
+                >
+                  <Space.Compact style={{ width: '100%' }}>
+                    <Form.Item name="hook_secret" noStyle>
+                      <Input.Password placeholder="可自定义或点击右侧自动生成 32 位随机密钥" />
+                    </Form.Item>
+                    <Button icon={<KeyOutlined />} onClick={handleGenerateHookSecret}>
+                      随机生成
+                    </Button>
+                  </Space.Compact>
+                </Form.Item>
+              </Card>
+
+              <Card
+                title="订阅事件类型"
+                variant="borderless"
+                style={{ marginBottom: 24, background: '#fafbfc', border: '1px solid #f0f0f0', borderRadius: 8 }}
+              >
+                <Form.Item
+                  name="hook_events"
+                  label="选择触发 Webhook 的工作流执行事件"
+                  rules={[{ required: true, message: '请至少勾选一个订阅事件' }]}
+                >
+                  <Checkbox.Group style={{ width: '100%' }}>
+                    <Space orientation="vertical" size={12}>
+                      <Checkbox value="start_execute">
+                        <Space size={8}>
+                          <Text strong>任务开始执行</Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            (start_execute) - 工作流流水线实例被调度并启动执行时触发
+                          </Text>
+                        </Space>
+                      </Checkbox>
+                      <Checkbox value="complete_execute">
+                        <Space size={8}>
+                          <Text strong>任务执行完成</Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            (complete_execute) - 工作流执行完毕（无论成功、失败或取消）后触发
+                          </Text>
+                        </Space>
+                      </Checkbox>
+                    </Space>
+                  </Checkbox.Group>
+                </Form.Item>
+              </Card>
+
+              <Form.Item>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  icon={<SaveOutlined />}
+                  loading={savingHook}
+                  disabled={hookLicenseBlocked}
+                >
+                  保存工作流 Hook 配置
+                </Button>
+              </Form.Item>
+            </Form>
           </div>
         ) : activeTab === 'aiCodeReview' ? (
           <div style={{ maxWidth: 720 }}>
