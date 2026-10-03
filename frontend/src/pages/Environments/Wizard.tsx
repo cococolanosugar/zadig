@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   Steps,
@@ -16,6 +16,7 @@ import {
   Descriptions,
   Tag,
   Empty,
+  AutoComplete,
 } from 'antd';
 import {
   ClusterOutlined,
@@ -26,6 +27,7 @@ import {
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import http from '../../api/client';
+import environmentApi, { AvailableNamespace } from '../../api/environment';
 import { feedback } from '../../utils/feedback';
 import { useProjectStore } from '../../stores/project';
 
@@ -58,8 +60,26 @@ export const EnvironmentWizardPage: React.FC = () => {
   const [clusters, setClusters] = useState<ClusterItem[]>([]);
   const [availableServices, setAvailableServices] = useState<ServiceItem[]>([]);
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [availableNamespaces, setAvailableNamespaces] = useState<AvailableNamespace[]>([]);
+  const [loadingNamespaces, setLoadingNamespaces] = useState<boolean>(false);
 
   const [form] = Form.useForm();
+
+  const fetchNamespaces = useCallback(async (clusterId: string) => {
+    if (!clusterId) {
+      setAvailableNamespaces([]);
+      return;
+    }
+    setLoadingNamespaces(true);
+    try {
+      const res = await environmentApi.getAvailableNamespaces(clusterId, 'create');
+      setAvailableNamespaces(Array.isArray(res) ? res : []);
+    } catch {
+      setAvailableNamespaces([]);
+    } finally {
+      setLoadingNamespaces(false);
+    }
+  }, []);
 
   // Load clusters and project services
   useEffect(() => {
@@ -82,8 +102,10 @@ export const EnvironmentWizardPage: React.FC = () => {
           ? clusterRes
           : (clusterRes as any)?.data || [];
         setClusters(clusterList);
+        const defaultClusterId = clusterList[0]?.id || 'local';
         if (clusterList.length > 0 && !form.getFieldValue('cluster_id')) {
-          form.setFieldsValue({ cluster_id: clusterList[0].id });
+          form.setFieldsValue({ cluster_id: defaultClusterId });
+          fetchNamespaces(defaultClusterId);
         }
 
         const svcList = Array.isArray(serviceRes)
@@ -101,7 +123,7 @@ export const EnvironmentWizardPage: React.FC = () => {
     };
 
     fetchResources();
-  }, [projectName]);
+  }, [projectName, fetchNamespaces, form]);
 
   const handleNext = async () => {
     try {
@@ -242,7 +264,11 @@ export const EnvironmentWizardPage: React.FC = () => {
                 label="目标 Kubernetes 集群"
                 rules={[{ required: true, message: '请选择部署集群' }]}
               >
-                <Select placeholder="选择集群" loading={loadingResources}>
+                <Select
+                  placeholder="选择集群"
+                  loading={loadingResources}
+                  onChange={(val) => fetchNamespaces(val)}
+                >
                   {clusters.map((c) => (
                     <Option key={c.id} value={c.id}>
                       {c.name} {c.is_local ? '(当前控制面集群)' : ''}
@@ -255,9 +281,60 @@ export const EnvironmentWizardPage: React.FC = () => {
                 name="namespace"
                 label="Kubernetes Namespace (命名空间)"
                 rules={[{ required: true, message: '请输入命名空间' }]}
-                extra="系统将在选定集群中自动创建或绑定该 Namespace"
+                extra={
+                  <div>
+                    <div>系统将在选定集群中自动创建或托管该 Namespace（支持自由输入或选择集群现有命名空间）。</div>
+                    {loadingNamespaces && (
+                      <div style={{ marginTop: 4 }}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>正在从目标集群检测命名空间...</Text>
+                      </div>
+                    )}
+                    {availableNamespaces.length > 0 && (
+                      <div style={{ marginTop: 6 }}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>集群已发现命名空间快捷填入: </Text>
+                        <Space size={[4, 4]} wrap style={{ marginTop: 4 }}>
+                          {availableNamespaces.map((ns) => (
+                            <Tag
+                              key={ns.name}
+                              color={ns.used_by_other_env ? 'default' : 'geekblue'}
+                              style={{
+                                cursor: ns.used_by_other_env ? 'not-allowed' : 'pointer',
+                                opacity: ns.used_by_other_env ? 0.6 : 1,
+                              }}
+                              onClick={() => {
+                                if (!ns.used_by_other_env) {
+                                  form.setFieldsValue({ namespace: ns.name });
+                                }
+                              }}
+                            >
+                              {ns.name} {ns.used_by_other_env ? '(已占用)' : ''}
+                            </Tag>
+                          ))}
+                        </Space>
+                      </div>
+                    )}
+                  </div>
+                }
               >
-                <Input placeholder={`例如: ${projectName}-env-dev`} />
+                <AutoComplete
+                  placeholder={`例如: ${projectName}-env-dev 或从下拉列表中选择`}
+                  options={availableNamespaces.map((ns) => ({
+                    value: ns.name,
+                    disabled: ns.used_by_other_env,
+                    label: (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: ns.used_by_other_env ? 'normal' : 500 }}>{ns.name}</span>
+                        {ns.used_by_other_env ? (
+                          <Tag color="warning" style={{ marginInlineEnd: 0 }}>已被其他环境占用</Tag>
+                        ) : (
+                          <Tag color="success" style={{ marginInlineEnd: 0 }}>集群可用</Tag>
+                        )}
+                      </div>
+                    ),
+                  }))}
+                >
+                  <Input placeholder={`例如: ${projectName}-env-dev`} />
+                </AutoComplete>
               </Form.Item>
 
               <Form.Item
