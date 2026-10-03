@@ -10,6 +10,11 @@ import {
   Popover,
   Badge,
   Typography,
+  Space,
+  Tag,
+  Tooltip,
+  Spin,
+  Empty,
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
@@ -47,11 +52,14 @@ import {
   BgColorsOutlined,
   ControlOutlined,
   SafetyOutlined,
+  CheckOutlined,
+  DeleteOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '../stores/auth';
 import { useProjectStore } from '../stores/project';
 import { projectApi } from '../api/project';
-import http from '../api/client';
+import notificationApi, { type NotificationItem } from '../api/notification';
 import { feedback } from '../utils/feedback';
 import ZadigLogo from '../components/Brand/ZadigLogo';
 
@@ -62,22 +70,101 @@ export const BasicLayout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { userInfo, logout } = useAuthStore();
-  const { projects, setProjects, setLoading } = useProjectStore();
+  const { projects, setProjects, setLoading, currentProject } = useProjectStore();
 
   const [collapsed, setCollapsed] = useState(false);
   const [showBanner, setShowBanner] = useState(true);
-  const [notifications, setNotifications] = useState<Array<{ id?: string; content?: { title?: string; content?: string }; create_time?: number }>>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationPopoverOpen, setNotificationPopoverOpen] = useState(false);
 
-  // 拉取系统通知公告 (PullNotifyAnnouncement)
+  // 拉取系统通知 (PullNotify: GET /api/aslan/system/notification)
+  const fetchNotifications = async () => {
+    setNotificationLoading(true);
+    try {
+      const list = await notificationApi.getNotifications();
+      setNotifications(list);
+    } catch {
+      setNotifications([]);
+    } finally {
+      setNotificationLoading(false);
+    }
+  };
+
   useEffect(() => {
-    http
-      .get<Array<{ id?: string; content?: { title?: string; content?: string }; create_time?: number }>>(
-        '/api/aslan/system/announcement',
-        { skipErrorHandler: true }
-      )
-      .then((res) => setNotifications(Array.isArray(res) ? res : []))
-      .catch(() => setNotifications([]));
+    fetchNotifications();
   }, []);
+
+  const handleMarkAsRead = async (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      await notificationApi.markAsRead([id]);
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+      feedback.message.success('已标记为已读');
+    } catch {
+      feedback.message.error('操作失败');
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    const unreadIds = notifications.filter((n) => !n.is_read).map((n) => n.id);
+    if (unreadIds.length === 0) return;
+    try {
+      await notificationApi.markAsRead(unreadIds);
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      feedback.message.success('全部通知已标记为已读');
+    } catch {
+      feedback.message.error('操作失败');
+    }
+  };
+
+  const handleDeleteNotification = async (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      await notificationApi.deleteNotifications([id]);
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      feedback.message.success('通知已删除');
+    } catch {
+      feedback.message.error('操作失败');
+    }
+  };
+
+  const unreadNotifications = notifications.filter((n) => !n.is_read);
+  const unreadCount = unreadNotifications.length;
+
+  const renderTaskStatusTag = (status?: string) => {
+    switch (status) {
+      case 'passed':
+      case 'success':
+        return <Tag color="success">成功</Tag>;
+      case 'failed':
+        return <Tag color="error">失败</Tag>;
+      case 'running':
+        return <Tag color="processing">运行中</Tag>;
+      case 'timeout':
+        return <Tag color="warning">超时</Tag>;
+      case 'cancelled':
+        return <Tag color="default">已取消</Tag>;
+      default:
+        return status ? <Tag>{status}</Tag> : null;
+    }
+  };
+
+  const getTaskLink = (n: NotificationItem) => {
+    const prod = n.content?.product_name || currentProject || 'default';
+    if (n.type === 2) {
+      const pType = n.content?.type === 'single' ? 'single' : 'multi';
+      const pName = n.content?.pipeline_name || '';
+      const taskId = n.content?.task_id || '';
+      return `/v1/projects/detail/${prod}/pipelines/${pType}/${pName}/${taskId}?status=${n.content?.status || ''}`;
+    }
+    if (n.type === 4) {
+      const wfName = n.content?.workflow_name || '';
+      const taskId = n.content?.task_id || '';
+      return `/v1/projects/detail/${prod}/pipelines/custom/${wfName}/${taskId}`;
+    }
+    return '';
+  };
   const [openKeys, setOpenKeys] = useState<string[]>([
     'product-delivery',
     'release-management',
@@ -1237,33 +1324,171 @@ export const BasicLayout: React.FC = () => {
               <BookOutlined style={{ fontSize: 16, color: '#606266', cursor: 'pointer' }} />
             </Popover>
 
-            {/* 5. Notifications (real announcements via PullNotifyAnnouncement) */}
+            {/* 5. Notifications (系统通知: /api/aslan/system/notification) */}
             <Popover
-              title="系统通知"
+              title={
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                  <Space size={6}>
+                    <Text strong style={{ fontSize: 14 }}>系统通知</Text>
+                    {unreadCount > 0 && (
+                      <Tag color="processing" style={{ marginInlineEnd: 0 }}>{unreadCount} 条未读</Tag>
+                    )}
+                  </Space>
+                  <Space size={4}>
+                    <Tooltip title="全部设为已读">
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<CheckOutlined />}
+                        disabled={unreadCount === 0}
+                        onClick={handleMarkAllAsRead}
+                      />
+                    </Tooltip>
+                    <Tooltip title="通知设置">
+                      <Link to="/v1/profile/preference">
+                        <Button type="text" size="small" icon={<SettingOutlined />} />
+                      </Link>
+                    </Tooltip>
+                    <Tooltip title="刷新">
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<ReloadOutlined />}
+                        loading={notificationLoading}
+                        onClick={fetchNotifications}
+                      />
+                    </Tooltip>
+                  </Space>
+                </div>
+              }
               trigger="click"
+              open={notificationPopoverOpen}
+              onOpenChange={setNotificationPopoverOpen}
+              placement="bottomRight"
               content={
-                <div style={{ width: 280 }}>
-                  {notifications.length > 0 ? (
-                    notifications.map((n) => (
-                      <div key={n.id} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
-                        <Text strong style={{ fontSize: 13 }}>{n.content?.title || '通知'}</Text>
-                        <div>
-                          <Text type="secondary" style={{ fontSize: 12 }}>{n.content?.content || ''}</Text>
-                        </div>
-                        <div>
-                          <Text type="secondary" style={{ fontSize: 11 }}>
-                            {n.create_time ? new Date(n.create_time * 1000).toLocaleString() : ''}
-                          </Text>
-                        </div>
-                      </div>
-                    ))
+                <div style={{ width: 340, maxHeight: 420, overflowY: 'auto' }}>
+                  {notificationLoading && notifications.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                      <Spin size="small" />
+                    </div>
+                  ) : notifications.length === 0 ? (
+                    <Empty
+                      image={Empty.PRESENTED_IMAGE_SIMPLE}
+                      description="暂无系统通知"
+                      style={{ margin: '16px 0' }}
+                    />
                   ) : (
-                    <Text type="secondary">暂无新系统通知</Text>
+                    notifications.map((n) => {
+                      const isTask = n.type === 2 || n.type === 4;
+                      const taskLink = isTask ? getTaskLink(n) : '';
+                      return (
+                        <div
+                          key={n.id}
+                          style={{
+                            padding: '10px 12px',
+                            borderBottom: '1px solid #f0f0f0',
+                            backgroundColor: n.is_read ? 'transparent' : '#f9fbfd',
+                            borderLeft: n.is_read ? '3px solid transparent' : '3px solid #1677ff',
+                            marginBottom: 2,
+                          }}
+                        >
+                          {/* Type 2 / 4 Task Notification */}
+                          {isTask && (
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                <Space size={4}>
+                                  {renderTaskStatusTag(n.content?.status)}
+                                  {taskLink ? (
+                                    <Link
+                                      to={taskLink}
+                                      onClick={() => {
+                                        if (!n.is_read) handleMarkAsRead(n.id);
+                                        setNotificationPopoverOpen(false);
+                                      }}
+                                      style={{ fontWeight: 500 }}
+                                    >
+                                      #{n.content?.task_id}
+                                    </Link>
+                                  ) : (
+                                    <Text strong>#{n.content?.task_id}</Text>
+                                  )}
+                                </Space>
+                                <Text type="secondary" style={{ fontSize: 11 }}>
+                                  {n.content?.executor ? `执行人: ${n.content.executor}` : ''}
+                                </Text>
+                              </div>
+                              <div style={{ fontSize: 12, color: '#595959', marginBottom: 4 }}>
+                                {n.content?.workflow_display_name || n.content?.workflow_name || n.content?.pipeline_name || '-'}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Type 3 Message / Type 1 Announcement */}
+                          {!isTask && (
+                            <div>
+                              <div style={{ marginBottom: 4 }}>
+                                <Text strong style={{ fontSize: 13 }}>
+                                  {n.content?.title || (n.type === 1 ? '系统公告' : '系统消息')}
+                                </Text>
+                                {n.content?.req_id && (
+                                  <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>
+                                    ({n.content.req_id})
+                                  </Text>
+                                )}
+                              </div>
+                              {n.content?.content && (
+                                <div style={{ fontSize: 12, color: '#595959', marginBottom: 4, lineHeight: 1.5 }}>
+                                  {n.content.content}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Bottom footer: timestamp + action buttons */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                            <Space size={6}>
+                              <Tag
+                                color={n.is_read ? 'default' : 'geekblue'}
+                                style={{ fontSize: 11, marginInlineEnd: 0, padding: '0 4px', lineHeight: '18px' }}
+                              >
+                                {n.is_read ? '已读' : '未读'}
+                              </Tag>
+                              <Text type="secondary" style={{ fontSize: 11 }}>
+                                {n.create_time ? new Date(n.create_time * 1000).toLocaleString() : ''}
+                              </Text>
+                            </Space>
+                            <Space size={2}>
+                              {!n.is_read && (
+                                <Tooltip title="标为已读">
+                                  <Button
+                                    type="text"
+                                    size="small"
+                                    icon={<CheckOutlined style={{ fontSize: 12 }} />}
+                                    onClick={(e) => handleMarkAsRead(n.id, e)}
+                                    style={{ padding: '0 4px', height: 22 }}
+                                  />
+                                </Tooltip>
+                              )}
+                              <Tooltip title="删除该通知">
+                                <Button
+                                  type="text"
+                                  danger
+                                  size="small"
+                                  icon={<DeleteOutlined style={{ fontSize: 12 }} />}
+                                  onClick={(e) => handleDeleteNotification(n.id, e)}
+                                  style={{ padding: '0 4px', height: 22 }}
+                                />
+                              </Tooltip>
+                            </Space>
+                          </div>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               }
             >
-              <Badge dot={notifications.length > 0} offset={[-2, 2]}>
+              <Badge count={unreadCount} overflowCount={99} offset={[-2, 2]}>
                 <BellOutlined
                   style={{ fontSize: 16, color: '#606266', cursor: 'pointer' }}
                   title="系统通知"
