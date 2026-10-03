@@ -12,7 +12,7 @@ import {
   Tooltip,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { ReloadOutlined, FileTextOutlined } from '@ant-design/icons';
+import { ReloadOutlined, FileTextOutlined, RocketOutlined } from '@ant-design/icons';
 import environmentApi, {
   type WorkloadType,
   type ResourceType,
@@ -20,6 +20,7 @@ import environmentApi, {
 } from '../../api/environment';
 import YamlEditor from '../../components/Editor/YamlEditor';
 import { feedback } from '../../utils/feedback';
+import UpdateImageModal from './UpdateImageModal';
 
 const { Text } = Typography;
 
@@ -79,6 +80,23 @@ export const EnvWorkloadsDrawer: React.FC<EnvWorkloadsDrawerProps> = ({
   const [yamlLoading, setYamlLoading] = useState(false);
   const [currentYaml, setCurrentYaml] = useState('');
   const [currentResourceName, setCurrentResourceName] = useState('');
+
+  // 镜像更新弹层状态
+  const [updateImageModalOpen, setUpdateImageModalOpen] = useState(false);
+  const [targetWorkload, setTargetWorkload] = useState<{
+    name: string;
+    type: string;
+    images?: Array<{ name: string; image: string }>;
+  } | null>(null);
+
+  const handleOpenUpdateImage = (record: K8sResourceCommon) => {
+    setTargetWorkload({
+      name: record.name,
+      type: currentCategoryConfig.singularType,
+      images: record.images || [],
+    });
+    setUpdateImageModalOpen(true);
+  };
 
   const currentCategoryConfig =
     CATEGORIES.find((c) => c.key === activeCategory) || CATEGORIES[0];
@@ -369,19 +387,33 @@ export const EnvWorkloadsDrawer: React.FC<EnvWorkloadsDrawerProps> = ({
       {
         title: '操作',
         key: 'actions',
-        width: 110,
+        width: currentCategoryConfig.isWorkload ? 180 : 110,
         align: 'center',
         render: (_, record) => (
-          <Tooltip title="查看从集群实时读取的 Kubernetes 资源 YAML">
-            <Button
-              type="link"
-              size="small"
-              icon={<FileTextOutlined />}
-              onClick={() => handleViewLiveYaml(record)}
-            >
-              实时 YAML
-            </Button>
-          </Tooltip>
+          <Space size={0}>
+            {currentCategoryConfig.isWorkload && (
+              <Tooltip title="更新容器镜像">
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<RocketOutlined />}
+                  onClick={() => handleOpenUpdateImage(record)}
+                >
+                  更新镜像
+                </Button>
+              </Tooltip>
+            )}
+            <Tooltip title="查看从集群实时读取的 Kubernetes 资源 YAML">
+              <Button
+                type="link"
+                size="small"
+                icon={<FileTextOutlined />}
+                onClick={() => handleViewLiveYaml(record)}
+              >
+                实时 YAML
+              </Button>
+            </Tooltip>
+          </Space>
         ),
       }
     );
@@ -486,6 +518,23 @@ export const EnvWorkloadsDrawer: React.FC<EnvWorkloadsDrawerProps> = ({
           />
         )}
       </Drawer>
+
+      {targetWorkload && (
+        <UpdateImageModal
+          open={updateImageModalOpen}
+          onClose={() => {
+            setUpdateImageModalOpen(false);
+            setTargetWorkload(null);
+          }}
+          onSuccess={loadData}
+          projectName={projectName}
+          envName={envName}
+          workloadType={targetWorkload.type}
+          workloadName={targetWorkload.name}
+          containers={targetWorkload.images}
+          production={production}
+        />
+      )}
     </>
   );
 };
