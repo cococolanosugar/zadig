@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Tabs, Table, Tag, Typography, Button, Space, Input, Row, Col, Spin, Empty, Badge, Drawer, Tooltip } from 'antd';
+import { Card, Tabs, Table, Tag, Typography, Button, Space, Input, Row, Col, Spin, Empty, Badge, Drawer, Tooltip, Modal, Form, Popconfirm, message as antdMessage } from 'antd';
 import {
   AppstoreOutlined,
   BranchesOutlined,
@@ -20,6 +20,7 @@ import templateApi, {
   type ChartTemplateItem,
   type BuildTemplateItem,
   type ScannerTemplateItem,
+  templateCrudApi,
 } from '../../api/template';
 
 const { Title, Text, Paragraph } = Typography;
@@ -50,6 +51,82 @@ export const TemplateCenterPage: React.FC = () => {
   // 模板内容查看抽屉（对齐旧版「查看内容」）
   const [viewing, setViewing] = useState<{ title: string; content: string; variables?: Array<{ key: string; value?: string }> } | null>(null);
   const [viewingWorkflow, setViewingWorkflow] = useState<WorkflowTemplateItem | null>(null);
+
+  // 模板新建/编辑（YAML 与 Dockerfile 模板为内容型，可完整 CRUD；Chart/构建/扫描模板由各自模块维护）
+  const [editing, setEditing] = useState<
+    | { kind: 'yaml'; id?: string; name: string; content: string }
+    | { kind: 'dockerfile'; id?: string; name: string; content: string }
+    | null
+  >(null);
+  const [editingForm] = Form.useForm();
+  const [editingSaving, setEditingSaving] = useState(false);
+
+  const openCreateTemplate = () => {
+    const kind = activeTab === 'dockerfiles' ? 'dockerfile' : activeTab === 'k8s-yamls' ? 'yaml' : null;
+    if (!kind) {
+      antdMessage.info('该类模板由对应功能模块内创建（服务/构建/扫描配置保存后自动收录）');
+      return;
+    }
+    setEditing({ kind, name: '', content: '' });
+    editingForm.setFieldsValue({ name: '', content: '' });
+  };
+
+  const openEditTemplate = (kind: 'yaml' | 'dockerfile', id: string, name: string, content: string) => {
+    setEditing({ kind, id, name, content });
+    editingForm.setFieldsValue({ name, content });
+  };
+
+  const handleSaveEditing = async () => {
+    if (!editing) return false;
+    try {
+      const values = await editingForm.validateFields();
+      setEditingSaving(true);
+      if (editing.kind === 'yaml') {
+        if (editing.id) {
+          await templateCrudApi.updateYamlTemplate(editing.id, { name: values.name, content: values.content });
+        } else {
+          await templateCrudApi.createYamlTemplate({ name: values.name, content: values.content });
+        }
+      } else if (editing.id) {
+        await templateCrudApi.updateDockerfileTemplate(editing.id, { name: values.name, content: values.content });
+      } else {
+        await templateCrudApi.createDockerfileTemplate({ name: values.name, content: values.content });
+      }
+      antdMessage.success('模板已保存（保存时自动提取变量）');
+      setEditing(null);
+      // 重新拉取当前 tab 列表
+      if (editing.kind === 'yaml') {
+        templateApi.getYamlTemplates().then((res) => setYamlTemplates(res.yaml_template || []));
+      } else {
+        templateApi.getDockerfileTemplates().then((res) => setDockerfileTemplates(res.dockerfile_template || []));
+      }
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setEditingSaving(false);
+    }
+  };
+
+  const handleDeleteYamlTemplate = async (id: string) => {
+    try {
+      await templateCrudApi.deleteYamlTemplate(id);
+      antdMessage.success('模板已删除');
+      setYamlTemplates((prev) => prev.filter((t) => t.id !== id));
+    } catch {
+      antdMessage.error('删除失败（可能仍被服务引用）');
+    }
+  };
+
+  const handleDeleteDockerfileTemplate = async (id: string) => {
+    try {
+      await templateCrudApi.deleteDockerfileTemplate(id);
+      antdMessage.success('模板已删除');
+      setDockerfileTemplates((prev) => prev.filter((t) => t.id !== id));
+    } catch {
+      antdMessage.error('删除失败（可能仍被服务引用）');
+    }
+  };
 
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplateItem[]>([]);
   const [i18nMap, setI18nMap] = useState<Record<string, WorkflowTemplateI18n>>({});
@@ -207,8 +284,8 @@ export const TemplateCenterPage: React.FC = () => {
             allowClear
             style={{ width: 240, borderRadius: 4 }}
           />
-          <Tooltip title="模板由各功能模块内创建（服务/构建/扫描等配置保存后自动收录）">
-            <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 4 }} disabled>
+          <Tooltip title="YAML / Dockerfile 模板可直接新建；其余模板由对应功能模块维护">
+            <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 4 }} onClick={openCreateTemplate}>
               新建模板
             </Button>
           </Tooltip>
@@ -332,9 +409,21 @@ export const TemplateCenterPage: React.FC = () => {
                 render: (t: number | undefined) => (t ? new Date(t * 1000).toLocaleString() : '-'),
               },
               { title: '操作', key: 'action', render: (_, r: YamlTemplateItem) => (
-                <Button type="link" onClick={() => setViewing({ title: r.name, content: r.content || '', variables: r.variables })}>
-                  查看内容
-                </Button>
+                <Space size={0}>
+                  <Button type="link" onClick={() => setViewing({ title: r.name, content: r.content || '', variables: r.variables })}>
+                    查看内容
+                  </Button>
+                  {r.id && (
+                    <>
+                      <Button type="link" onClick={() => openEditTemplate('yaml', r.id as string, r.name, r.content || '')}>
+                        编辑
+                      </Button>
+                      <Popconfirm title={`确定删除模板 [${r.name}]？`} onConfirm={() => handleDeleteYamlTemplate(r.id as string)}>
+                        <Button type="link" danger>删除</Button>
+                      </Popconfirm>
+                    </>
+                  )}
+                </Space>
               ) },
             ]}
             locale={{
@@ -373,9 +462,21 @@ export const TemplateCenterPage: React.FC = () => {
                 render: (t: number | undefined) => (t ? new Date(t * 1000).toLocaleString() : '-'),
               },
               { title: '操作', key: 'action', render: (_, r: DockerfileTemplateItem) => (
-                <Button type="link" onClick={() => setViewing({ title: r.name, content: r.content || '' })}>
-                  查看内容
-                </Button>
+                <Space size={0}>
+                  <Button type="link" onClick={() => setViewing({ title: r.name, content: r.content || '' })}>
+                    查看内容
+                  </Button>
+                  {r.id && (
+                    <>
+                      <Button type="link" onClick={() => openEditTemplate('dockerfile', r.id as string, r.name, r.content || '')}>
+                        编辑
+                      </Button>
+                      <Popconfirm title={`确定删除模板 [${r.name}]？`} onConfirm={() => handleDeleteDockerfileTemplate(r.id as string)}>
+                        <Button type="link" danger>删除</Button>
+                      </Popconfirm>
+                    </>
+                  )}
+                </Space>
               ) },
             ]}
             locale={{
@@ -524,6 +625,44 @@ export const TemplateCenterPage: React.FC = () => {
           />
         )}
       </Card>
+
+      {/* 模板新建/编辑（YAML / Dockerfile） */}
+      <Modal
+        title={`${editing?.id ? '编辑' : '新建'}${editing?.kind === 'dockerfile' ? 'Dockerfile' : 'K8s YAML'}模板`}
+        open={!!editing}
+        onCancel={() => setEditing(null)}
+        onOk={handleSaveEditing}
+        okText="保存"
+        cancelText="取消"
+        width={720}
+        confirmLoading={editingSaving}
+        destroyOnHidden
+      >
+        <Form form={editingForm} layout="vertical">
+          <Form.Item
+            name="name"
+            label="模板名称"
+            rules={[{ required: true, message: '请输入模板名称' }]}
+          >
+            <Input placeholder="模板唯一标识" />
+          </Form.Item>
+          <Form.Item
+            name="content"
+            label={editing?.kind === 'dockerfile' ? 'Dockerfile 内容' : 'K8s YAML 内容（{{.变量}} 语法自动提取为模板变量）'}
+            rules={[{ required: true, message: '请输入模板内容' }]}
+          >
+            <Input.TextArea
+              rows={16}
+              style={{ fontFamily: 'monospace', fontSize: 13 }}
+              placeholder={
+                editing?.kind === 'dockerfile'
+                  ? 'FROM {{.base_image}}\n...'
+                  : 'apiVersion: apps/v1\nkind: Deployment\n...\nspec:\n  template:\n    spec:\n      containers:\n      - image: {{.image_name}}'
+              }
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       {/* Template Content View Drawer (k8s-yamls / dockerfiles) */}
       <Drawer
