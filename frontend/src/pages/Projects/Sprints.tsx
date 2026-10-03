@@ -26,11 +26,13 @@ import {
   DeleteOutlined,
   EditOutlined,
   SettingOutlined,
+  AppstoreOutlined,
 } from '@ant-design/icons';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
+import { SprintWorkItemDrawer } from './SprintWorkItemDrawer';
 
 const { Text } = Typography;
 
@@ -73,6 +75,10 @@ export const SprintsPage: React.FC = () => {
 
   // 迭代配置抽屉状态 (对齐 /sprints/config 路由；数据源为 sprint_template 模板列表)
   const [configDrawerOpen, setConfigDrawerOpen] = useState<boolean>(false);
+
+  // 迭代看板/工作项抽屉状态
+  const [workitemDrawerOpen, setWorkitemDrawerOpen] = useState<boolean>(false);
+  const [activeSprintForWorkitems, setActiveSprintForWorkitems] = useState<SprintItem | null>(null);
 
   useEffect(() => {
     if (location.pathname.endsWith('/config')) {
@@ -239,9 +245,20 @@ export const SprintsPage: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 200,
+      width: 260,
       render: (_, record) => (
         <Space size="middle">
+          <Button
+            type="link"
+            size="small"
+            icon={<AppstoreOutlined />}
+            onClick={() => {
+              setActiveSprintForWorkitems(record);
+              setWorkitemDrawerOpen(true);
+            }}
+          >
+            工作项
+          </Button>
           <Button
             type="link"
             size="small"
@@ -415,6 +432,19 @@ export const SprintsPage: React.FC = () => {
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无迭代模板" /> }}
         />
       </Drawer>
+
+      {/* 迭代工作项看板抽屉 */}
+      <SprintWorkItemDrawer
+        open={workitemDrawerOpen}
+        projectName={projectName || ''}
+        sprintId={activeSprintForWorkitems?.id || null}
+        sprintName={activeSprintForWorkitems?.name}
+        onClose={() => {
+          setWorkitemDrawerOpen(false);
+          setActiveSprintForWorkitems(null);
+          fetchSprints();
+        }}
+      />
     </div>
   );
 };
