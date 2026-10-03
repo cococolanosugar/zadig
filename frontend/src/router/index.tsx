@@ -30,6 +30,7 @@ import CodeHostsPage from '../pages/Settings/CodeHosts';
 import RegistriesPage from '../pages/Settings/Registries';
 import StoragePage from '../pages/Settings/Storage';
 import UsersPage from '../pages/Settings/Users';
+import ProjectRBACPage from '../pages/Projects/RBAC';
 import { SystemConfigPage } from '../pages/Settings/Config';
 import KeyVaultPage from '../pages/Settings/KeyVault';
 import SprintsPage from '../pages/Projects/Sprints';
@@ -146,7 +147,7 @@ export const AppRouter: React.FC = () => {
             <Route path="group" element={<VarsGroupPage />} />
             <Route path="group/create" element={<VarsGroupPage />} />
             <Route path="secrets" element={<KeyVaultPage />} />
-            <Route path="rbac" element={<UsersPage />} />
+            <Route path="rbac" element={<ProjectRBACPage />} />
             <Route path="integration" element={<SystemIntegrationPage />} />
             <Route path="integration/:category" element={<SystemIntegrationPage />} />
           </Route>
