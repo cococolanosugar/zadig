@@ -8,11 +8,15 @@ import {
   ReloadOutlined,
   SettingOutlined,
   SaveOutlined,
+  BellOutlined,
+  NotificationOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth';
 import { feedback } from '../../utils/feedback';
 import http from '../../api/client';
+import notificationApi, { type SubscriptionItem } from '../../api/notification';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -53,6 +57,49 @@ export const UserProfilePage: React.FC = () => {
   })();
   const [prefForm] = Form.useForm();
   const [savingPref, setSavingPref] = useState<boolean>(false);
+
+  // Notification Subscriptions state
+  const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>([]);
+  const [loadingSubscriptions, setLoadingSubscriptions] = useState(false);
+  const [savingSubType, setSavingSubType] = useState<number | null>(null);
+
+  const loadSubscriptions = useCallback(async () => {
+    setLoadingSubscriptions(true);
+    try {
+      const res = await notificationApi.listSubscriptions();
+      setSubscriptions(res);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingSubscriptions(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'preference') {
+      loadSubscriptions();
+    }
+  }, [activeTab, loadSubscriptions]);
+
+  const handleToggleSubscribe = async (type: number, enabled: boolean) => {
+    setSavingSubType(type);
+    try {
+      if (enabled) {
+        await notificationApi.upsertSubscription({ type });
+        feedback.message.success('已订阅该类系统通知');
+      } else {
+        await notificationApi.unsubscribe(type);
+        feedback.message.success('已取消订阅该类通知');
+      }
+      await loadSubscriptions();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '更新订阅状态失败';
+      feedback.message.error(msg);
+    } finally {
+      setSavingSubType(null);
+    }
+  };
 
   const handleRotateToken = async () => {
     if (!userInfo?.uid) {
@@ -495,9 +542,94 @@ export const UserProfilePage: React.FC = () => {
             </Form>
           </div>
         ) : (
-          <div style={{ maxWidth: 640 }}>
+          <div style={{ maxWidth: 680 }}>
+            <Card
+              title={
+                <Space size={8}>
+                  <BellOutlined style={{ color: '#1677ff' }} />
+                  <span>系统通知订阅设置</span>
+                </Space>
+              }
+              variant="borderless"
+              style={{ marginBottom: 28, background: '#fafbfc', border: '1px solid #f0f0f0', borderRadius: 8 }}
+              styles={{ body: { padding: '16px 20px' } }}
+            >
+              <Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 16 }}>
+                设置您希望接收的系统通知类型。开关变更将自动同步至服务端，并在右上角通知中心及桌面推送中生效。
+              </Paragraph>
+
+              {loadingSubscriptions ? (
+                <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                  <Spin size="small" />
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {[
+                    {
+                      type: 1,
+                      title: '系统全员公告',
+                      desc: '系统平台发布的重要版本升级、服务维护通知及全局系统通知',
+                      icon: <NotificationOutlined style={{ color: '#1677ff', fontSize: 16 }} />,
+                    },
+                    {
+                      type: 2,
+                      title: '流水线状态提醒',
+                      desc: '当与您相关的持续交付流水线执行成功、失败或超时中断时提醒',
+                      icon: <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 16 }} />,
+                    },
+                    {
+                      type: 3,
+                      title: '系统消息与审批待办',
+                      desc: '发布审批待办、环境变更申请、权限审批及系统直接消息通知',
+                      icon: <BellOutlined style={{ color: '#fa8c16', fontSize: 16 }} />,
+                    },
+                    {
+                      type: 4,
+                      title: '工作流任务状态变更',
+                      desc: '自定义工作流及通用流水线任务排队、启动调度、完成或取消状态推送',
+                      icon: <ApiOutlined style={{ color: '#722ed1', fontSize: 16 }} />,
+                    },
+                  ].map((item) => {
+                    const isSubscribed = subscriptions.some((s) => s.type === item.type);
+                    const isSaving = savingSubType === item.type;
+                    return (
+                      <div
+                        key={item.type}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '12px 16px',
+                          background: '#ffffff',
+                          borderRadius: 6,
+                          border: '1px solid #f0f0f0',
+                        }}
+                      >
+                        <Space size={12} style={{ alignItems: 'flex-start' }}>
+                          <div style={{ marginTop: 2 }}>{item.icon}</div>
+                          <div>
+                            <div style={{ fontWeight: 500, color: '#1f2d3d', fontSize: 14 }}>
+                              {item.title}
+                            </div>
+                            <div style={{ color: '#8c8c8c', fontSize: 12, marginTop: 2 }}>
+                              {item.desc}
+                            </div>
+                          </div>
+                        </Space>
+                        <Switch
+                          checked={isSubscribed}
+                          loading={isSaving}
+                          onChange={(checked) => handleToggleSubscribe(item.type, checked)}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+
             <Title level={5} style={{ marginBottom: 16 }}>
-              个性化偏好设置
+              界面与本地偏好设置
             </Title>
             <Form
               form={prefForm}
