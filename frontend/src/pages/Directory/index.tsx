@@ -13,6 +13,8 @@ import {
   Popconfirm,
   Drawer,
   Descriptions,
+  Switch,
+  Select,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -23,9 +25,14 @@ import {
   EditOutlined,
   DeleteOutlined,
   EyeOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import http from '../../api/client';
+import applicationApi, {
+  type ApplicationFieldDefinition,
+} from '../../api/application';
+import { FieldDefinitionDrawer } from './FieldDefinitionDrawer';
 import { feedback } from '../../utils/feedback';
 
 const { Title, Text } = Typography;
@@ -43,6 +50,7 @@ export interface CatalogApplication {
   production_service_name?: string;
   create_time?: number;
   update_time?: number;
+  custom_fields?: Record<string, unknown>;
 }
 
 export const DirectoryPage: React.FC = () => {
@@ -58,6 +66,10 @@ export const DirectoryPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<CatalogApplication | null>(null);
   const [form] = Form.useForm();
+
+  // Custom field definitions state
+  const [fieldDrawerOpen, setFieldDrawerOpen] = useState(false);
+  const [fieldDefinitions, setFieldDefinitions] = useState<ApplicationFieldDefinition[]>([]);
 
   // Detail Drawer state
   const [detailOpen, setDetailOpen] = useState(false);
@@ -94,10 +106,23 @@ export const DirectoryPage: React.FC = () => {
     [routeId]
   );
 
+  const loadFieldDefinitions = useCallback(async () => {
+    try {
+      const res = await applicationApi.listFieldDefinitions();
+      setFieldDefinitions(Array.isArray(res) ? res : []);
+    } catch {
+      setFieldDefinitions([]);
+    }
+  }, []);
+
   useEffect(() => {
     loadApplications(page, pageSize, searchText);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize]);
+
+  useEffect(() => {
+    loadFieldDefinitions();
+  }, [loadFieldDefinitions]);
 
   const handleSearch = () => {
     setPage(1);
@@ -133,6 +158,7 @@ export const DirectoryPage: React.FC = () => {
       description: record.description,
       testing_service_name: record.testing_service_name,
       production_service_name: record.production_service_name,
+      custom_fields: record.custom_fields || {},
     });
     setModalOpen(true);
   };
@@ -140,19 +166,24 @@ export const DirectoryPage: React.FC = () => {
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
+      const payload = {
+        ...values,
+        custom_fields: values.custom_fields || {},
+      };
       if (editing) {
-        await http.put(`/api/aslan/application/applications/${editing.id}`, { ...editing, ...values });
+        await http.put(`/api/aslan/application/applications/${editing.id}`, { ...editing, ...payload });
         feedback.message.success(`应用 [${values.name}] 已更新`);
       } else {
-        await http.post('/api/aslan/application/applications', values);
+        await http.post('/api/aslan/application/applications', payload);
         feedback.message.success(`应用 [${values.name}] 创建成功`);
       }
       setModalOpen(false);
       setEditing(null);
       loadApplications(page, pageSize, searchText.trim());
-    } catch (err: any) {
-      if (!err?.errorFields) {
-        feedback.message.error(err?.response?.data?.message || err?.message || '保存失败');
+    } catch (err: unknown) {
+      const errorObj = err as { errorFields?: unknown; response?: { data?: { message?: string } }; message?: string };
+      if (!errorObj?.errorFields) {
+        feedback.message.error(errorObj?.response?.data?.message || errorObj?.message || '保存失败');
       }
     }
   };
@@ -167,7 +198,7 @@ export const DirectoryPage: React.FC = () => {
     }
   };
 
-  const columns: ColumnsType<CatalogApplication> = [
+  const baseColumns: ColumnsType<CatalogApplication> = [
     {
       title: '业务系统名称',
       dataIndex: 'name',
@@ -194,6 +225,33 @@ export const DirectoryPage: React.FC = () => {
     },
     { title: '所属项目', dataIndex: 'project', key: 'project', render: (p) => <Tag color="blue">{String(p || '-')}</Tag> },
     { title: '负责人', dataIndex: 'owner', key: 'owner', render: (o) => <Text type="secondary">{String(o || '-')}</Text> },
+  ];
+
+  const customFieldColumns: ColumnsType<CatalogApplication> = fieldDefinitions
+    .filter((f) => f.show_in_list)
+    .map((f) => ({
+      title: f.name,
+      key: `custom_${f.key}`,
+      render: (_, r) => {
+        const val = r.custom_fields?.[f.key];
+        if (val === undefined || val === null || val === '') return '-';
+        if (typeof val === 'boolean') return val ? <Tag color="green">是</Tag> : <Tag color="default">否</Tag>;
+        if (Array.isArray(val)) {
+          return (
+            <Space orientation="horizontal" size={2} wrap>
+              {val.map((item) => (
+                <Tag key={String(item)} style={{ fontSize: 11 }}>
+                  {String(item)}
+                </Tag>
+              ))}
+            </Space>
+          );
+        }
+        return <Text>{String(val)}</Text>;
+      },
+    }));
+
+  const trailingColumns: ColumnsType<CatalogApplication> = [
     {
       title: '关联服务 (测试 / 生产)',
       key: 'services',
@@ -247,6 +305,12 @@ export const DirectoryPage: React.FC = () => {
     },
   ];
 
+  const columns: ColumnsType<CatalogApplication> = [
+    ...baseColumns,
+    ...customFieldColumns,
+    ...trailingColumns,
+  ];
+
   return (
     <div style={{ padding: '20px 24px', backgroundColor: '#f5f7fa', minHeight: 'calc(100vh - 110px)' }}>
       <div style={{ marginBottom: 16 }}>
@@ -278,9 +342,14 @@ export const DirectoryPage: React.FC = () => {
               刷新
             </Button>
           </Space>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            新建应用
-          </Button>
+          <Space orientation="horizontal" size={8}>
+            <Button icon={<SettingOutlined />} onClick={() => setFieldDrawerOpen(true)}>
+              字段定义管理
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              新建应用
+            </Button>
+          </Space>
         </div>
 
         <Table
@@ -315,6 +384,7 @@ export const DirectoryPage: React.FC = () => {
         onOk={handleSave}
         okText={editing ? '保存' : '创建'}
         cancelText="取消"
+        width={580}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
           <Form.Item
@@ -344,8 +414,44 @@ export const DirectoryPage: React.FC = () => {
             <Input placeholder="例如: 张三" />
           </Form.Item>
           <Form.Item name="description" label="描述">
-            <Input.TextArea rows={3} placeholder="应用职责与边界说明" />
+            <Input.TextArea rows={2} placeholder="应用职责与边界说明" />
           </Form.Item>
+
+          {/* Dynamic Custom Fields */}
+          {fieldDefinitions.length > 0 && (
+            <>
+              <div style={{ margin: '16px 0 8px', fontWeight: 600, color: '#4b5563', fontSize: 13 }}>
+                自定义扩展属性 (Custom Fields)
+              </div>
+              {fieldDefinitions.map((f) => (
+                <Form.Item
+                  key={f.key}
+                  name={['custom_fields', f.key]}
+                  label={f.name}
+                  rules={[{ required: Boolean(f.required), message: `请输入${f.name}` }]}
+                  tooltip={f.description}
+                  valuePropName={f.type === 'bool' ? 'checked' : 'value'}
+                >
+                  {f.type === 'bool' ? (
+                    <Switch checkedChildren="是" unCheckedChildren="否" />
+                  ) : f.type === 'single_select' ? (
+                    <Select
+                      placeholder={`请选择${f.name}`}
+                      options={(f.options || []).map((opt) => ({ label: opt, value: opt }))}
+                    />
+                  ) : f.type === 'multi_select' ? (
+                    <Select
+                      mode="multiple"
+                      placeholder={`请选择${f.name}`}
+                      options={(f.options || []).map((opt) => ({ label: opt, value: opt }))}
+                    />
+                  ) : (
+                    <Input placeholder={`请输入${f.name}`} />
+                  )}
+                </Form.Item>
+              ))}
+            </>
+          )}
         </Form>
       </Modal>
 
@@ -359,7 +465,7 @@ export const DirectoryPage: React.FC = () => {
         }
         open={detailOpen}
         onClose={handleCloseDetail}
-        size={600}
+        size="large"
       >
         {detailItem && (
           <Descriptions column={1} bordered size="small">
@@ -386,9 +492,37 @@ export const DirectoryPage: React.FC = () => {
             <Descriptions.Item label="职责描述">
               {detailItem.description || '暂无描述'}
             </Descriptions.Item>
+
+            {/* Custom fields in detail */}
+            {fieldDefinitions.length > 0 &&
+              fieldDefinitions.map((f) => {
+                const val = (detailItem.custom_fields as Record<string, unknown> | undefined)?.[f.key];
+                return (
+                  <Descriptions.Item key={f.key} label={f.name}>
+                    {val === undefined || val === null || val === '' ? (
+                      '-'
+                    ) : typeof val === 'boolean' ? (
+                      val ? <Tag color="green">是</Tag> : <Tag color="default">否</Tag>
+                    ) : Array.isArray(val) ? (
+                      val.join(', ')
+                    ) : (
+                      String(val)
+                    )}
+                  </Descriptions.Item>
+                );
+              })}
           </Descriptions>
         )}
       </Drawer>
+
+      <FieldDefinitionDrawer
+        open={fieldDrawerOpen}
+        onClose={() => setFieldDrawerOpen(false)}
+        onFieldsChange={() => {
+          loadFieldDefinitions();
+          loadApplications(page, pageSize, searchText.trim());
+        }}
+      />
     </div>
   );
 };
