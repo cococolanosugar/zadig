@@ -48,6 +48,15 @@ interface ScanningTaskItem {
   end_time?: number;
   duration?: number;
 }
+
+// ListScanningTaskResp: {scan_info, scan_tasks:[{scan_id,status,run_time,creator,created_at,repo_info}], total_tasks}
+const mapScanTask = (t: Record<string, unknown>): ScanningTaskItem => ({
+  scan_id: t.scan_id as number,
+  status: t.status as string,
+  creator: t.creator as string,
+  create_time: t.created_at as number,
+  duration: t.run_time as number,
+});
 import type { ColumnsType } from 'antd/es/table';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
@@ -259,12 +268,13 @@ export const ScannersPage: React.FC = () => {
         // 保留列表数据
       }
       try {
-        const taskRes = await http.get<ScanningTaskItem[] | { items?: ScanningTaskItem[] }>(
+        // 后端 ListScanningTask 返回 {scan_info, scan_tasks, total_tasks}
+        const taskRes = await http.get<{ scan_info?: unknown; scan_tasks?: Array<Record<string, unknown>>; total_tasks?: number }>(
           `/api/aslan/testing/scanning/${scanner.id}/task`,
           { skipErrorHandler: true }
         );
         setScanTasks(
-          Array.isArray(taskRes) ? taskRes : (taskRes as { items?: ScanningTaskItem[] })?.items || []
+          Array.isArray(taskRes?.scan_tasks) ? taskRes.scan_tasks.map(mapScanTask) : []
         );
       } catch {
         setScanTasks([]);
