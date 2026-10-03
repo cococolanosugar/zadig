@@ -21,6 +21,7 @@ import {
   Timeline,
   Segmented,
   Tooltip,
+  Badge,
 } from 'antd';
 import { Line } from '@ant-design/plots';
 import {
@@ -37,6 +38,7 @@ import {
   RollbackOutlined,
   RiseOutlined,
   TrophyOutlined,
+  CodeOutlined,
 } from '@ant-design/icons';
 import http from '../../api/client';
 import statApi, {
@@ -49,6 +51,7 @@ import statApi, {
 import { feedback } from '../../utils/feedback';
 import { normalizeJobName } from '../../utils/jobname';
 import { useProjectStore } from '../../stores/project';
+import { subscribeSSE } from '../../utils/sse';
 
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -267,6 +270,78 @@ export const QualityCenterPage: React.FC = () => {
   const [junitSuites, setJunitSuites] = useState<JUnitSuite[]>([]);
   const [reportTask, setReportTask] = useState<{ taskId: number | string; name: string } | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
+  const [taskLogs, setTaskLogs] = useState<string[]>([]);
+  const [sseConnected, setSseConnected] = useState<boolean>(false);
+
+  // 独立测试任务实时状态与日志 SSE 订阅 (GET /api/aslan/testing/sse/:testName/tasks/:taskID)
+  useEffect(() => {
+    if (!reportTask || !detailTest) {
+      setTaskLogs([]);
+      setSseConnected(false);
+      return;
+    }
+
+    const projectNameForTask = detailTest.product_name || projectName || '';
+    const sseUrl = `/api/aslan/testing/sse/${encodeURIComponent(reportTask.name)}/tasks/${reportTask.taskId}?projectName=${encodeURIComponent(projectNameForTask)}`;
+
+    setTaskLogs([`[${new Date().toLocaleTimeString()}] 正在建立测试任务实时数据流连接...`]);
+    setSseConnected(true);
+
+    const unsubscribe = subscribeSSE<Record<string, unknown>>(sseUrl, {
+      onMessage: (data) => {
+        if (!data) return;
+        if (typeof data === 'string') {
+          setTaskLogs((prev) => [...prev, data]);
+          return;
+        }
+
+        // 同步任务详情最新状态
+        if (data.status) {
+          setTaskDetail((prev) => ({ ...(prev || {}), ...data }));
+          const timeStr = new Date().toLocaleTimeString();
+          const logLine = `[${timeStr}] 任务执行状态: ${String(data.status)} ${data.error ? `(异常原因: ${data.error})` : ''}`;
+          setTaskLogs((prev) => {
+            if (prev[prev.length - 1] === logLine) return prev;
+            return [...prev, logLine];
+          });
+        }
+
+        // 提取阶段与子任务日志
+        const stages = (data.stages || []) as Array<{
+          name?: string;
+          status?: string;
+          sub_tasks?: Record<string, unknown>;
+          jobs?: Array<{ name?: string; status?: string; spec?: { log?: string } }>;
+        }>;
+
+        if (Array.isArray(stages)) {
+          stages.forEach((st) => {
+            if (st.jobs && Array.isArray(st.jobs)) {
+              st.jobs.forEach((j) => {
+                if (j.spec?.log) {
+                  const lines = j.spec.log.split('\n').filter(Boolean);
+                  setTaskLogs((prev) => {
+                    const existingSet = new Set(prev);
+                    const newLines = lines.filter((l) => !existingSet.has(l));
+                    return newLines.length > 0 ? [...prev, ...newLines] : prev;
+                  });
+                }
+              });
+            }
+          });
+        }
+      },
+      onError: () => {
+        setSseConnected(false);
+        setTaskLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] 任务日志流已断开或任务已完成`]);
+      },
+    });
+
+    return () => {
+      unsubscribe();
+      setSseConnected(false);
+    };
+  }, [reportTask, detailTest, projectName]);
 
   const openTaskReport = useCallback(
     async (task: Record<string, unknown>) => {
@@ -1310,6 +1385,61 @@ export const QualityCenterPage: React.FC = () => {
                 </Descriptions.Item>
               </Descriptions>
             )}
+
+            {/* 实时执行日志 (对齐 GET /api/aslan/testing/sse/:testName/tasks/:taskID) */}
+            <Card
+              size="small"
+              title={
+                <Space>
+                  <CodeOutlined style={{ color: '#0066ff' }} />
+                  <span>实时执行日志流</span>
+                  <Badge
+                    status={sseConnected ? 'processing' : 'default'}
+                    text={sseConnected ? '实时监听中' : '日志流已结束'}
+                  />
+                </Space>
+              }
+              extra={
+                <Button size="small" onClick={() => setTaskLogs([])}>
+                  清空日志
+                </Button>
+              }
+            >
+              <div
+                style={{
+                  background: '#1e1e1e',
+                  color: '#d4d4d4',
+                  padding: 12,
+                  borderRadius: 6,
+                  fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  maxHeight: 260,
+                  overflowY: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {taskLogs.length > 0 ? (
+                  taskLogs.map((log, index) => {
+                    const isError = log.includes('error') || log.includes('异常') || log.includes('failed');
+                    const isSuccess = log.includes('passed') || log.includes('成功');
+                    return (
+                      <div
+                        key={index}
+                        style={{
+                          color: isError ? '#f87171' : isSuccess ? '#4ade80' : '#d4d4d4',
+                        }}
+                      >
+                        {log}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div style={{ color: '#94a3b8' }}>暂无日志输出，等待实时数据流推送...</div>
+                )}
+              </div>
+            </Card>
 
             {/* JUnit 测试报告 */}
             <Card size="small" title="JUnit 测试报告">
