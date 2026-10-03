@@ -64,6 +64,7 @@ interface EnvironmentItem {
   status?: string;
   production?: boolean;
   update_time?: number;
+  source?: string;
 }
 
 // GET /api/aslan/environment/kube/pods — kube.ListPodsInfoRespone
@@ -90,7 +91,7 @@ export const EnvironmentsPage: React.FC = () => {
   const { projectName, envName: routeEnvName } = useParams<{ projectName?: string; envName?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentProject } = useProjectStore();
+  const { currentProject, projects } = useProjectStore();
   const activeProject = projectName || currentProject;
   const searchParams = new URLSearchParams(location.search);
 
@@ -147,8 +148,16 @@ export const EnvironmentsPage: React.FC = () => {
   const [gvRows, setGvRows] = useState<Array<{ key: string; value: string; type?: string; desc?: string }>>([]);
   const [envRevision, setEnvRevision] = useState<number>(0);
   // 当前环境是否处于睡眠状态（后端 ProductStatusSleeping = "Sleeping"）
+  const currentProjectObj = projects.find((p) => (p.name || p.product_name) === activeProject);
   const currentEnvObj = environments.find((e) => e.name === currentEnv);
   const currentEnvIsSleeping = currentEnvObj?.status === 'Sleeping';
+  // 门控 Helm 特性：项目为 Helm 架构或环境 source === 'helm'，避免非 Helm 环境调用 /helm/releases 触发后端查表 panic
+  const isHelmEnv = Boolean(
+    currentProjectObj?.deployType === 'helm' ||
+    (currentProjectObj as { deploy_type?: string })?.deploy_type === 'helm' ||
+    (currentProjectObj as { product_feature?: { deploy_type?: string } })?.product_feature?.deploy_type === 'helm' ||
+    currentEnvObj?.source === 'helm'
+  );
 
   // 管理服务（对齐旧版添加/删除服务；后端 PUT /environments/:name 全量替换服务组）
   const [svcModalOpen, setSvcModalOpen] = useState(false);
@@ -661,20 +670,24 @@ export const EnvironmentsPage: React.FC = () => {
               >
                 管理服务
               </Button>
-              <Button
-                icon={<RocketOutlined />}
-                onClick={() => setHelmReleasesOpen(true)}
-                disabled={!currentEnv}
-              >
-                Helm Releases
-              </Button>
-              <Button
-                icon={<CodeOutlined />}
-                onClick={() => setHelmRendersetOpen(true)}
-                disabled={!currentEnv}
-              >
-                Helm 渲染配置
-              </Button>
+              {isHelmEnv && (
+                <>
+                  <Button
+                    icon={<RocketOutlined />}
+                    onClick={() => setHelmReleasesOpen(true)}
+                    disabled={!currentEnv}
+                  >
+                    Helm Releases
+                  </Button>
+                  <Button
+                    icon={<CodeOutlined />}
+                    onClick={() => setHelmRendersetOpen(true)}
+                    disabled={!currentEnv}
+                  >
+                    Helm 渲染配置
+                  </Button>
+                </>
+              )}
               <Button
                 icon={<AppstoreOutlined />}
                 onClick={() => setConfigDrawerOpen(true)}
@@ -978,13 +991,15 @@ export const EnvironmentsPage: React.FC = () => {
       />
 
       {/* Helm Releases Drawer (对齐旧版 Helm 环境的 Release 状态与 diff) */}
-      <HelmReleasesDrawer
-        open={helmReleasesOpen}
-        onClose={() => setHelmReleasesOpen(false)}
-        envName={currentEnv || ''}
-        projectName={activeProject || ''}
-        production={environments.find((e) => e.name === currentEnv)?.production ?? false}
-      />
+      {isHelmEnv && (
+        <HelmReleasesDrawer
+          open={helmReleasesOpen}
+          onClose={() => setHelmReleasesOpen(false)}
+          envName={currentEnv || ''}
+          projectName={activeProject || ''}
+          production={environments.find((e) => e.name === currentEnv)?.production ?? false}
+        />
+      )}
 
       {/* 节点列表抽屉 (对齐旧版 kube GET /nodes 节点健康与 IP) */}
       <EnvNodesDrawer
@@ -1013,7 +1028,7 @@ export const EnvironmentsPage: React.FC = () => {
         projectName={activeProject || ''}
         envName={currentEnv || ''}
         serviceName={historyServiceName}
-        isHelmChart={false}
+        isHelmChart={Boolean(isHelmEnv)}
         production={currentEnvObj?.production ?? false}
         onRollbackSuccess={() => {
           loadWorkloadPods();
@@ -1021,13 +1036,15 @@ export const EnvironmentsPage: React.FC = () => {
       />
 
       {/* Helm 渲染配置抽屉 (对齐旧版 /rendersets/*) */}
-      <HelmRendersetDrawer
-        open={helmRendersetOpen}
-        onClose={() => setHelmRendersetOpen(false)}
-        projectName={activeProject || ''}
-        envName={currentEnv || ''}
-        production={currentEnvObj?.production ?? false}
-      />
+      {isHelmEnv && (
+        <HelmRendersetDrawer
+          open={helmRendersetOpen}
+          onClose={() => setHelmRendersetOpen(false)}
+          projectName={activeProject || ''}
+          envName={currentEnv || ''}
+          production={currentEnvObj?.production ?? false}
+        />
+      )}
 
       {/* 服务模板差异对比弹窗 (对齐旧版 GET /diff/products/:name/service/:svc) */}
       <ServiceDiffModal
