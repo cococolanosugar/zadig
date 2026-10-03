@@ -16,6 +16,8 @@ import {
   Modal,
   Select,
   DatePicker,
+  Alert,
+  Divider,
 } from 'antd';
 import {
   MailOutlined,
@@ -31,10 +33,13 @@ import {
   PlusOutlined,
   DeleteOutlined,
   RobotOutlined,
+  ClearOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import http from '../../../api/client';
+import systemConfigApi, { type CleanCacheState } from '../../../api/systemConfig';
 import { feedback } from '../../../utils/feedback';
 
 const { Title, Text } = Typography;
@@ -117,6 +122,13 @@ export const SystemConfigPage: React.FC = () => {
   const [llmOptions, setLlmOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [savingAiReview, setSavingAiReview] = useState(false);
 
+  // 缓存清理 (CleanCache)
+  const [cleanStatus, setCleanStatus] = useState<CleanCacheState | null>(null);
+  const [cleanLoading, setCleanLoading] = useState(false);
+  const [cronForm] = Form.useForm();
+  const [cleaningOneClick, setCleaningOneClick] = useState(false);
+  const [cleaningShared, setCleaningShared] = useState(false);
+
   // Data states
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [basicImages, setBasicImages] = useState<BasicImageItem[]>([]);
@@ -192,17 +204,111 @@ export const SystemConfigPage: React.FC = () => {
           });
         }
         setLlmOptions(Array.isArray(llmRes) ? llmRes.map((l) => ({ label: l.name, value: l.id })) : []);
+      } else if (tab === 'cache') {
+        setCleanLoading(true);
+        try {
+          const res = await systemConfigApi.getCleanCacheState();
+          setCleanStatus(res);
+          cronForm.setFieldsValue({
+            cron_enabled: res?.cron_enabled ?? false,
+            cron: res?.cron ?? '',
+          });
+        } catch {
+          // ignore
+        } finally {
+          setCleanLoading(false);
+        }
       }
     } catch {
       // Graceful fallback
     } finally {
       setLoading(false);
     }
-  }, [emailForm, concurrencyForm, proxyForm, aiReviewForm]);
+  }, [emailForm, concurrencyForm, proxyForm, aiReviewForm, cronForm]);
 
   useEffect(() => {
     loadTabData(activeTab);
   }, [activeTab, loadTabData]);
+
+  // 缓存清理轮询
+  useEffect(() => {
+    if (activeTab !== 'cache') return;
+    if (cleanStatus?.status === 'cleaning') {
+      const timer = setTimeout(async () => {
+        try {
+          const res = await systemConfigApi.getCleanCacheState();
+          setCleanStatus(res);
+        } catch {
+          // ignore
+        }
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab, cleanStatus?.status]);
+
+  const handleCleanCacheOneClick = () => {
+    feedback.modal?.confirm({
+      title: '确认一键清理镜像缓存？',
+      content: '停止的容器、所有未被容器使用的网络、无用的镜像和构建缓存镜像将被删除。',
+      okText: '确认清理',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        setCleaningOneClick(true);
+        try {
+          await systemConfigApi.cleanImageCacheOneClick();
+          feedback.message.success('已触发镜像缓存清理');
+          const res = await systemConfigApi.getCleanCacheState();
+          setCleanStatus(res);
+        } catch (err: unknown) {
+          const msg =
+            (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '触发缓存清理失败';
+          feedback.message.error(msg);
+        } finally {
+          setCleaningOneClick(false);
+        }
+      },
+    });
+  };
+
+  const handleSaveCleanCron = async (values: { cron?: string; cron_enabled?: boolean }) => {
+    try {
+      await systemConfigApi.setCleanCacheCron({
+        cron: values.cron || '',
+        cron_enabled: Boolean(values.cron_enabled),
+      });
+      feedback.message.success('定时清理配置已保存');
+      const res = await systemConfigApi.getCleanCacheState();
+      setCleanStatus(res);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '保存定时配置失败';
+      feedback.message.error(msg);
+    }
+  };
+
+  const handleCleanSharedStorage = () => {
+    feedback.modal?.confirm({
+      title: '确认清理共享存储？',
+      content: '将清空工作流和构建引擎的共享持久存储数据目录 (DataPath)，该操作不可逆。',
+      okText: '确认清理',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        setCleaningShared(true);
+        try {
+          await systemConfigApi.cleanSharedStorage();
+          feedback.message.success('共享存储已清理完成');
+        } catch (err: unknown) {
+          const msg =
+            (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '清理共享存储失败';
+          feedback.message.error(msg);
+        } finally {
+          setCleaningShared(false);
+        }
+      },
+    });
+  };
 
   const handleTabChange = (key: string) => {
     const tabPathMap: Record<string, string> = {
@@ -397,6 +503,14 @@ export const SystemConfigPage: React.FC = () => {
       label: (
         <span>
           <GlobalOutlined /> 网络代理
+        </span>
+      ),
+    },
+    {
+      key: 'cache',
+      label: (
+        <span>
+          <ClearOutlined /> 缓存清理
         </span>
       ),
     },
@@ -764,6 +878,188 @@ export const SystemConfigPage: React.FC = () => {
                 保存代理设置
               </Button>
             </Form>
+          </div>
+        ) : activeTab === 'cache' ? (
+          <div style={{ maxWidth: 880 }}>
+            <Alert
+              type="info"
+              showIcon
+              title={
+                <span>
+                  支持清理系统中的镜像缓存（Docker system prune）与构建工作流共享持久存储。详情可参考{' '}
+                  <a
+                    href="https://docs.koderover.com/zadig/settings/system-settings/#缓存清理"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    官方文档
+                  </a>
+                </span>
+              }
+              style={{ marginBottom: 20 }}
+            />
+
+            <Card
+              title="镜像缓存清理"
+              variant="borderless"
+              style={{ marginBottom: 20, background: '#fafbfc', border: '1px solid #f0f0f0', borderRadius: 8 }}
+              extra={
+                <Space>
+                  <Button
+                    icon={<ReloadOutlined />}
+                    size="small"
+                    onClick={() => loadTabData('cache')}
+                    loading={cleanLoading}
+                  >
+                    刷新状态
+                  </Button>
+                  <Button
+                    type="primary"
+                    danger
+                    icon={<ClearOutlined />}
+                    size="small"
+                    disabled={cleanStatus?.status === 'cleaning'}
+                    loading={cleaningOneClick}
+                    onClick={handleCleanCacheOneClick}
+                  >
+                    一键清理
+                  </Button>
+                </Space>
+              }
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <Form
+                    form={cronForm}
+                    layout="inline"
+                    onFinish={handleSaveCleanCron}
+                    initialValues={{
+                      cron_enabled: false,
+                      cron: '',
+                    }}
+                  >
+                    <Form.Item name="cron_enabled" label="定时清理" valuePropName="checked">
+                      <Switch />
+                    </Form.Item>
+                    <Form.Item
+                      noStyle
+                      shouldUpdate={(prev, cur) => prev.cron_enabled !== cur.cron_enabled}
+                    >
+                      {({ getFieldValue }) =>
+                        getFieldValue('cron_enabled') ? (
+                          <>
+                            <Form.Item
+                              name="cron"
+                              rules={[{ required: true, message: '请输入标准 Cron 表达式' }]}
+                              extra="例如: 0 0 * * * (每天零点执行)"
+                            >
+                              <Input placeholder="Cron 表达式 (例如 0 0 * * *)" style={{ width: 220 }} />
+                            </Form.Item>
+                            <Form.Item>
+                              <Button type="primary" htmlType="submit" size="small">
+                                保存定时设置
+                              </Button>
+                            </Form.Item>
+                          </>
+                        ) : null
+                      }
+                    </Form.Item>
+                  </Form>
+                </div>
+
+                <Divider style={{ margin: '8px 0' }} />
+
+                <div>
+                  <Space orientation="horizontal" size={16} align="center">
+                    <Text strong>执行状态:</Text>
+                    {cleanStatus?.status === 'cleaning' ? (
+                      <Tag color="processing">清理中...</Tag>
+                    ) : cleanStatus?.status === 'success' ? (
+                      <Tag color="success">清理完成</Tag>
+                    ) : cleanStatus?.status === 'failed' ? (
+                      <Tag color="error">清理失败</Tag>
+                    ) : (
+                      <Tag color="default">未执行过清理</Tag>
+                    )}
+                    {cleanStatus?.update_time ? (
+                      <Text type="secondary" style={{ fontSize: 13 }}>
+                        {cleanStatus.status === 'cleaning' ? '开始时间: ' : '完成时间: '}
+                        {new Date(cleanStatus.update_time * 1000).toLocaleString('zh-CN')}
+                      </Text>
+                    ) : null}
+                  </Space>
+                </div>
+
+                {cleanStatus?.dind_clean_infos && cleanStatus.dind_clean_infos.length > 0 && (
+                  <div>
+                    <Text strong style={{ display: 'block', marginBottom: 8, fontSize: 13 }}>
+                      清理节点与 Pod 详情:
+                    </Text>
+                    <Table
+                      dataSource={cleanStatus.dind_clean_infos}
+                      rowKey={(r, idx) => r.pod_name || String(idx)}
+                      pagination={false}
+                      size="small"
+                      columns={[
+                        {
+                          title: 'Pod 名称',
+                          dataIndex: 'pod_name',
+                          key: 'pod_name',
+                          render: (t) => <Text code>{t || '-'}</Text>,
+                        },
+                        {
+                          title: '耗时',
+                          key: 'duration',
+                          render: (_, r) => {
+                            if (r.start_time && r.end_time) {
+                              return `${Math.max(1, r.end_time - r.start_time)}s`;
+                            }
+                            return '-';
+                          },
+                        },
+                        {
+                          title: '执行结果 / 错误详情',
+                          key: 'result',
+                          render: (_, r) =>
+                            r.error_message ? (
+                              <Text type="danger">{r.error_message}</Text>
+                            ) : (
+                              <Text type="secondary" style={{ fontSize: 12 }}>
+                                {r.clean_info || '无输出信息'}
+                              </Text>
+                            ),
+                        },
+                      ]}
+                    />
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            <Card
+              title="共享临时存储清理 (Shared Storage)"
+              variant="borderless"
+              style={{ background: '#fafbfc', border: '1px solid #f0f0f0', borderRadius: 8 }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <Text style={{ display: 'block', color: '#1f2d3d' }}>
+                    清空工作流和构建引擎运行时产生在宿主共享持久化卷 (DataPath) 上的临时数据缓存。
+                  </Text>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    该清理将直接释放系统持久存储空间，建议在存储卷紧张或排查脏缓存时执行。
+                  </Text>
+                </div>
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  loading={cleaningShared}
+                  onClick={handleCleanSharedStorage}
+                >
+                  清理共享存储
+                </Button>
+              </div>
+            </Card>
           </div>
         ) : activeTab === 'aiCodeReview' ? (
           <div style={{ maxWidth: 720 }}>
