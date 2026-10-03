@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Modal,
   Form,
@@ -8,8 +8,9 @@ import {
   Space,
   Typography,
   Spin,
+  Tooltip,
 } from 'antd';
-import { PlayCircleOutlined } from '@ant-design/icons';
+import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { workflowApi, type WorkflowParam } from '../../api/workflow';
 import { feedback } from '../../utils/feedback';
 import { useNavigate } from 'react-router-dom';
@@ -39,30 +40,88 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
   const [presetLoading, setPresetLoading] = useState(false);
   const [preset, setPreset] = useState<Record<string, unknown> | null>(null);
   const [params, setParams] = useState<WorkflowParam[]>([]);
+  const [dynamicOptions, setDynamicOptions] = useState<Record<string, string[]>>({});
+  const [dynamicLoading, setDynamicLoading] = useState<Record<string, boolean>>({});
   const navigate = useNavigate();
+
+  const renderDynamicVar = useCallback(
+    async (
+      param: WorkflowParam,
+      currentPreset: Record<string, unknown>,
+      forceDefault = false
+    ) => {
+      setDynamicLoading((prev) => ({ ...prev, [param.name]: true }));
+      try {
+        const options = await workflowApi.renderDynamicVariables(
+          projectName,
+          '',
+          '',
+          '',
+          param.name,
+          currentPreset
+        );
+        const list = Array.isArray(options) ? options : [];
+        setDynamicOptions((prev) => ({ ...prev, [param.name]: list }));
+
+        const curVal = form.getFieldValue(param.name);
+        if ((!curVal || forceDefault) && list.length > 0) {
+          form.setFieldsValue({ [param.name]: list[0] });
+        }
+      } catch (err) {
+        console.error(`Failed to render dynamic variable ${param.name}:`, err);
+      } finally {
+        setDynamicLoading((prev) => ({ ...prev, [param.name]: false }));
+      }
+    },
+    [projectName, form]
+  );
 
   useEffect(() => {
     if (visible && workflowName) {
       setPresetLoading(true);
       setPreset(null);
       setParams([]);
+      setDynamicOptions({});
+      setDynamicLoading({});
       workflowApi
         .getWorkflowPreset(workflowName)
         .then((res) => {
           if (res) {
-            setPreset(res as unknown as Record<string, unknown>);
-            setParams(res.params || []);
+            const rawPreset = res as unknown as Record<string, unknown>;
+            setPreset(rawPreset);
+            const pList = res.params || [];
+            setParams(pList);
             const initialValues: Record<string, string> = {};
-            (res.params || []).forEach((p) => {
+            pList.forEach((p) => {
               initialValues[p.name] = p.value ?? p.default ?? '';
             });
             form.setFieldsValue(initialValues);
+
+            // 触发所有 script 类型的动态变量初始化渲染
+            pList.forEach((p) => {
+              if (p.type === 'script') {
+                renderDynamicVar(p, rawPreset, !p.value);
+              }
+            });
           }
         })
         .catch(() => feedback.message.error('获取工作流执行参数失败'))
         .finally(() => setPresetLoading(false));
     }
-  }, [visible, workflowName, form]);
+  }, [visible, workflowName, form, renderDynamicVar]);
+
+  const handleRefreshDynamicVar = (param: WorkflowParam) => {
+    if (!preset) return;
+    const currentValues = form.getFieldsValue();
+    const currentPreset = {
+      ...preset,
+      params: params.map((p) => ({
+        ...p,
+        value: currentValues[p.name] ?? p.value ?? '',
+      })),
+    };
+    renderDynamicVar(param, currentPreset, false);
+  };
 
   const handleExecute = async () => {
     if (!preset) return;
@@ -101,6 +160,38 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
             placeholder="请选择"
           />
         );
+      case 'multi-select':
+        return (
+          <Select
+            mode="multiple"
+            options={(p.choice_option || []).map((opt) => ({ label: opt, value: opt }))}
+            placeholder="请选择 (多选)"
+          />
+        );
+      case 'script': {
+        const options = dynamicOptions[p.name] || [];
+        const isVarLoading = !!dynamicLoading[p.name];
+        return (
+          <Space.Compact style={{ width: '100%' }}>
+            <Select
+              style={{ width: '100%' }}
+              showSearch
+              allowClear
+              placeholder={isVarLoading ? '计算动态选项中...' : '请选择动态变量选项'}
+              loading={isVarLoading}
+              options={options.map((opt) => ({ label: opt, value: opt }))}
+              notFoundContent={isVarLoading ? <Spin size="small" /> : '暂无可用动态选项'}
+            />
+            <Tooltip title="重新计算动态选项">
+              <Button
+                icon={<ReloadOutlined spin={isVarLoading} />}
+                disabled={isVarLoading}
+                onClick={() => handleRefreshDynamicVar(p)}
+              />
+            </Tooltip>
+          </Space.Compact>
+        );
+      }
       case 'text':
         return <Input.TextArea rows={2} placeholder={p.description || '请输入'} />;
       default:

@@ -78,6 +78,9 @@ export interface WorkflowParam {
   type?: string;
   value?: string;
   choice_option?: string[];
+  choice_value?: string[];
+  script?: string;
+  call_function?: string;
   default?: string;
 }
 
@@ -571,7 +574,93 @@ export const workflowApi = {
       params: { projectName, viewName },
     });
   },
+
+  /**
+   * Render dynamic variable options by evaluating script.
+   * POST /api/aslan/workflow/v4/dynamicVariable/render?projectName=&jobName=&serviceName=&moduleName=&key=
+   */
+  async renderDynamicVariables(
+    projectName: string,
+    jobName: string,
+    serviceName: string,
+    moduleName: string,
+    key: string,
+    workflowPayload: unknown
+  ): Promise<string[]> {
+    return http.post<string[]>(
+      '/api/aslan/workflow/v4/dynamicVariable/render',
+      workflowPayload,
+      {
+        params: {
+          projectName,
+          jobName,
+          serviceName,
+          moduleName,
+          key,
+        },
+        skipErrorHandler: true,
+      }
+    );
+  },
+
+  /**
+   * Get available dynamic placeholder variables for workflow/job.
+   * POST /api/aslan/workflow/v4/dynamicVariable/available?jobName=&projectName=&include_runtime=
+   */
+  async getAvailableDynamicVariables(
+    projectName: string,
+    jobName: string,
+    workflowPayload: unknown,
+    includeRuntime = false
+  ): Promise<string[]> {
+    return http.post<string[]>(
+      '/api/aslan/workflow/v4/dynamicVariable/available',
+      workflowPayload,
+      {
+        params: {
+          projectName,
+          jobName,
+          include_runtime: includeRuntime,
+        },
+        skipErrorHandler: true,
+      }
+    );
+  },
+
+  /**
+   * Merge image URI into Helm values YAML.
+   * POST /api/aslan/workflow/v4/deploy/mergeImage?projectName=
+   */
+  async mergeHelmDeployImage(
+    projectName: string,
+    payload: HelmDeployJobMergeImageParams
+  ): Promise<HelmDeployJobMergeImageResponse> {
+    return http.post<HelmDeployJobMergeImageResponse>(
+      '/api/aslan/workflow/v4/deploy/mergeImage',
+      payload,
+      {
+        params: { projectName },
+        skipErrorHandler: true,
+      }
+    );
+  },
 };
+
+export interface HelmDeployJobMergeImageParams {
+  service_name: string;
+  values_yaml: string;
+  env_name: string;
+  production?: boolean;
+  update_service_revision?: boolean;
+  service_modules: Array<{
+    name?: string;
+    image: string;
+  }>;
+}
+
+export interface HelmDeployJobMergeImageResponse {
+  values: string;
+}
 
 export interface WorkflowViewDetail {
   workflow_name: string;
