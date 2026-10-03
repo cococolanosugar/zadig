@@ -128,6 +128,32 @@ export const projectApi = {
   async deleteProject(projectName: string): Promise<unknown> {
     return http.delete(`/api/aslan/project/products/${projectName}`);
   },
+
+  /**
+   * Get project template hierarchy (projects -> services -> container modules)
+   * GET /api/aslan/project/templates/info
+   */
+  async getTemplatesHierarchyInfo(): Promise<ProjectTemplateHierarchyInfo[]> {
+    const res = await http.get<ProjectTemplateHierarchyInfo[]>('/api/aslan/project/templates/info');
+    return Array.isArray(res) ? res : [];
+  },
 };
+
+export interface ProjectTemplateContainerInfo {
+  value: string;
+  label: string;
+}
+
+export interface ProjectTemplateServiceInfo {
+  value: string;
+  label: string;
+  container_info?: ProjectTemplateContainerInfo[];
+}
+
+export interface ProjectTemplateHierarchyInfo {
+  value: string;
+  label: string;
+  service_info?: ProjectTemplateServiceInfo[];
+}
 
 export default projectApi;
