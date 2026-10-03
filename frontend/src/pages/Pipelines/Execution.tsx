@@ -18,6 +18,8 @@ import {
   Timeline,
   Spin,
   Modal,
+  Popover,
+  Checkbox,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -29,6 +31,7 @@ import {
   UserOutlined,
   SafetyOutlined,
   BugOutlined,
+  PauseCircleOutlined,
 } from '@ant-design/icons';
 import { workflowApi, type WorkflowTaskExecution } from '../../api/workflow';
 import { useProjectStore } from '../../stores/project';
@@ -207,6 +210,56 @@ export const PipelineExecutionPage: React.FC = () => {
     }
   };
 
+  // 断点触发逻辑（对齐后端 SetWorkflowTaskV4Breakpoint: POST /breakpoint/:workflowName/:jobName/task/:taskID/:position?operation=）
+  const [settingBreakpointJob, setSettingBreakpointJob] = useState<string | null>(null);
+
+  const handleTriggerBreakpoint = async (
+    jobName: string,
+    position: 'before' | 'after',
+    currentValue: boolean | undefined
+  ) => {
+    if (!effWorkflowName || !effTaskId) return;
+    const operation = currentValue ? 'unset' : 'set';
+    setSettingBreakpointJob(`${jobName}-${position}`);
+    try {
+      await workflowApi.setWorkflowTaskBreakpoint(
+        effWorkflowName,
+        jobName,
+        effTaskId,
+        position,
+        operation,
+        activeProject
+      );
+      feedback.message.success(
+        `修改断点成功！已${operation === 'set' ? '设置' : '取消'} [${jobName}] ${position === 'before' ? '执行前' : '执行后'}断点`
+      );
+      // 乐观更新本地 task 状态
+      setTask((prev) => {
+        if (!prev?.stages) return prev;
+        return {
+          ...prev,
+          stages: prev.stages.map((stage) => ({
+            ...stage,
+            jobs: (stage.jobs || []).map((j) => {
+              if (j.name === jobName) {
+                return {
+                  ...j,
+                  [position === 'before' ? 'breakpoint_before' : 'breakpoint_after']: !currentValue,
+                };
+              }
+              return j;
+            }),
+          })),
+        };
+      });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '修改断点失败';
+      feedback.message.error(msg);
+    } finally {
+      setSettingBreakpointJob(null);
+    }
+  };
+
   const handleJobErrorDecision = async (decision: 'reject' | 'ignore') => {
     if (!task || !selectedJob) return;
     setApproving(true);
@@ -293,16 +346,48 @@ export const PipelineExecutionPage: React.FC = () => {
           <div style={{ marginTop: 4 }}>
             {stage.jobs.map((j) => {
               const isDebug = j.status === 'debug_before' || j.status === 'debug_after';
+              const hasBreakpoint = Boolean(j.breakpoint_before || j.breakpoint_after);
+              const isJobFinished = ['cancelled', 'timeout', 'passed', 'failed'].includes(j.status);
+
               return (
-                <Tag
+                <Popover
                   key={j.name}
-                  color={selectedJob === j.name ? 'blue' : isDebug ? 'gold' : 'default'}
-                  icon={isDebug ? <BugOutlined /> : undefined}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => setSelectedJob(j.name)}
+                  trigger="hover"
+                  title={<Text strong>断点调试设置: {j.name}</Text>}
+                  content={
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 180, padding: '4px 0' }}>
+                      <Checkbox
+                        checked={j.breakpoint_before}
+                        disabled={isJobFinished || settingBreakpointJob === `${j.name}-before`}
+                        onChange={() => handleTriggerBreakpoint(j.name, 'before', j.breakpoint_before)}
+                      >
+                        执行前断点 (before)
+                      </Checkbox>
+                      <Checkbox
+                        checked={j.breakpoint_after}
+                        disabled={isJobFinished || settingBreakpointJob === `${j.name}-after`}
+                        onChange={() => handleTriggerBreakpoint(j.name, 'after', j.breakpoint_after)}
+                      >
+                        执行后断点 (after)
+                      </Checkbox>
+                      {hasBreakpoint && (
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          🔴 已设断点，执行到该阶段将自动暂停并等待调试
+                        </Text>
+                      )}
+                    </div>
+                  }
                 >
-                  {j.name} ({j.status})
-                </Tag>
+                  <Tag
+                    color={selectedJob === j.name ? 'blue' : isDebug ? 'gold' : hasBreakpoint ? 'volcano' : 'default'}
+                    icon={isDebug ? <BugOutlined /> : hasBreakpoint ? <PauseCircleOutlined /> : undefined}
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => setSelectedJob(j.name)}
+                  >
+                    {j.name} ({j.status})
+                    {hasBreakpoint && ' [断点]'}
+                  </Tag>
+                </Popover>
               );
             })}
           </div>
@@ -506,6 +591,65 @@ export const PipelineExecutionPage: React.FC = () => {
             <Button size="small" onClick={loadJobEvents} disabled={!selectedJob}>
               查看事件
             </Button>
+            {selectedJobInfo && (
+              <Popover
+                trigger="click"
+                title={<Text strong>断点调试设置: {selectedJob}</Text>}
+                content={
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 180, padding: '4px 0' }}>
+                    <Checkbox
+                      checked={selectedJobInfo.breakpoint_before}
+                      disabled={
+                        ['cancelled', 'timeout', 'passed', 'failed'].includes(selectedJobInfo.status) ||
+                        settingBreakpointJob === `${selectedJob}-before`
+                      }
+                      onChange={() =>
+                        handleTriggerBreakpoint(
+                          selectedJob,
+                          'before',
+                          selectedJobInfo.breakpoint_before
+                        )
+                      }
+                    >
+                      执行前断点 (before)
+                    </Checkbox>
+                    <Checkbox
+                      checked={selectedJobInfo.breakpoint_after}
+                      disabled={
+                        ['cancelled', 'timeout', 'passed', 'failed'].includes(selectedJobInfo.status) ||
+                        settingBreakpointJob === `${selectedJob}-after`
+                      }
+                      onChange={() =>
+                        handleTriggerBreakpoint(
+                          selectedJob,
+                          'after',
+                          selectedJobInfo.breakpoint_after
+                        )
+                      }
+                    >
+                      执行后断点 (after)
+                    </Checkbox>
+                    {(selectedJobInfo.breakpoint_before || selectedJobInfo.breakpoint_after) && (
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        🔴 断点已就绪，运行至对应位置将触发调试挂起
+                      </Text>
+                    )}
+                  </div>
+                }
+              >
+                <Button
+                  size="small"
+                  icon={<PauseCircleOutlined />}
+                  danger={Boolean(
+                    selectedJobInfo.breakpoint_before || selectedJobInfo.breakpoint_after
+                  )}
+                >
+                  {selectedJobInfo.breakpoint_before || selectedJobInfo.breakpoint_after
+                    ? '断点已设置'
+                    : '设置断点'}
+                </Button>
+              </Popover>
+            )}
             <Button
               size="small"
               icon={<BugOutlined />}

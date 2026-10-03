@@ -103,6 +103,8 @@ export interface WorkflowTaskExecution {
       status: string;
       error?: string;
       error_policy?: { policy?: string } | null;
+      breakpoint_before?: boolean;
+      breakpoint_after?: boolean;
     }[];
   }[];
 }
@@ -461,6 +463,27 @@ export const workflowApi = {
     return http.delete(
       `/api/aslan/workflow/v4/workflowtask/debug/${encodeURIComponent(workflowName)}/${encodeURIComponent(jobName)}/task/${taskId}/${encodeURIComponent(position)}${q}`,
       { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Set or unset breakpoint for a workflow task job.
+   * POST /api/aslan/workflow/v4/workflowtask/breakpoint/:workflowName/:jobName/task/:taskID/:position?operation=&projectName=
+   */
+  async setWorkflowTaskBreakpoint(
+    workflowName: string,
+    jobName: string,
+    taskId: number | string,
+    position: 'before' | 'after',
+    operation: 'set' | 'unset',
+    projectName?: string
+  ): Promise<unknown> {
+    const params: Record<string, string> = { operation };
+    if (projectName) params.projectName = projectName;
+    return http.post(
+      `/api/aslan/workflow/v4/workflowtask/breakpoint/${encodeURIComponent(workflowName)}/${encodeURIComponent(jobName)}/task/${taskId}/${encodeURIComponent(position)}`,
+      {},
+      { params, skipErrorHandler: true }
     );
   },
 
