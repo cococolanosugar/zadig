@@ -17,6 +17,7 @@ import {
   Drawer,
   Timeline,
   Spin,
+  Modal,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -27,11 +28,14 @@ import {
   ClockCircleOutlined,
   UserOutlined,
   SafetyOutlined,
+  BugOutlined,
 } from '@ant-design/icons';
 import { workflowApi, type WorkflowTaskExecution } from '../../api/workflow';
 import { useProjectStore } from '../../stores/project';
+import { useAuthStore } from '../../stores/auth';
 import { feedback } from '../../utils/feedback';
 import LogViewer from '../../components/Terminal/LogViewer';
+import { PodTerminal } from '../../components/Terminal/PodTerminal';
 
 const { Title, Text } = Typography;
 
@@ -141,6 +145,11 @@ export const PipelineExecutionPage: React.FC = () => {
   const [jobEvents, setJobEvents] = useState<Array<{ event_type: string; time: string; message: string }>>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
 
+  // 容器调试相关状态与处理器（对齐后端 EnableDebugWorkflowTaskV4 / StopDebugWorkflowTaskJobV4 与 podexec WS）
+  const [enablingDebug, setEnablingDebug] = useState(false);
+  const [stoppingDebug, setStoppingDebug] = useState(false);
+  const [debugModalOpen, setDebugModalOpen] = useState(false);
+
   // 当前选中 job 的执行状态与错误策略（用于 job 级操作判定）
   const selectedJobInfo = useMemo(() => {
     for (const stage of task?.stages || []) {
@@ -149,6 +158,54 @@ export const PipelineExecutionPage: React.FC = () => {
     }
     return null;
   }, [task, selectedJob]);
+
+  const canEnableDebug = useMemo(() => {
+    return ['waiting', 'running', 'wait_for_approval', 'pause'].includes(task?.status || '');
+  }, [task?.status]);
+
+  const isJobInDebug = useMemo(() => {
+    return selectedJobInfo?.status === 'debug_before' || selectedJobInfo?.status === 'debug_after';
+  }, [selectedJobInfo?.status]);
+
+  const debugWsUrl = useMemo(() => {
+    if (!effWorkflowName || !effTaskId || !selectedJob) return '';
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    const token = useAuthStore.getState().token || '';
+    return `${protocol}//${host}/api/podexec/debug/${encodeURIComponent(effWorkflowName)}/${encodeURIComponent(selectedJob)}/task/${effTaskId}?projectName=${encodeURIComponent(activeProject)}&token=${encodeURIComponent(token)}`;
+  }, [effWorkflowName, effTaskId, selectedJob, activeProject]);
+
+  const handleEnableDebug = async () => {
+    if (!effWorkflowName || !effTaskId) return;
+    setEnablingDebug(true);
+    try {
+      await workflowApi.enableWorkflowTaskDebug(effWorkflowName, effTaskId, activeProject);
+      feedback.message.success('开启调试模式！');
+      await loadTask();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '开启调试模式失败';
+      feedback.message.error(msg);
+    } finally {
+      setEnablingDebug(false);
+    }
+  };
+
+  const handleStopDebug = async () => {
+    if (!effWorkflowName || !effTaskId || !selectedJob) return;
+    setStoppingDebug(true);
+    const position = selectedJobInfo?.status === 'debug_after' ? 'after' : 'before';
+    try {
+      await workflowApi.stopWorkflowTaskJobDebug(effWorkflowName, selectedJob, effTaskId, position, activeProject);
+      feedback.message.success('已完成调试，工作流继续执行');
+      setDebugModalOpen(false);
+      await loadTask();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '停止调试失败';
+      feedback.message.error(msg);
+    } finally {
+      setStoppingDebug(false);
+    }
+  };
 
   const handleJobErrorDecision = async (decision: 'reject' | 'ignore') => {
     if (!task || !selectedJob) return;
@@ -214,6 +271,10 @@ export const PipelineExecutionPage: React.FC = () => {
       case 'wait_for_approval':
       case 'waiting':
         return <Tag icon={<SafetyOutlined />} color="warning">等待审批</Tag>;
+      case 'debug_before':
+        return <Tag icon={<BugOutlined />} color="warning">准备前调试</Tag>;
+      case 'debug_after':
+        return <Tag icon={<BugOutlined />} color="warning">执行后调试</Tag>;
       default:
         return <Tag color="default">排队中</Tag>;
     }
@@ -230,16 +291,20 @@ export const PipelineExecutionPage: React.FC = () => {
         title: stage.name,
         description: (
           <div style={{ marginTop: 4 }}>
-            {stage.jobs.map((j) => (
-              <Tag
-                key={j.name}
-                color={selectedJob === j.name ? 'blue' : 'default'}
-                style={{ cursor: 'pointer' }}
-                onClick={() => setSelectedJob(j.name)}
-              >
-                {j.name} ({j.status})
-              </Tag>
-            ))}
+            {stage.jobs.map((j) => {
+              const isDebug = j.status === 'debug_before' || j.status === 'debug_after';
+              return (
+                <Tag
+                  key={j.name}
+                  color={selectedJob === j.name ? 'blue' : isDebug ? 'gold' : 'default'}
+                  icon={isDebug ? <BugOutlined /> : undefined}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setSelectedJob(j.name)}
+                >
+                  {j.name} ({j.status})
+                </Tag>
+              );
+            })}
           </div>
         ),
         status: stepStatus,
@@ -283,6 +348,15 @@ export const PipelineExecutionPage: React.FC = () => {
           </Col>
           <Col>
             <Space orientation="horizontal" size={8}>
+              {canEnableDebug && (
+                <Button
+                  icon={<BugOutlined />}
+                  loading={enablingDebug}
+                  onClick={handleEnableDebug}
+                >
+                  开启调试模式
+                </Button>
+              )}
               {task?.status === 'running' && (
                 <Popconfirm
                   title="确定取消正在运行的任务？"
@@ -432,6 +506,16 @@ export const PipelineExecutionPage: React.FC = () => {
             <Button size="small" onClick={loadJobEvents} disabled={!selectedJob}>
               查看事件
             </Button>
+            <Button
+              size="small"
+              icon={<BugOutlined />}
+              type={isJobInDebug ? 'primary' : 'default'}
+              danger={isJobInDebug}
+              onClick={() => setDebugModalOpen(true)}
+              disabled={!selectedJob}
+            >
+              {isJobInDebug ? '进入调试终端' : '调试终端'}
+            </Button>
             {selectedJobInfo?.status === 'failed' && task?.status === 'running' && (
               <>
                 <Button size="small" onClick={() => handleJobErrorDecision('ignore')} loading={approving}>
@@ -492,6 +576,61 @@ export const PipelineExecutionPage: React.FC = () => {
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该 Job 暂无 K8s 事件" style={{ padding: '60px 0' }} />
         )}
       </Drawer>
+
+      {/* Job Debug Terminal Modal */}
+      <Modal
+        title={
+          <Space>
+            <BugOutlined style={{ color: '#fa8c16' }} />
+            <span>
+              工作流容器调试 - Job [{selectedJob || '-'}] (
+              {selectedJobInfo?.status === 'debug_after'
+                ? '执行后调试'
+                : selectedJobInfo?.status === 'debug_before'
+                ? '准备前调试'
+                : '容器调试'}
+              )
+            </span>
+          </Space>
+        }
+        open={debugModalOpen}
+        onCancel={() => setDebugModalOpen(false)}
+        width={960}
+        destroyOnClose
+        styles={{ body: { padding: '12px 16px' } }}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text type="secondary" style={{ fontSize: 13 }}>
+              提示：调试完成后点击「完成调试并继续」以解除断点并恢复工作流执行
+            </Text>
+            <Space>
+              <Button onClick={() => setDebugModalOpen(false)}>
+                后台运行 (关闭窗口)
+              </Button>
+              <Popconfirm
+                title="确定完成调试并继续执行工作流？"
+                onConfirm={handleStopDebug}
+                okText="继续执行"
+                cancelText="取消"
+              >
+                <Button type="primary" loading={stoppingDebug}>
+                  完成调试并继续
+                </Button>
+              </Popconfirm>
+            </Space>
+          </div>
+        }
+      >
+        {debugWsUrl ? (
+          <PodTerminal
+            customWsUrl={debugWsUrl}
+            welcomeMessage={`\x1b[34m[Zadig Debug Terminal]\x1b[0m 正在连接 Job 容器: \x1b[33m${selectedJob}\x1b[0m (任务 #${effTaskId})...\r\n`}
+            height={500}
+          />
+        ) : (
+          <Empty description="无法获取调试连接信息" style={{ padding: '60px 0' }} />
+        )}
+      </Modal>
     </div>
   );
 };

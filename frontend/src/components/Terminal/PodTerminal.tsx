@@ -5,14 +5,17 @@ import '@xterm/xterm/css/xterm.css';
 import { useAuthStore } from '../../stores/auth';
 
 export interface PodTerminalProps {
-  podName: string;
-  containerName: string;
-  projectName: string;
-  envName: string;
+  podName?: string;
+  containerName?: string;
+  projectName?: string;
+  envName?: string;
   clusterId?: string;
   // 生产环境走 /api/podexec/production/ 变体（对齐旧版 isProd 分支）
   production?: boolean;
   height?: number | string;
+  // 支持自定义 WS URL（例如工作流调试终端 /api/podexec/debug/...）
+  customWsUrl?: string;
+  welcomeMessage?: string;
 }
 
 // WS 消息协议对齐 pkg/microservice/podexec/core/service/ws_terminal.go 的 TerminalMessage：
@@ -27,13 +30,15 @@ interface TerminalMessage {
 }
 
 export const PodTerminal: React.FC<PodTerminalProps> = ({
-  podName,
-  containerName,
-  projectName,
-  envName,
+  podName = '',
+  containerName = '',
+  projectName = '',
+  envName = '',
   clusterId = '',
   production = false,
   height = 480,
+  customWsUrl,
+  welcomeMessage,
 }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermInstance = useRef<Terminal | null>(null);
@@ -61,16 +66,20 @@ export const PodTerminal: React.FC<PodTerminalProps> = ({
     fitAddon.fit();
     xtermInstance.current = term;
 
-    term.writeln(`\x1b[34m[Zadig Web Terminal]\x1b[0m 正在连接 Pod: \x1b[32m${podName}\x1b[0m (Container: \x1b[36m${containerName}\x1b[0m)...`);
+    if (welcomeMessage) {
+      term.writeln(welcomeMessage);
+    } else {
+      term.writeln(`\x1b[34m[Zadig Web Terminal]\x1b[0m 正在连接 Pod: \x1b[32m${podName}\x1b[0m (Container: \x1b[36m${containerName}\x1b[0m)...`);
+    }
 
     // Build WebSocket URL
-    // 后端 podexec WS: /api/podexec/:productName/:podName/:containerName/podExec/:envName
-    //                 /api/podexec/production/:productName/.../:envName（生产环境变体）
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     const prefix = production ? 'production/' : '';
     const token = useAuthStore.getState().token || '';
-    const wsUrl = `${protocol}//${host}/api/podexec/${prefix}${encodeURIComponent(projectName)}/${encodeURIComponent(podName)}/${encodeURIComponent(containerName)}/podExec/${encodeURIComponent(envName)}?projectName=${encodeURIComponent(projectName)}&token=${encodeURIComponent(token)}`;
+    const wsUrl =
+      customWsUrl ||
+      `${protocol}//${host}/api/podexec/${prefix}${encodeURIComponent(projectName)}/${encodeURIComponent(podName)}/${encodeURIComponent(containerName)}/podExec/${encodeURIComponent(envName)}?projectName=${encodeURIComponent(projectName)}&token=${encodeURIComponent(token)}`;
 
     const sendResize = (ws: WebSocket) => {
       const dims = fitAddon.proposeDimensions();
