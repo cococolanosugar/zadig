@@ -12,6 +12,7 @@ import {
   Popconfirm,
   Tabs,
   Empty,
+  Badge,
 } from 'antd';
 import {
   BranchesOutlined,
@@ -51,10 +52,13 @@ export const PipelinesPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'list' | 'tasks' | 'dag'>('list');
   const [loading, setLoading] = useState(false);
 
-  // 任务历史（对齐旧版全局工作流任务列表）
+  // 任务历史（对齐旧版全局工作流任务列表与实时 SSE 订阅 /api/aslan/workflow/sse/workflowTasks/running & pending）
   const [tasks, setTasks] = useState<WorkflowTaskPreview[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [favoriteOnly, setFavoriteOnly] = useState(false);
+  const [runningTasksSSE, setRunningTasksSSE] = useState<WorkflowTaskPreview[]>([]);
+  const [pendingTasksSSE, setPendingTasksSSE] = useState<WorkflowTaskPreview[]>([]);
+  const [sseConnected, setSseConnected] = useState(false);
 
   const loadTasks = useCallback(async () => {
     setTasksLoading(true);
@@ -77,6 +81,52 @@ export const PipelinesPage: React.FC = () => {
       loadTasks();
     }
   }, [activeTab, loadTasks]);
+
+  // 订阅任务实时 SSE（正在运行与排队中），并在切出或组件卸载时关闭连接
+  useEffect(() => {
+    if (activeTab !== 'tasks') {
+      setSseConnected(false);
+      return;
+    }
+
+    setSseConnected(true);
+
+    const closeRunning = workflowApi.subscribeRunningWorkflowTasksSSE((list) => {
+      setRunningTasksSSE(list || []);
+      setTasks((prev) => {
+        if (!list || list.length === 0) return prev;
+        const runningMap = new Map(list.map((item) => [`${item.workflow_name}-${item.task_id}`, item]));
+        return prev.map((t) => {
+          const match = runningMap.get(`${t.workflow_name}-${t.task_id}`);
+          if (match) {
+            return { ...t, status: match.status || 'running' };
+          }
+          return t;
+        });
+      });
+    });
+
+    const closePending = workflowApi.subscribePendingWorkflowTasksSSE((list) => {
+      setPendingTasksSSE(list || []);
+      setTasks((prev) => {
+        if (!list || list.length === 0) return prev;
+        const pendingMap = new Map(list.map((item) => [`${item.workflow_name}-${item.task_id}`, item]));
+        return prev.map((t) => {
+          const match = pendingMap.get(`${t.workflow_name}-${t.task_id}`);
+          if (match) {
+            return { ...t, status: match.status || 'waiting' };
+          }
+          return t;
+        });
+      });
+    });
+
+    return () => {
+      closeRunning();
+      closePending();
+      setSseConnected(false);
+    };
+  }, [activeTab]);
 
   // Trigger Modal
   const [triggerModalVisible, setTriggerModalVisible] = useState(false);
@@ -445,6 +495,14 @@ export const PipelinesPage: React.FC = () => {
                 loading={tasksLoading}
                 dataSource={tasks}
                 toolBarRender={() => [
+                  <Space key="sse-status" size="middle" style={{ marginRight: 8 }}>
+                    <Badge
+                      status={sseConnected ? 'processing' : 'default'}
+                      text={`SSE 实时同步: ${sseConnected ? '已连接' : '未连接'}`}
+                    />
+                    <Tag color="processing">正在执行: {runningTasksSSE.length}</Tag>
+                    <Tag color="warning">排队中: {pendingTasksSSE.length}</Tag>
+                  </Space>,
                   <Button key="refresh" icon={<SyncOutlined />} onClick={loadTasks}>
                     刷新
                   </Button>,
