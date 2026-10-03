@@ -10,6 +10,7 @@ import {
   FileSearchOutlined,
   ExclamationCircleOutlined,
   SaveOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import http from '../../api/client';
@@ -169,6 +170,43 @@ export const ServiceDetailPage: React.FC = () => {
     } finally {
       setSavingYaml(false);
     }
+  };
+
+  // 导出服务 YAML（对齐旧版 GET /environment/export/service，返回多文档 YAML 数组）
+  const [exportYamls, setExportYamls] = useState<string[] | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportYaml = async () => {
+    if (!envName || !projectName || !serviceName) return;
+    setExporting(true);
+    try {
+      const res = await http.get<string[]>(
+        `/api/aslan/environment/export/service?serviceName=${encodeURIComponent(serviceName)}&envName=${encodeURIComponent(envName)}&projectName=${encodeURIComponent(projectName)}&production=false`,
+        { skipErrorHandler: true }
+      );
+      setExportYamls(Array.isArray(res) ? res : []);
+      if (!res || !Array.isArray(res) || res.length === 0) {
+        feedback.message.warning('该服务无可导出的 YAML 资源');
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data
+        ?.description || (err as { message?: string })?.message || '导出失败';
+      feedback.message.error(msg);
+      setExportYamls(null);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const downloadExportYamls = () => {
+    if (!exportYamls || exportYamls.length === 0) return;
+    const blob = new Blob([exportYamls.join('\n---\n')], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${serviceName}-${envName}.yaml`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleRestartSvc = async () => {
@@ -370,6 +408,9 @@ export const ServiceDetailPage: React.FC = () => {
               ) : yamlContent ? (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
+                    <Button size="small" icon={<DownloadOutlined />} loading={exporting} onClick={handleExportYaml}>
+                      导出 YAML
+                    </Button>
                     <Button size="small" icon={<ReloadOutlined />} onClick={fetchYaml}>
                       重置
                     </Button>
@@ -396,6 +437,37 @@ export const ServiceDetailPage: React.FC = () => {
           ]}
         />
       </Card>
+
+      {/* 导出 YAML 结果 Drawer */}
+      <Drawer
+        title={`导出 YAML: ${serviceName || ''}`}
+        placement="right"
+        open={Array.isArray(exportYamls)}
+        onClose={() => setExportYamls(null)}
+        size="large"
+        extra={
+          <Button size="small" icon={<DownloadOutlined />} onClick={downloadExportYamls} disabled={!exportYamls || exportYamls.length === 0}>
+            下载全部
+          </Button>
+        }
+      >
+        {exportYamls && exportYamls.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Text type="secondary" style={{ fontSize: 13 }}>
+              共 {exportYamls.length} 个资源 YAML（来自环境所在集群的实时资源）
+            </Text>
+            {exportYamls.map((y, i) => (
+              <Card key={i} size="small" title={`资源 #${i + 1}`}>
+                <pre style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 400, overflow: 'auto' }}>
+                  {y}
+                </pre>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="无可导出的 YAML 资源" />
+        )}
+      </Drawer>
 
       {/* Pod Log Drawer */}
       <Drawer
