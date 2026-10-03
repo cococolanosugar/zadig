@@ -29,6 +29,7 @@ import {
   DownOutlined,
   CloudSyncOutlined,
   FileAddOutlined,
+  AppstoreAddOutlined,
 } from '@ant-design/icons';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/project';
@@ -38,6 +39,7 @@ import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
 import { serviceApi, ServiceDetail } from '../../api/service';
 import ImportFromRepoModal, { SyncServiceInfo } from './ImportFromRepoModal';
+import ImportFromTemplateModal, { SyncTemplateServiceInfo } from './ImportFromTemplateModal';
 
 const { Title, Text } = Typography;
 
@@ -77,6 +79,10 @@ export const ServicesPage: React.FC = () => {
   const [serviceDetail, setServiceDetail] = useState<ServiceDetail | null>(null);
   const [repoModalOpen, setRepoModalOpen] = useState(false);
   const [syncServiceInfo, setSyncServiceInfo] = useState<SyncServiceInfo | null>(null);
+
+  // 模板导入 / 同步状态
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [syncTemplateInfo, setSyncTemplateInfo] = useState<SyncTemplateServiceInfo | null>(null);
 
   const loadServices = useCallback(async () => {
     if (!activeProject) {
@@ -415,6 +421,23 @@ spec:
                   从代码库同步
                 </Button>
               )}
+              {Boolean(serviceDetail?.template_id) && (
+                <Button
+                  icon={<AppstoreAddOutlined />}
+                  onClick={() => {
+                    setSyncTemplateInfo({
+                      service_name: serviceDetail!.service_name,
+                      template_id: serviceDetail!.template_id,
+                      auto_sync: serviceDetail!.auto_sync,
+                      variable_yaml: serviceDetail!.variable_yaml,
+                      service_variable_kvs: serviceDetail!.service_variable_kvs,
+                    });
+                    setTemplateModalOpen(true);
+                  }}
+                >
+                  从模板同步
+                </Button>
+              )}
               <Button
                 type="primary"
                 icon={<SaveOutlined />}
@@ -451,6 +474,15 @@ spec:
                       onClick: () => {
                         setSyncServiceInfo(null);
                         setRepoModalOpen(true);
+                      },
+                    },
+                    {
+                      key: 'template',
+                      icon: <AppstoreAddOutlined />,
+                      label: '使用模板新建服务',
+                      onClick: () => {
+                        setSyncTemplateInfo(null);
+                        setTemplateModalOpen(true);
                       },
                     },
                   ],
@@ -710,6 +742,21 @@ spec:
           loadServices();
           if (names.length > 0) {
             setSelectedService(names[0]);
+          }
+        }}
+      />
+
+      {/* Import / Reload from YAML Template Modal */}
+      <ImportFromTemplateModal
+        open={templateModalOpen}
+        onClose={() => setTemplateModalOpen(false)}
+        projectName={activeProject || ''}
+        isProduction={isProduction}
+        syncService={syncTemplateInfo}
+        onSuccess={(name) => {
+          loadServices();
+          if (name) {
+            setSelectedService(name);
           }
         }}
       />
