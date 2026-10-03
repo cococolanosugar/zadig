@@ -99,13 +99,37 @@ export const ServiceDetailPage: React.FC = () => {
   const [podDetailLoading, setPodDetailLoading] = useState(false);
   const [podEvents, setPodEvents] = useState<Array<{ type?: string; reason?: string; message?: string; last_timestamp?: string }>>([]);
 
+  // 当前环境是否生产环境（环境详情 ProductResp.is_prod）；pods/保存/导出按真实标志透传 production
+  const [envProduction, setEnvProduction] = useState(false);
+  useEffect(() => {
+    if (!envName || !projectName) {
+      setEnvProduction(false);
+      return;
+    }
+    let cancelled = false;
+    http
+      .get<{ is_prod?: boolean }>(
+        `/api/aslan/environment/environments/${envName}?projectName=${projectName}`,
+        { skipErrorHandler: true }
+      )
+      .then((d) => {
+        if (!cancelled) setEnvProduction(!!d?.is_prod);
+      })
+      .catch(() => {
+        if (!cancelled) setEnvProduction(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [envName, projectName]);
+
   const fetchPods = useCallback(async () => {
     if (!envName || !projectName) return;
     setLoading(true);
     try {
       // 后端实际端点为 kube/pods（environments/:env/workloads/pods 不存在）
       const res = await http.get<PodItem[]>(
-        `/api/aslan/environment/kube/pods?projectName=${projectName}&envName=${envName}&production=false`,
+        `/api/aslan/environment/kube/pods?projectName=${projectName}&envName=${envName}&production=${envProduction}`,
         { skipErrorHandler: true }
       );
       const all = Array.isArray(res) ? res : [];
@@ -117,7 +141,7 @@ export const ServiceDetailPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [envName, projectName, serviceName]);
+  }, [envName, projectName, serviceName, envProduction]);
 
   const fetchYaml = useCallback(async () => {
     if (!envName || !projectName || !serviceName) return;
@@ -147,14 +171,14 @@ export const ServiceDetailPage: React.FC = () => {
     } finally {
       setYamlLoading(false);
     }
-  }, [envName, projectName, serviceName, serviceType]);
+  }, [envName, projectName, serviceName, serviceType, envProduction]);
 
   const handleSaveSvcYaml = async () => {
     if (!envName || !projectName || !serviceName) return;
     setSavingYaml(true);
     try {
       await http.put(
-        `/api/aslan/environment/environments/${envName}/services/${encodeURIComponent(serviceName)}?projectName=${projectName}&production=false`,
+        `/api/aslan/environment/environments/${envName}/services/${encodeURIComponent(serviceName)}?projectName=${projectName}&production=${envProduction}`,
         {
           service_name: serviceName,
           type: 'k8s',
@@ -181,7 +205,7 @@ export const ServiceDetailPage: React.FC = () => {
     setExporting(true);
     try {
       const res = await http.get<string[]>(
-        `/api/aslan/environment/export/service?serviceName=${encodeURIComponent(serviceName)}&envName=${encodeURIComponent(envName)}&projectName=${encodeURIComponent(projectName)}&production=false`,
+        `/api/aslan/environment/export/service?serviceName=${encodeURIComponent(serviceName)}&envName=${encodeURIComponent(envName)}&projectName=${encodeURIComponent(projectName)}&production=${envProduction}`,
         { skipErrorHandler: true }
       );
       setExportYamls(Array.isArray(res) ? res : []);
