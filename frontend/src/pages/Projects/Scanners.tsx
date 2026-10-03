@@ -19,6 +19,7 @@ import {
   Descriptions,
   Empty,
   Spin,
+  Timeline,
 } from 'antd';
 import {
   PlusOutlined,
@@ -35,6 +36,7 @@ import {
 } from '@ant-design/icons';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
+import LogViewer from '../../components/Terminal/LogViewer';
 
 interface ScanningTaskItem {
   id?: number | string;
@@ -123,6 +125,100 @@ export const ScannersPage: React.FC = () => {
   const [detailLoading, setDetailLoading] = useState<boolean>(false);
   const [detailScanner, setDetailScanner] = useState<ScannerItem | null>(null);
   const [scanTasks, setScanTasks] = useState<ScanningTaskItem[]>([]);
+
+  // ---------- 扫描任务详情：事件 / SSE 日志 / 产物 / 取消 ----------
+  // 契约（workflow/testing handler/router.go + scanning.go）：
+  //   GET  /api/aslan/testing/scanning/:id/task/:scan_id/events  → Events([{event_type,time,message}])
+  //   GET  /api/aslan/testing/scanning/:id/task/:scan_id/sse     → SSE 实时日志
+  //   GET  /api/aslan/testing/scanning/:id/task/:scan_id/artifact_info?jobName= → {file_names,not_history_file_flag}
+  //   GET  /api/aslan/testing/scanning/artifact?id=&jobName=&taskID=&projectName= → 二进制 artifact.tar.gz
+  //   DELETE /api/aslan/testing/scanning/:id/task/:scan_id?projectName= → 取消
+  //   jobName = 扫描器名称（后端扫描工作流的 job.Name 即 scanning.Name）
+  const [taskDrawer, setTaskDrawer] = useState<{ scannerId: string; scannerName: string; taskId: string } | null>(null);
+  const [taskEvents, setTaskEvents] = useState<Array<{ event_type: string; time: string; message: string }>>([]);
+  const [taskEventsLoading, setTaskEventsLoading] = useState(false);
+  const [artifactFiles, setArtifactFiles] = useState<string[]>([]);
+  const [artifactLoading, setArtifactLoading] = useState(false);
+  const [cancellingTask, setCancellingTask] = useState(false);
+
+  const openTaskDetail = useCallback(
+    async (scanner: ScannerItem, task: ScanningTaskItem) => {
+      if (!scanner.id) return;
+      const taskId = String(task.scan_id ?? task.id ?? '');
+      setTaskDrawer({ scannerId: scanner.id, scannerName: scanner.name, taskId });
+      setTaskEvents([]);
+      setArtifactFiles([]);
+      setTaskEventsLoading(true);
+      setArtifactLoading(true);
+      try {
+        const res = await http.get<Array<{ event_type: string; time: string; message: string }>>(
+          `/api/aslan/testing/scanning/${scanner.id}/task/${taskId}/events`,
+          { skipErrorHandler: true }
+        );
+        setTaskEvents(Array.isArray(res) ? res : []);
+      } catch {
+        setTaskEvents([]);
+      } finally {
+        setTaskEventsLoading(false);
+      }
+      try {
+        const res = await http.get<{ file_names?: string[] }>(
+          `/api/aslan/testing/scanning/${scanner.id}/task/${taskId}/artifact_info?jobName=${encodeURIComponent(scanner.name)}`,
+          { skipErrorHandler: true }
+        );
+        setArtifactFiles(res?.file_names || []);
+      } catch {
+        setArtifactFiles([]);
+      } finally {
+        setArtifactLoading(false);
+      }
+    },
+    []
+  );
+
+  const handleCancelScanTask = useCallback(
+    async (scannerId: string, taskId: string) => {
+      if (!projectName) return;
+      setCancellingTask(true);
+      try {
+        await http.delete(
+          `/api/aslan/testing/scanning/${scannerId}/task/${taskId}?projectName=${encodeURIComponent(projectName)}`,
+          { skipErrorHandler: true }
+        );
+        feedback.message.success(`扫描任务 #${taskId} 已取消`);
+        if (detailScanner) openScannerDetail(detailScanner);
+      } catch (err: unknown) {
+        const msg = (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data?.description || '取消失败';
+        feedback.message.error(msg);
+      } finally {
+        setCancellingTask(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [taskDrawer, projectName, detailScanner]
+  );
+
+  const handleDownloadArtifact = useCallback(async () => {
+    if (!taskDrawer || !projectName) return;
+    try {
+      const res = await http.get(
+        `/api/aslan/testing/scanning/artifact?id=${encodeURIComponent(taskDrawer.scannerId)}&jobName=${encodeURIComponent(taskDrawer.scannerName)}&taskID=${taskDrawer.taskId}&projectName=${encodeURIComponent(projectName)}`,
+        { skipErrorHandler: true, responseType: 'blob' }
+      );
+      const blob = res instanceof Blob ? res : new Blob([res as BlobPart], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'artifact.tar.gz';
+      a.click();
+      URL.revokeObjectURL(url);
+      feedback.message.success('产物已下载');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data?.description || '产物下载失败（任务可能未产出产物）';
+      feedback.message.error(msg);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskDrawer, projectName]);
 
   const fetchScanners = useCallback(async () => {
     if (!projectName) return;
@@ -698,6 +794,30 @@ export const ScannersPage: React.FC = () => {
                   key: 'duration',
                   render: (d) => (d ? `${d}s` : '-'),
                 },
+                {
+                  title: '操作',
+                  key: 'actions',
+                  render: (_, r) => (
+                    <Space size={0}>
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<FileSearchOutlined />}
+                        onClick={() => detailScanner && openTaskDetail(detailScanner, r)}
+                      >
+                        详情/日志
+                      </Button>
+                      {String(r.status) === 'running' && (
+                        <Popconfirm
+                          title={`确定取消任务 #${String(r.scan_id ?? r.id)}？`}
+                          onConfirm={() => detailScanner && handleCancelScanTask(detailScanner.id as string, String(r.scan_id ?? r.id))}
+                        >
+                          <Button type="link" size="small" danger loading={cancellingTask}>取消</Button>
+                        </Popconfirm>
+                      )}
+                    </Space>
+                  ),
+                },
               ]}
               locale={{
                 emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无扫描任务记录，点击列表中的「立即扫描」触发" />,
@@ -706,6 +826,78 @@ export const ScannersPage: React.FC = () => {
           </div>
         ) : (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未获取到扫描配置详情" />
+        )}
+      </Drawer>
+
+      {/* 扫描任务详情：事件 / SSE 日志 / 产物下载 */}
+      <Drawer
+        title={`扫描任务: ${taskDrawer?.scannerName || ''} #${taskDrawer?.taskId || ''}`}
+        placement="right"
+        open={!!taskDrawer}
+        onClose={() => setTaskDrawer(null)}
+        size="large"
+      >
+        {taskDrawer && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <Card size="small" title="执行控制台日志 (SSE)">
+              <LogViewer
+                height={320}
+                streamUrl={`/api/aslan/testing/scanning/${taskDrawer.scannerId}/task/${taskDrawer.taskId}/sse`}
+              />
+            </Card>
+
+            <Card size="small" title="任务事件">
+              {taskEventsLoading ? (
+                <div style={{ textAlign: 'center', padding: '30px 0' }}>
+                  <Spin />
+                </div>
+              ) : taskEvents.length > 0 ? (
+                <Timeline
+                  items={taskEvents.map((e, i) => ({
+                    key: i,
+                    color: e.event_type === 'error' ? 'red' : e.event_type === 'warning' ? 'orange' : 'blue',
+                    children: (
+                      <div>
+                        <Text type="secondary" style={{ fontSize: 12 }}>{e.time}</Text>
+                        <div style={{ fontSize: 13 }}>{e.message}</div>
+                      </div>
+                    ),
+                  }))}
+                />
+              ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无任务事件" />
+              )}
+            </Card>
+
+            <Card
+              size="small"
+              title="扫描产物"
+              extra={
+                <Button
+                  size="small"
+                  icon={<FileSearchOutlined />}
+                  onClick={handleDownloadArtifact}
+                  disabled={artifactLoading || artifactFiles.length === 0}
+                >
+                  下载 artifact.tar.gz
+                </Button>
+              }
+            >
+              {artifactLoading ? (
+                <div style={{ textAlign: 'center', padding: '30px 0' }}>
+                  <Spin />
+                </div>
+              ) : artifactFiles.length > 0 ? (
+                <Space size={4} wrap>
+                  {artifactFiles.map((f) => (
+                    <Tag key={f} color="geekblue">{f}</Tag>
+                  ))}
+                </Space>
+              ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该任务未产出扫描产物（需配置归档步骤）" />
+              )}
+            </Card>
+          </div>
         )}
       </Drawer>
     </div>

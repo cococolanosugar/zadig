@@ -234,6 +234,32 @@ export const QualityCenterPage: React.FC = () => {
     [detailTest, projectName]
   );
 
+  // 测试任务产物（GET /testing/testtask/artifact?projectName=&testName=&jobName=&taskID= → 二进制）
+  const handleDownloadTestArtifact = useCallback(
+    async (task: Record<string, unknown>) => {
+      if (!detailTest) return;
+      const taskId = String(task.task_id ?? task.id ?? '');
+      try {
+        const res = await http.get(
+          `/api/aslan/testing/testtask/artifact?projectName=${encodeURIComponent(detailTest.product_name || projectName || '')}&testName=${encodeURIComponent(detailTest.name)}&jobName=${encodeURIComponent(detailTest.name.toLowerCase().slice(0, 32))}&taskID=${taskId}`,
+          { skipErrorHandler: true, responseType: 'blob' }
+        );
+        const blob = res instanceof Blob ? res : new Blob([res as BlobPart], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `test-${detailTest.name}-${taskId}.tar.gz`;
+        a.click();
+        URL.revokeObjectURL(url);
+        feedback.message.success('产物已下载');
+      } catch (err: unknown) {
+        const msg = (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data?.description || '产物下载失败（任务可能未配置归档步骤）';
+        feedback.message.error(msg);
+      }
+    },
+    [detailTest, projectName]
+  );
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -797,6 +823,9 @@ export const QualityCenterPage: React.FC = () => {
                       </Button>
                       <Button type="link" size="small" onClick={() => handleRestartTask(r)}>
                         重启
+                      </Button>
+                      <Button type="link" size="small" onClick={() => handleDownloadTestArtifact(r)}>
+                        产物
                       </Button>
                     </Space>
                   ),
