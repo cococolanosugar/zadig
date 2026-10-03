@@ -110,16 +110,41 @@ export const ServicesPage: React.FC = () => {
   const handleSaveYaml = async () => {
     if (!selectedService || !activeProject) return;
     try {
-      // 后端更新端点为 PUT /services（无 /:name），service_name 在 body 中
-      // 后端更新端点为 PUT /services（无 /:name），字段按 models.Product json tag
-      await http.put(
-        `/api/aslan/service/services?production=${isProduction}`,
+      // 对齐旧版 saveServiceAPI（zadig-portal/src/api/index.js:388）：
+      // POST /service/services?projectName=<product>&force=true。
+      // createServiceTemplateRequest 的 source/type/visibility/yaml 均 binding:required；
+      // visibility 沿用当前服务值（缺失则 'private'），variable_yaml 需先取详情保留。
+      let visibility = 'private';
+      let variableYaml = '';
+      let serviceVariableKVs: unknown[] = [];
+      try {
+        const detail = await http.get<{
+          visibility?: string;
+          variable_yaml?: string;
+          service_variable_kvs?: unknown[];
+        }>(
+          `/api/aslan/service/services/${encodeURIComponent(selectedService)}/k8s?projectName=${activeProject}&production=${isProduction}`,
+          { skipErrorHandler: true }
+        );
+        visibility = detail?.visibility || 'private';
+        variableYaml = detail?.variable_yaml || '';
+        serviceVariableKVs = detail?.service_variable_kvs || [];
+      } catch {
+        // 详情获取失败时按默认 visibility 保存
+      }
+      await http.post(
+        `/api/aslan/service/services?projectName=${activeProject}&force=true&production=${isProduction}`,
         {
-          service_name: selectedService,
           product_name: activeProject,
+          service_name: selectedService,
+          visibility,
           type: 'k8s',
           yaml: yamlContent,
-        }
+          source: 'spock',
+          variable_yaml: variableYaml,
+          service_variable_kvs: serviceVariableKVs,
+        },
+        { skipErrorHandler: true }
       );
       setOriginalYaml(yamlContent);
       feedback.message.success(`服务 ${selectedService} 配置已保存成功！`);
