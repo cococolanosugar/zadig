@@ -32,6 +32,8 @@ import {
   AppstoreAddOutlined,
   AppstoreOutlined,
   ControlOutlined,
+  DesktopOutlined,
+  HeartOutlined,
 } from '@ant-design/icons';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/project';
@@ -45,6 +47,7 @@ import ImportFromTemplateModal, { SyncTemplateServiceInfo } from './ImportFromTe
 import ServiceModulesDrawer from './ServiceModulesDrawer';
 import ServiceVariablesDrawer from './ServiceVariablesDrawer';
 import HelmServiceDrawer from './HelmServiceDrawer';
+import PmServiceModal from './PmServiceModal';
 
 const { Title, Text } = Typography;
 
@@ -97,6 +100,10 @@ export const ServicesPage: React.FC = () => {
 
   // Helm 服务管理抽屉
   const [helmDrawerOpen, setHelmDrawerOpen] = useState(false);
+
+  // PM 主机服务弹窗
+  const [pmModalOpen, setPmModalOpen] = useState(false);
+  const [editingPmService, setEditingPmService] = useState<string | null>(null);
 
   const loadServices = useCallback(async () => {
     if (!activeProject) {
@@ -466,6 +473,17 @@ spec:
               >
                 变量配置
               </Button>
+              {serviceDetail?.type === 'pm' && (
+                <Button
+                  icon={<HeartOutlined />}
+                  onClick={() => {
+                    setEditingPmService(selectedService);
+                    setPmModalOpen(true);
+                  }}
+                >
+                  主机配置 & 探活
+                </Button>
+              )}
               <Button
                 icon={<CloudServerOutlined />}
                 onClick={() => setHelmDrawerOpen(true)}
@@ -500,6 +518,15 @@ spec:
                       icon: <FileAddOutlined />,
                       label: '新建空白服务',
                       onClick: () => setCreateModalVisible(true),
+                    },
+                    {
+                      key: 'pm',
+                      icon: <DesktopOutlined />,
+                      label: '新建主机 (PM) 服务',
+                      onClick: () => {
+                        setEditingPmService(null);
+                        setPmModalOpen(true);
+                      },
                     },
                     {
                       key: 'repo',
@@ -566,7 +593,13 @@ spec:
                         <CodeOutlined style={{ color: isSelected ? '#0066ff' : '#8c8c8c' }} />
                         <Text strong={isSelected}>{item.service_name}</Text>
                       </Space>
-                      <Tag color="cyan">K8s</Tag>
+                      {item.type === 'pm' ? (
+                        <Tag color="purple">PM</Tag>
+                      ) : item.type === 'helm' ? (
+                        <Tag color="blue">Helm</Tag>
+                      ) : (
+                        <Tag color="cyan">K8s</Tag>
+                      )}
                     </div>
                   );
                 })}
@@ -839,6 +872,22 @@ spec:
         }}
         projectName={activeProject || ''}
         isProduction={isProduction}
+      />
+
+      {/* PM Host Service Modal */}
+      <PmServiceModal
+        open={pmModalOpen}
+        onClose={() => setPmModalOpen(false)}
+        projectName={activeProject || ''}
+        isProduction={isProduction}
+        serviceName={editingPmService}
+        serviceDetail={editingPmService ? serviceDetail : null}
+        onSuccess={(name) => {
+          loadServices();
+          if (name) {
+            setSelectedService(name);
+          }
+        }}
       />
     </div>
   );
