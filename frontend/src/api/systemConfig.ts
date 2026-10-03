@@ -144,7 +144,37 @@ export const systemConfigApi = {
     const res = await http.get<WorkflowParameterItem[]>('/api/aslan/system/workflow_parameter', { params });
     return Array.isArray(res) ? res : [];
   },
+
+  // --- 7. 系统自定义导航 ---
+  async getSystemNavigation(): Promise<CustomNavigationConfig> {
+    const res = await http.get<CustomNavigationConfig>('/api/aslan/system/navigation');
+    return res || { items: [] };
+  },
+  async updateSystemNavigation(items: NavigationItem[]): Promise<void> {
+    await http.put('/api/aslan/system/navigation', { items });
+  },
 };
+
+export interface NavigationItem {
+  name: string;
+  en_name?: string;
+  key: string;
+  type: 'folder' | 'item' | string;
+  icon_type?: string;
+  icon?: string;
+  page_type?: string;
+  url?: string;
+  disabled?: boolean;
+  children?: NavigationItem[];
+}
+
+export interface CustomNavigationConfig {
+  id?: string;
+  items: NavigationItem[];
+  create_time?: number;
+  update_time?: number;
+  update_by?: string;
+}
 
 export interface KeyVaultKVItem {
   id: string;

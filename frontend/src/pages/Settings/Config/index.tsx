@@ -19,6 +19,7 @@ import {
   Alert,
   Divider,
   Checkbox,
+  Drawer,
 } from 'antd';
 import {
   MailOutlined,
@@ -47,6 +48,9 @@ import {
   CopyOutlined,
   EyeOutlined,
   EyeInvisibleOutlined,
+  MenuOutlined,
+  FolderOutlined,
+  FileOutlined,
 } from '@ant-design/icons';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -60,6 +64,8 @@ import systemConfigApi, {
   type KeyVaultGroupItem,
   type KeyVaultKVItem,
   type CreateKeyVaultArgs,
+  type NavigationItem,
+  type CustomNavigationConfig,
 } from '../../../api/systemConfig';
 import emailApi from '../../../api/email';
 import { feedback } from '../../../utils/feedback';
@@ -198,6 +204,15 @@ export const SystemConfigPage: React.FC = () => {
   const [existingHostSaved, setExistingHostSaved] = useState(false);
   const [savingEmail, setSavingEmail] = useState(false);
   const [testingEmail, setTestingEmail] = useState(false);
+
+  // Navigation states
+  const [navigationConfig, setNavigationConfig] = useState<CustomNavigationConfig | null>(null);
+  const [navigationItems, setNavigationItems] = useState<NavigationItem[]>([]);
+  const [savingNavigation, setSavingNavigation] = useState(false);
+  const [editingNavItem, setEditingNavItem] = useState<NavigationItem | null>(null);
+  const [navEditModalOpen, setNavEditModalOpen] = useState(false);
+  const [navForm] = Form.useForm();
+  const [navPreviewOpen, setNavPreviewOpen] = useState(false);
 
   const loadTabData = useCallback(async (tab: string) => {
     setLoading(true);
@@ -341,13 +356,21 @@ export const SystemConfigPage: React.FC = () => {
         } catch {
           // ignore
         }
+      } else if (tab === 'navigation') {
+        try {
+          const res = await systemConfigApi.getSystemNavigation();
+          setNavigationConfig(res);
+          setNavigationItems(res.items || []);
+        } catch {
+          // ignore
+        }
       }
     } catch {
       // Graceful fallback
     } finally {
       setLoading(false);
     }
-  }, [emailForm, concurrencyForm, proxyForm, aiReviewForm, cronForm, securityForm, serverUrlForm, workflowHookForm]);
+  }, [emailForm, concurrencyForm, proxyForm, aiReviewForm, cronForm, securityForm, serverUrlForm, workflowHookForm, navForm]);
 
   useEffect(() => {
     loadTabData(activeTab);
@@ -672,6 +695,66 @@ export const SystemConfigPage: React.FC = () => {
     feedback.message.success(`已复制参数引用: {{${expr}}}`);
   };
 
+  const handleOpenEditNavItem = (item: NavigationItem) => {
+    setEditingNavItem(item);
+    navForm.setFieldsValue({
+      name: item.name,
+      en_name: item.en_name || '',
+      url: item.url || '',
+      disabled: Boolean(item.disabled),
+    });
+    setNavEditModalOpen(true);
+  };
+
+  const updateNavItemInTree = (
+    items: NavigationItem[],
+    targetKey: string,
+    updates: Partial<NavigationItem>
+  ): NavigationItem[] => {
+    return items.map((node) => {
+      if (node.key === targetKey) {
+        return { ...node, ...updates };
+      }
+      if (node.children && node.children.length > 0) {
+        return {
+          ...node,
+          children: updateNavItemInTree(node.children, targetKey, updates),
+        };
+      }
+      return node;
+    });
+  };
+
+  const handleSaveNavItemModal = async (values: Partial<NavigationItem>) => {
+    if (!editingNavItem) return;
+    const newItems = updateNavItemInTree(navigationItems, editingNavItem.key, {
+      name: values.name,
+      en_name: values.en_name,
+      url: values.url,
+      disabled: Boolean(values.disabled),
+    });
+    setNavigationItems(newItems);
+    setNavEditModalOpen(false);
+    feedback.message.success(`已更新导航节点 "${values.name || editingNavItem.key}"（点击上方「保存导航配置」以持久化至服务端）`);
+  };
+
+  const handleSaveAllNavigation = async () => {
+    setSavingNavigation(true);
+    try {
+      await systemConfigApi.updateSystemNavigation(navigationItems);
+      feedback.message.success('系统导航树配置已成功保存！');
+      const res = await systemConfigApi.getSystemNavigation();
+      setNavigationConfig(res);
+      setNavigationItems(res.items || []);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '保存导航配置失败';
+      feedback.message.error(msg);
+    } finally {
+      setSavingNavigation(false);
+    }
+  };
+
   const handleTabChange = (key: string) => {
     const tabPathMap: Record<string, string> = {
       apps: '/v1/system/apps',
@@ -929,6 +1012,14 @@ export const SystemConfigPage: React.FC = () => {
       label: (
         <span>
           <CodeOutlined /> 工作流参数
+        </span>
+      ),
+    },
+    {
+      key: 'navigation',
+      label: (
+        <span>
+          <MenuOutlined /> 系统导航
         </span>
       ),
     },
@@ -2006,6 +2097,148 @@ export const SystemConfigPage: React.FC = () => {
               </Space>
             )}
           </div>
+        ) : activeTab === 'navigation' ? (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <Title level={5} style={{ margin: 0, fontWeight: 600 }}>
+                  系统导航目录配置 (Custom Navigation)
+                </Title>
+                <Text type="secondary" style={{ fontSize: 13 }}>
+                  自定义平台侧边栏目录与功能入口，支持多级分组、系统内置页面与自定义插件链接编排
+                  {navigationConfig?.update_by && (
+                    <span style={{ marginLeft: 12 }}>
+                      （最后保存: {navigationConfig.update_by}
+                      {navigationConfig.update_time
+                        ? ` 于 ${dayjs.unix(navigationConfig.update_time).format('YYYY-MM-DD HH:mm:ss')}`
+                        : ''}
+                      ）
+                    </span>
+                  )}
+                </Text>
+              </div>
+              <Space>
+                <Button
+                  icon={<EyeOutlined />}
+                  onClick={() => setNavPreviewOpen(true)}
+                >
+                  预览 JSON 结构
+                </Button>
+                <Button
+                  icon={<ReloadOutlined />}
+                  onClick={() => loadTabData('navigation')}
+                >
+                  重置 / 刷新
+                </Button>
+                <Button
+                  type="primary"
+                  icon={<SaveOutlined />}
+                  loading={savingNavigation}
+                  onClick={handleSaveAllNavigation}
+                >
+                  保存导航配置
+                </Button>
+              </Space>
+            </div>
+
+            <Alert
+              title="导航自定义与侧边栏渲染说明"
+              description="本模块通过后端 /api/aslan/system/navigation 管理系统全局侧边栏目录树。点击各节点的「编辑」可修改中英文显示名称、跳转路由及启用状态；编辑完成后请点击右上角「保存导航配置」完成持久化。"
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+
+            <Table<NavigationItem>
+              dataSource={navigationItems}
+              rowKey="key"
+              pagination={false}
+              size="middle"
+              childrenColumnName="children"
+              columns={[
+                {
+                  title: '导航名称 (中文)',
+                  dataIndex: 'name',
+                  key: 'name',
+                  render: (name: string, record: NavigationItem) => {
+                    const isFolder = record.type === 'folder' || Boolean(record.children && record.children.length > 0);
+                    return (
+                      <Space>
+                        {isFolder ? (
+                          <FolderOutlined style={{ color: '#fa8c16', fontSize: 16 }} />
+                        ) : (
+                          <FileOutlined style={{ color: '#1677ff', fontSize: 16 }} />
+                        )}
+                        <Text strong={isFolder}>{name || record.key}</Text>
+                      </Space>
+                    );
+                  },
+                },
+                {
+                  title: '英文标识 / 名称',
+                  dataIndex: 'en_name',
+                  key: 'en_name',
+                  render: (en?: string, record?: NavigationItem) => en || <Text type="secondary">{record?.key}</Text>,
+                },
+                {
+                  title: '节点类型',
+                  dataIndex: 'type',
+                  key: 'type',
+                  width: 120,
+                  render: (type: string, record: NavigationItem) => {
+                    const isFolder = type === 'folder' || Boolean(record.children && record.children.length > 0);
+                    return isFolder ? (
+                      <Tag color="orange">目录分组</Tag>
+                    ) : record.page_type === 'plugin' ? (
+                      <Tag color="purple">扩展插件</Tag>
+                    ) : (
+                      <Tag color="blue">功能页面</Tag>
+                    );
+                  },
+                },
+                {
+                  title: '路由地址 (URL)',
+                  dataIndex: 'url',
+                  key: 'url',
+                  render: (url?: string) =>
+                    url ? (
+                      <Text code style={{ fontSize: 12, fontFamily: 'monospace' }}>
+                        {url}
+                      </Text>
+                    ) : (
+                      <Text type="secondary">-</Text>
+                    ),
+                },
+                {
+                  title: '状态',
+                  dataIndex: 'disabled',
+                  key: 'disabled',
+                  width: 100,
+                  render: (disabled?: boolean) =>
+                    disabled ? (
+                      <Tag color="default">已禁用</Tag>
+                    ) : (
+                      <Tag color="success">已启用</Tag>
+                    ),
+                },
+                {
+                  title: '操作',
+                  key: 'action',
+                  width: 100,
+                  render: (_, record: NavigationItem) => (
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<EditOutlined />}
+                      onClick={() => handleOpenEditNavItem(record)}
+                    >
+                      编辑
+                    </Button>
+                  ),
+                },
+              ]}
+            />
+          </div>
         ) : activeTab === 'aiCodeReview' ? (
           <div style={{ maxWidth: 720 }}>
             <Form form={aiReviewForm} layout="vertical">
@@ -2203,6 +2436,80 @@ export const SystemConfigPage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* 导航节点编辑 Modal */}
+      <Modal
+        title={editingNavItem ? `编辑导航节点: ${editingNavItem.name || editingNavItem.key}` : '编辑导航节点'}
+        open={navEditModalOpen}
+        onCancel={() => setNavEditModalOpen(false)}
+        onOk={() => navForm.submit()}
+        destroyOnHidden
+      >
+        <Form form={navForm} layout="vertical" onFinish={handleSaveNavItemModal}>
+          <Form.Item
+            name="name"
+            label="中文显示名称"
+            rules={[{ required: true, message: '请输入中文显示名称' }]}
+          >
+            <Input placeholder="例如: 项目列表 / 持续交付" />
+          </Form.Item>
+
+          <Form.Item name="en_name" label="英文显示名称">
+            <Input placeholder="例如: Projects / Delivery" />
+          </Form.Item>
+
+          <Form.Item name="url" label="路由地址 (URL)">
+            <Input placeholder="例如: /v1/projects 或 https://..." />
+          </Form.Item>
+
+          <Form.Item
+            name="disabled"
+            label="禁用节点"
+            valuePropName="checked"
+            extra="禁用后该节点及其子项在系统导航中将被隐藏"
+          >
+            <Switch />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 导航 JSON 结构预览 Drawer */}
+      <Drawer
+        title="系统导航原始 JSON 结构预览"
+        placement="right"
+        size={600}
+        open={navPreviewOpen}
+        onClose={() => setNavPreviewOpen(false)}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Space>
+            <Button
+              type="primary"
+              size="small"
+              icon={<CopyOutlined />}
+              onClick={() => {
+                navigator.clipboard.writeText(JSON.stringify(navigationItems, null, 2));
+                feedback.message.success('已复制导航配置 JSON');
+              }}
+            >
+              复制 JSON
+            </Button>
+          </Space>
+        </div>
+        <pre
+          style={{
+            backgroundColor: '#f5f5f5',
+            padding: 16,
+            borderRadius: 6,
+            fontSize: 12,
+            fontFamily: 'monospace',
+            maxHeight: 'calc(100vh - 180px)',
+            overflow: 'auto',
+          }}
+        >
+          {JSON.stringify(navigationItems, null, 2)}
+        </pre>
+      </Drawer>
     </div>
   );
 };
