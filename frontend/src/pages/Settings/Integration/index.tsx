@@ -36,6 +36,8 @@ import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
 import http from '../../../api/client';
 import { feedback } from '../../../utils/feedback';
+import { generateAesKey, rsaEncrypt } from '../../../utils/crypto';
+import { authApi } from '../../../api/auth';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -58,7 +60,10 @@ export interface IntegrationMeta {
   desc: string;
   link: string;
   icon: React.ReactNode;
+  // 分类列表/CRUD 的基础路径（不带 query；POST/DELETE 直接用 base）
   apiEndpoint: string;
+  // 列表 GET 需实时生成 encryptedKey（后端对空 key 直接 ErrInvalidParam）
+  needsEncryptedKey?: boolean;
   // 连通性测试端点（后端实际存在的 /validate 或列表 GET；缺省用 apiEndpoint GET）
   validateEndpoint?: string;
   supportVendors: string[];
@@ -72,7 +77,8 @@ const INTEGRATION_LIST: IntegrationMeta[] = [
     desc: '统一身份认证，支持 AD、LDAP、GitHub、钉钉、飞书、企业微信、OAuth 等',
     link: '/v1/system/integration/account',
     icon: <UserOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
-    apiEndpoint: '/api/v1/connectors?encryptedKey=',
+    apiEndpoint: '/api/v1/connectors',
+    needsEncryptedKey: true,
     validateEndpoint: undefined,
     supportVendors: ['LDAP / AD', 'OAuth 2.0', '飞书 SSO', '钉钉 SSO', '企业微信 SSO'],
   },
@@ -82,7 +88,8 @@ const INTEGRATION_LIST: IntegrationMeta[] = [
     desc: '代码仓库接入，支持 GitLab、GitHub、Gerrit、Gitee、Perforce、Git 标准协议等',
     link: '/v1/system/integration/git',
     icon: <BranchesOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
-    apiEndpoint: '/api/v1/codehosts?encryptedKey=',
+    apiEndpoint: '/api/v1/codehosts',
+    needsEncryptedKey: true,
     supportVendors: ['GitLab', 'GitHub', 'Gitee', 'Gerrit', 'Perforce'],
   },
   {
@@ -164,6 +171,7 @@ const INTEGRATION_LIST: IntegrationMeta[] = [
     link: '/v1/system/integration/cloudService',
     icon: <CloudOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
     apiEndpoint: '/api/aslan/system/cloud_service',
+    needsEncryptedKey: true,
     supportVendors: ['阿里云 SAE', '阿里云 DMS', '腾讯云 TKE'],
   },
   {
@@ -173,6 +181,7 @@ const INTEGRATION_LIST: IntegrationMeta[] = [
     link: '/v1/system/integration/external',
     icon: <ApiOutlined style={{ fontSize: 30, color: '#0066ff' }} />,
     apiEndpoint: '/api/aslan/system/external',
+    needsEncryptedKey: true,
     supportVendors: ['通用 Webhook', 'RESTful API', '自定义脚本'],
   },
 ];
@@ -192,21 +201,33 @@ export const SystemIntegrationPage: React.FC = () => {
   const [testingConnection, setTestingConnection] = useState<boolean>(false);
   const [form] = Form.useForm();
 
+  // 需要加密 key 的分类（connectors/codehosts/cloud_service/external）：实时生成 encryptedKey
+  // （generateAesKey(32) + rsaEncrypt(aesKey, publicKey)，publicKey 来自 /system/rsaKey/publicKey）
+  const buildListUrl = useCallback(async (cat: IntegrationMeta): Promise<string> => {
+    if (!cat.needsEncryptedKey) return cat.apiEndpoint;
+    const publicKey = await authApi.getRSAPublicKey();
+    const encryptedKey = rsaEncrypt(generateAesKey(32), publicKey);
+    return `${cat.apiEndpoint}?encryptedKey=${encodeURIComponent(encryptedKey)}`;
+  }, []);
+
   const fetchItems = useCallback(async (cat: IntegrationMeta) => {
     setLoading(true);
     try {
+      const url = await buildListUrl(cat);
       const res = await http.get<IntegrationItem[] | { list: IntegrationItem[] }>(
-        cat.apiEndpoint,
+        url,
         { skipErrorHandler: true }
       );
-      const list = Array.isArray(res) ? res : (res as any)?.list || [];
+      const list = Array.isArray(res)
+        ? res
+        : (res as any)?.list || (res as any)?.external_system || [];
       setItems(list);
     } catch {
       setItems([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [buildListUrl]);
 
   useEffect(() => {
     if (currentCategory) {
@@ -226,8 +247,10 @@ export const SystemIntegrationPage: React.FC = () => {
     if (!currentCategory) return;
     try {
       setTestingConnection(true);
-      // 后端无 /connection 端点；连通性验证 = 分类列表 GET 成功（数据面可达）
-      await http.get(currentCategory.apiEndpoint, { skipErrorHandler: true });
+      // 后端无 /connection 端点；连通性验证 = 分类列表 GET 成功（数据面可达）；
+      // 需 encryptedKey 的分类同样实时生成
+      const url = await buildListUrl(currentCategory);
+      await http.get(url, { skipErrorHandler: true });
       feedback.message.success('连通性测试通过！服务响应状态正常');
     } catch (err: any) {
       feedback.message.error(err?.response?.data?.description || err?.message || '连通性测试失败，请检查服务地址或凭据配置');
@@ -241,6 +264,7 @@ export const SystemIntegrationPage: React.FC = () => {
     try {
       const values = await form.validateFields();
       setLoading(true);
+      // POST 直接用 base 路径（encryptedKey 仅列表 GET 需要）
       await http.post(currentCategory.apiEndpoint, values);
       feedback.message.success(`[${values.name}] 集成配置保存成功！`);
       setModalVisible(false);
