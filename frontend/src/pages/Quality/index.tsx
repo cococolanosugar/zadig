@@ -1,5 +1,27 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Card, Table, Typography, Button, Space, Input, Tag, Row, Col, Statistic, Empty, Spin, Modal, Form, Select, Drawer, Descriptions, Radio, Timeline } from 'antd';
+import {
+  Card,
+  Table,
+  Typography,
+  Button,
+  Space,
+  Input,
+  Tag,
+  Row,
+  Col,
+  Statistic,
+  Empty,
+  Spin,
+  Modal,
+  Form,
+  Select,
+  Drawer,
+  Descriptions,
+  Radio,
+  Timeline,
+  Segmented,
+  Tooltip,
+} from 'antd';
 import { Line } from '@ant-design/plots';
 import {
   CheckCircleOutlined,
@@ -9,10 +31,24 @@ import {
   FieldTimeOutlined,
   BarChartOutlined,
   ReloadOutlined,
+  ThunderboltOutlined,
+  ExperimentOutlined,
+  RocketOutlined,
+  RollbackOutlined,
+  RiseOutlined,
+  TrophyOutlined,
 } from '@ant-design/icons';
 import http from '../../api/client';
+import statApi, {
+  type DailyAverageDurationItem,
+  type BuildTenDurationItem,
+  type BuildTrendResp,
+  type TestHealthResp,
+  type RollbackStatItem,
+} from '../../api/stat';
 import { feedback } from '../../utils/feedback';
 import { normalizeJobName } from '../../utils/jobname';
+import { useProjectStore } from '../../stores/project';
 
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -31,6 +67,8 @@ export const QualityCenterPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { projectName } = useParams<{ projectName?: string }>();
+  const { currentProject } = useProjectStore();
+  const activeProject = projectName || currentProject;
 
   // Extract test name and task id from routes
   const match = location.pathname.match(/\/test\/(?:detail\/)?(?:function\/)?([^/]+)(?:\/([^/]+))?/);
@@ -63,41 +101,56 @@ export const QualityCenterPage: React.FC = () => {
   const [buildHealth, setBuildHealth] = useState<{ totalSuccess: number; totalFailure: number }>({ totalSuccess: 0, totalFailure: 0 });
   const [buildDaily, setBuildDaily] = useState<Array<{ date: string; averageDuration: number }>>([]);
   const [latestTen, setLatestTen] = useState<Array<{ name?: string; productName?: string; duration: number; status: string; taskCreator?: string; createTime?: number }>>([]);
+  const [buildAverageList, setBuildAverageList] = useState<DailyAverageDurationItem[]>([]);
+  const [topTenDuration, setTopTenDuration] = useState<BuildTenDurationItem[]>([]);
+  const [, setBuildTrendData] = useState<BuildTrendResp | null>(null);
+  const [activeBuildChartTab, setActiveBuildChartTab] = useState<'average' | 'daily'>('average');
+  const [activeBuildTableTab, setActiveBuildTableTab] = useState<'latest' | 'topDuration'>('latest');
 
-  const fetchBuildQuality = useCallback(async () => {
-    if (!projectName) return;
-    setBuildLoading(true);
-    const end = Math.floor(Date.now() / 1000);
-    const start = end - (buildRange === '7d' ? 7 : buildRange === '30d' ? 30 : 90) * 86400;
-    const body = { startDate: start, endDate: end, productNames: projectName ? [projectName] : [] };
-    try {
-      const [healthRes, dailyRes, tenRes] = await Promise.allSettled([
-        http.post<{ totalSuccess: number; totalFailure: number }>('/api/aslan/stat/quality/buildHealthMeasure', body, { skipErrorHandler: true }),
-        http.post<Array<{ date: string; averageDuration: number }>>('/api/aslan/stat/quality/buildDailyMeasure', body, { skipErrorHandler: true }),
-        http.post<Array<{ name?: string; productName?: string; duration: number; status: string; taskCreator?: string; createTime?: number }>>('/api/aslan/stat/quality/buildLatestTenMeasure', body, { skipErrorHandler: true }),
-      ]);
-      setBuildHealth(healthRes.status === 'fulfilled' && healthRes.value ? healthRes.value : { totalSuccess: 0, totalFailure: 0 });
-      setBuildDaily(dailyRes.status === 'fulfilled' && Array.isArray(dailyRes.value) ? dailyRes.value : []);
-      setLatestTen(tenRes.status === 'fulfilled' && Array.isArray(tenRes.value) ? tenRes.value : []);
-    } finally {
-      setBuildLoading(false);
-    }
-  }, [projectName, buildRange]);
+  // 测试质量度量 (testHealthMeasure & testAverageMeasure & dailyHealthTrend)
+  const [testAverageList, setTestAverageList] = useState<DailyAverageDurationItem[]>([]);
+  const [testHealth, setTestHealth] = useState<TestHealthResp>({ totalSuccess: 0, totalFailure: 0 });
+  const [testTrend, setTestTrend] = useState<Array<{ date: string; totalSuccess: number; totalFailure: number; successRate: number }>>([]);
+  const [activeTestChartTab, setActiveTestChartTab] = useState<'passRate' | 'averageDuration'>('passRate');
 
   // 部署与回滚质量（stat/v2/quality/deploy|rollback，GET 查询形式）
   const [deployHealth, setDeployHealth] = useState<{ success: number; failure: number }>({ success: 0, failure: 0 });
   const [topDeployed, setTopDeployed] = useState<Array<{ service_name: string; env_name: string; count: number; success: number; failed: number }>>([]);
   const [rollbackTotal, setRollbackTotal] = useState<number>(0);
   const [deployMonthly, setDeployMonthly] = useState<Array<{ date: string; success: number; rollback: number; failed: number; timeout: number }>>([]);
-  // 测试健康趋势（stat/v2/quality/test/dailyHealthTrend）
-  const [testTrend, setTestTrend] = useState<Array<{ date: string; totalSuccess: number; totalFailure: number; successRate: number }>>([]);
+  const [rollbackRecords, setRollbackRecords] = useState<RollbackStatItem[]>([]);
+
+  const fetchBuildQuality = useCallback(async () => {
+    setBuildLoading(true);
+    const end = Math.floor(Date.now() / 1000);
+    const start = end - (buildRange === '7d' ? 7 : buildRange === '30d' ? 30 : 90) * 86400;
+    const body = { startDate: start, endDate: end, productNames: activeProject ? [activeProject] : [] };
+    try {
+      const [healthRes, dailyRes, tenRes, avgRes, topDurationRes, trendRes] = await Promise.allSettled([
+        statApi.getBuildHealthMeasure(body),
+        http.post<Array<{ date: string; averageDuration: number }>>('/api/aslan/stat/quality/buildDailyMeasure', body, { skipErrorHandler: true }),
+        http.post<Array<{ name?: string; productName?: string; duration: number; status: string; taskCreator?: string; createTime?: number }>>('/api/aslan/stat/quality/buildLatestTenMeasure', body, { skipErrorHandler: true }),
+        statApi.getBuildAverageMeasure(body),
+        statApi.getBuildTenDurationMeasure(body),
+        statApi.getBuildTrendMeasure(body),
+      ]);
+      setBuildHealth(healthRes.status === 'fulfilled' && healthRes.value ? healthRes.value : { totalSuccess: 0, totalFailure: 0 });
+      setBuildDaily(dailyRes.status === 'fulfilled' && Array.isArray(dailyRes.value) ? dailyRes.value : []);
+      setLatestTen(tenRes.status === 'fulfilled' && Array.isArray(tenRes.value) ? tenRes.value : []);
+      setBuildAverageList(avgRes.status === 'fulfilled' && Array.isArray(avgRes.value) ? avgRes.value : []);
+      setTopTenDuration(topDurationRes.status === 'fulfilled' && Array.isArray(topDurationRes.value) ? topDurationRes.value : []);
+      setBuildTrendData(trendRes.status === 'fulfilled' && trendRes.value ? trendRes.value : null);
+    } finally {
+      setBuildLoading(false);
+    }
+  }, [activeProject, buildRange]);
 
   const fetchDeployRollbackQuality = useCallback(async () => {
     const end = Math.floor(Date.now() / 1000);
     const start = end - (buildRange === '7d' ? 7 : buildRange === '30d' ? 30 : 90) * 86400;
     const rangeQ = `startDate=${start}&endDate=${end}`;
     try {
-      const [healthRes, topRes, rbRes, mtRes] = await Promise.allSettled([
+      const [healthRes, topRes, rbRes, mtRes, rbStatRes] = await Promise.allSettled([
         http.get<{ success: number; failure: number }>(
           `/api/aslan/stat/v2/quality/deploy/health?${rangeQ}`, { skipErrorHandler: true }
         ),
@@ -108,33 +161,50 @@ export const QualityCenterPage: React.FC = () => {
         http.get<Array<{ date: string; success: number; rollback: number; failed: number; timeout: number }>>(
           `/api/aslan/stat/v2/quality/deploy/trend/monthly?${rangeQ}`, { skipErrorHandler: true }
         ),
+        statApi.getRollbackStat({
+          startDate: start,
+          endDate: end,
+          projects: activeProject ? [activeProject] : [],
+          type: 'both',
+        }),
       ]);
       setDeployHealth(healthRes.status === 'fulfilled' && healthRes.value ? healthRes.value : { success: 0, failure: 0 });
       setTopDeployed(topRes.status === 'fulfilled' && Array.isArray(topRes.value) ? topRes.value : []);
       setRollbackTotal(rbRes.status === 'fulfilled' && rbRes.value ? Number(rbRes.value.total) || 0 : 0);
       setDeployMonthly(mtRes.status === 'fulfilled' && Array.isArray(mtRes.value) ? mtRes.value : []);
+      setRollbackRecords(rbStatRes.status === 'fulfilled' && rbStatRes.value?.data ? rbStatRes.value.data : []);
     } catch {
       setDeployHealth({ success: 0, failure: 0 });
       setTopDeployed([]);
       setRollbackTotal(0);
       setDeployMonthly([]);
+      setRollbackRecords([]);
     }
-  }, [buildRange]);
+  }, [activeProject, buildRange]);
 
   const fetchTestTrend = useCallback(async () => {
     const end = Math.floor(Date.now() / 1000);
     const start = end - (buildRange === '7d' ? 7 : buildRange === '30d' ? 30 : 90) * 86400;
+    const body = { startDate: start, endDate: end, productNames: activeProject ? [activeProject] : [] };
     try {
-      const res = await http.post<Array<{ date: string; totalSuccess: number; totalFailure: number; successRate: number }>>(
-        '/api/aslan/stat/v2/quality/test/dailyHealthTrend',
-        { start_time: start, end_time: end, projects: projectName ? [projectName] : [] },
-        { skipErrorHandler: true }
-      );
-      setTestTrend(Array.isArray(res) ? res : []);
+      const [trendRes, avgRes, healthRes] = await Promise.allSettled([
+        http.post<Array<{ date: string; totalSuccess: number; totalFailure: number; successRate: number }>>(
+          '/api/aslan/stat/v2/quality/test/dailyHealthTrend',
+          { start_time: start, end_time: end, projects: activeProject ? [activeProject] : [] },
+          { skipErrorHandler: true }
+        ),
+        statApi.getTestAverageMeasure(body),
+        statApi.getTestHealthMeasure(body),
+      ]);
+      setTestTrend(trendRes.status === 'fulfilled' && Array.isArray(trendRes.value) ? trendRes.value : []);
+      setTestAverageList(avgRes.status === 'fulfilled' && Array.isArray(avgRes.value) ? avgRes.value : []);
+      setTestHealth(healthRes.status === 'fulfilled' && healthRes.value ? healthRes.value : { totalSuccess: 0, totalFailure: 0 });
     } catch {
       setTestTrend([]);
+      setTestAverageList([]);
+      setTestHealth({ totalSuccess: 0, totalFailure: 0 });
     }
-  }, [projectName, buildRange]);
+  }, [activeProject, buildRange]);
 
   // 测试详情抽屉（配置 + 任务历史）
   const [detailOpen, setDetailOpen] = useState(false);
@@ -460,9 +530,23 @@ export const QualityCenterPage: React.FC = () => {
       <Card
         variant="borderless"
         style={{ borderRadius: 8, border: '1px solid #ebeef5', marginBottom: 20 }}
-        title="构建质量效能"
+        title={
+          <Space>
+            <ThunderboltOutlined style={{ color: '#1677ff' }} />
+            <span>构建质量效能</span>
+          </Space>
+        }
         extra={
           <Space size={8}>
+            <Segmented
+              size="small"
+              value={activeBuildChartTab}
+              onChange={(v) => setActiveBuildChartTab(v as 'average' | 'daily')}
+              options={[
+                { label: '平均构建耗时 (秒)', value: 'average', icon: <FieldTimeOutlined /> },
+                { label: '日构建频次', value: 'daily', icon: <RiseOutlined /> },
+              ]}
+            />
             <Radio.Group value={buildRange} onChange={(e) => setBuildRange(e.target.value)} size="small">
               <Radio.Button value="7d">近 7 天</Radio.Button>
               <Radio.Button value="30d">近 30 天</Radio.Button>
@@ -474,24 +558,51 @@ export const QualityCenterPage: React.FC = () => {
       >
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col xs={24} sm={8}>
-            <Statistic title="构建成功次数" value={buildHealth.totalSuccess} valueStyle={{ color: '#52c41a' }} />
+            <Statistic title="构建成功次数" value={buildHealth.totalSuccess} styles={{ content: { color: '#52c41a' } }} />
           </Col>
           <Col xs={24} sm={8}>
-            <Statistic title="构建失败次数" value={buildHealth.totalFailure} valueStyle={{ color: '#ff4d4f' }} />
+            <Statistic title="构建失败次数" value={buildHealth.totalFailure} styles={{ content: { color: '#ff4d4f' } }} />
           </Col>
           <Col xs={24} sm={8}>
             <Statistic
               title="构建健康度"
-              value={buildHealth.totalSuccess + buildHealth.totalFailure > 0
-                ? `${Math.round((buildHealth.totalSuccess / (buildHealth.totalSuccess + buildHealth.totalFailure)) * 100)}%`
-                : '-'}
+              value={
+                buildHealth.totalSuccess + buildHealth.totalFailure > 0
+                  ? `${Math.round(
+                      (buildHealth.totalSuccess / (buildHealth.totalSuccess + buildHealth.totalFailure)) * 100
+                    )}%`
+                  : '-'
+              }
               prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
             />
           </Col>
         </Row>
-        {buildDaily.length > 0 ? (
+
+        {activeBuildChartTab === 'average' ? (
+          buildAverageList.length > 0 ? (
+            <Line
+              data={buildAverageList.map((d) => ({
+                date: (d.date || '').slice(5),
+                duration: d.averageDuration,
+              }))}
+              xField="date"
+              yField="duration"
+              style={{ lineWidth: 2 }}
+              point={{ shapeField: 'circle', sizeField: 3 }}
+              height={260}
+            />
+          ) : (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={`${buildRange === '7d' ? '近 7 天' : buildRange === '30d' ? '近 30 天' : '近 90 天'}暂无平均构建时长数据`}
+            />
+          )
+        ) : buildDaily.length > 0 ? (
           <Line
-            data={buildDaily.map((d) => ({ date: (d.date || '').slice(5), duration: d.averageDuration }))}
+            data={buildDaily.map((d) => ({
+              date: (d.date || '').slice(5),
+              duration: d.averageDuration,
+            }))}
             xField="date"
             yField="duration"
             style={{ lineWidth: 2 }}
@@ -499,46 +610,135 @@ export const QualityCenterPage: React.FC = () => {
             height={260}
           />
         ) : (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`${buildRange === '7d' ? '近 7 天' : buildRange === '30d' ? '近 30 天' : '近 90 天'}暂无构建质量数据`} />
-        )}
-        <div style={{ marginTop: 16, marginBottom: 8 }}>
-          <Text strong style={{ fontSize: 14 }}>测试健康趋势 (成功率 %)</Text>
-        </div>
-        {testTrend.length > 0 ? (
-          <Line
-            data={testTrend.map((d) => ({ date: (d.date || '').slice(5), successRate: d.successRate }))}
-            xField="date"
-            yField="successRate"
-            yAxis={{ min: 0, max: 100 }}
-            style={{ lineWidth: 2 }}
-            point={{ shapeField: 'circle', sizeField: 3 }}
-            height={220}
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={`${buildRange === '7d' ? '近 7 天' : buildRange === '30d' ? '近 30 天' : '近 90 天'}暂无构建频次数据`}
           />
-        ) : (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`${buildRange === '7d' ? '近 7 天' : buildRange === '30d' ? '近 30 天' : '近 90 天'}暂无测试趋势数据`} />
         )}
       </Card>
 
-      {/* Latest Ten Builds */}
+      {/* Build Tasks Table: Latest 10 vs Top 10 Duration */}
       <Card
         variant="borderless"
         style={{ borderRadius: 8, border: '1px solid #ebeef5', marginBottom: 20 }}
-        title="最近构建记录"
+        title={
+          <Space>
+            <TrophyOutlined style={{ color: '#faad14' }} />
+            <span>构建任务记录与耗时排行</span>
+          </Space>
+        }
+        extra={
+          <Segmented
+            size="small"
+            value={activeBuildTableTab}
+            onChange={(v) => setActiveBuildTableTab(v as 'latest' | 'topDuration')}
+            options={[
+              { label: '最近 10 次构建', value: 'latest' },
+              { label: 'Top 10 耗时构建', value: 'topDuration' },
+            ]}
+          />
+        }
       >
-        {latestTen.length > 0 ? (
-          <Table
-            dataSource={latestTen}
-            rowKey={(r, i) => `${r.productName}-${r.createTime}-${i}`}
+        {activeBuildTableTab === 'latest' ? (
+          latestTen.length > 0 ? (
+            <Table
+              dataSource={latestTen}
+              rowKey={(r, i) => `${r.productName}-${r.createTime}-${i}`}
+              pagination={false}
+              size="small"
+              columns={[
+                {
+                  title: '所属项目',
+                  dataIndex: 'productName',
+                  key: 'productName',
+                  render: (p) => <Tag color="blue">{String(p || '-')}</Tag>,
+                },
+                {
+                  title: '耗时',
+                  dataIndex: 'duration',
+                  key: 'duration',
+                  render: (d) => <Text type="secondary">{d ? `${d} 秒` : '-'}</Text>,
+                },
+                {
+                  title: '状态',
+                  dataIndex: 'status',
+                  key: 'status',
+                  render: (s) => {
+                    const map: Record<string, { color: string; text: string }> = {
+                      passed: { color: 'success', text: '成功' },
+                      failed: { color: 'error', text: '失败' },
+                      running: { color: 'processing', text: '执行中' },
+                    };
+                    const m = map[String(s)] || { color: 'default', text: String(s || '未知') };
+                    return <Tag color={m.color}>{m.text}</Tag>;
+                  },
+                },
+                {
+                  title: '触发人',
+                  dataIndex: 'taskCreator',
+                  key: 'taskCreator',
+                  render: (c) => <Text type="secondary">{String(c || '-')}</Text>,
+                },
+                {
+                  title: '创建时间',
+                  dataIndex: 'createTime',
+                  key: 'createTime',
+                  render: (t) => (t ? new Date(t * 1000).toLocaleString() : '-'),
+                },
+              ]}
+            />
+          ) : (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无最近构建记录" />
+          )
+        ) : topTenDuration.length > 0 ? (
+          <Table<BuildTenDurationItem>
+            dataSource={topTenDuration}
+            rowKey={(r, i) => `${r.pipelineName}-${r.taskID}-${r.createTime}-${i}`}
             pagination={false}
             size="small"
             columns={[
-              { title: '所属项目', dataIndex: 'productName', key: 'productName', render: (p) => <Tag color="blue">{String(p || '-')}</Tag> },
-              { title: '耗时', dataIndex: 'duration', key: 'duration', render: (d) => <Text type="secondary">{d ? `${d} 秒` : '-'}</Text> },
               {
-                title: '状态',
+                title: '排名',
+                key: 'rank',
+                width: 70,
+                render: (_, __, index) => (
+                  <Tag color={index === 0 ? 'volcano' : index === 1 ? 'orange' : index === 2 ? 'gold' : 'default'}>
+                    No.{index + 1}
+                  </Tag>
+                ),
+              },
+              {
+                title: '工作流 / 任务',
+                key: 'pipeline',
+                render: (_, r) => (
+                  <Space>
+                    <Text strong>{r.displayName || r.pipelineName || '-'}</Text>
+                    {r.taskID && <Text code>#{r.taskID}</Text>}
+                  </Space>
+                ),
+              },
+              {
+                title: '所属项目',
+                dataIndex: 'productName',
+                key: 'productName',
+                render: (p) => <Tag color="blue">{String(p || '-')}</Tag>,
+              },
+              {
+                title: '构建耗时',
+                dataIndex: 'duration',
+                key: 'duration',
+                render: (d: number) => (
+                  <Space size={4}>
+                    <FieldTimeOutlined style={{ color: '#faad14' }} />
+                    <Text strong>{d ? `${d} 秒` : '-'}</Text>
+                  </Space>
+                ),
+              },
+              {
+                title: '任务状态',
                 dataIndex: 'status',
                 key: 'status',
-                render: (s) => {
+                render: (s: string) => {
                   const map: Record<string, { color: string; text: string }> = {
                     passed: { color: 'success', text: '成功' },
                     failed: { color: 'error', text: '失败' },
@@ -548,17 +748,120 @@ export const QualityCenterPage: React.FC = () => {
                   return <Tag color={m.color}>{m.text}</Tag>;
                 },
               },
-              { title: '触发人', dataIndex: 'taskCreator', key: 'taskCreator', render: (c) => <Text type="secondary">{String(c || '-')}</Text> },
               {
-                title: '创建时间',
+                title: '触发人',
+                dataIndex: 'taskCreator',
+                key: 'taskCreator',
+                render: (c: string) => <Text type="secondary">{String(c || '-')}</Text>,
+              },
+              {
+                title: '执行时间',
                 dataIndex: 'createTime',
                 key: 'createTime',
-                render: (t) => (t ? new Date(t * 1000).toLocaleString() : '-'),
+                render: (t: number) => (t ? new Date(t * 1000).toLocaleString() : '-'),
               },
             ]}
           />
         ) : (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无构建记录" />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无 Top 10 耗时构建记录" />
+        )}
+      </Card>
+
+      {/* Automated Testing Quality & Health */}
+      <Card
+        variant="borderless"
+        style={{ borderRadius: 8, border: '1px solid #ebeef5', marginBottom: 20 }}
+        title={
+          <Space>
+            <ExperimentOutlined style={{ color: '#52c41a' }} />
+            <span>自动化测试质量与健康度</span>
+          </Space>
+        }
+        extra={
+          <Segmented
+            size="small"
+            value={activeTestChartTab}
+            onChange={(v) => setActiveTestChartTab(v as 'passRate' | 'averageDuration')}
+            options={[
+              { label: '测试健康趋势 (%)', value: 'passRate' },
+              { label: '测试平均耗时 (秒)', value: 'averageDuration' },
+            ]}
+          />
+        }
+      >
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+          <Col xs={24} sm={6}>
+            <Statistic
+              title="测试执行总数"
+              value={testHealth.totalSuccess + testHealth.totalFailure}
+            />
+          </Col>
+          <Col xs={24} sm={6}>
+            <Statistic
+              title="测试成功次数"
+              value={testHealth.totalSuccess}
+              styles={{ content: { color: '#52c41a' } }}
+            />
+          </Col>
+          <Col xs={24} sm={6}>
+            <Statistic
+              title="测试失败次数"
+              value={testHealth.totalFailure}
+              styles={{ content: { color: '#ff4d4f' } }}
+            />
+          </Col>
+          <Col xs={24} sm={6}>
+            <Statistic
+              title="测试健康度 (通过率)"
+              value={
+                testHealth.totalSuccess + testHealth.totalFailure > 0
+                  ? `${Math.round(
+                      (testHealth.totalSuccess / (testHealth.totalSuccess + testHealth.totalFailure)) * 100
+                    )}%`
+                  : '-'
+              }
+              prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
+            />
+          </Col>
+        </Row>
+
+        {activeTestChartTab === 'passRate' ? (
+          testTrend.length > 0 ? (
+            <Line
+              data={testTrend.map((d) => ({
+                date: (d.date || '').slice(5),
+                successRate: d.successRate,
+              }))}
+              xField="date"
+              yField="successRate"
+              yAxis={{ min: 0, max: 100 }}
+              style={{ lineWidth: 2 }}
+              point={{ shapeField: 'circle', sizeField: 3 }}
+              height={240}
+            />
+          ) : (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={`${buildRange === '7d' ? '近 7 天' : buildRange === '30d' ? '近 30 天' : '近 90 天'}暂无测试趋势数据`}
+            />
+          )
+        ) : testAverageList.length > 0 ? (
+          <Line
+            data={testAverageList.map((d) => ({
+              date: (d.date || '').slice(5),
+              averageDuration: d.averageDuration,
+            }))}
+            xField="date"
+            yField="averageDuration"
+            style={{ lineWidth: 2 }}
+            point={{ shapeField: 'circle', sizeField: 3 }}
+            height={240}
+          />
+        ) : (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={`${buildRange === '7d' ? '近 7 天' : buildRange === '30d' ? '近 30 天' : '近 90 天'}暂无测试平均耗时数据`}
+          />
         )}
       </Card>
 
@@ -566,7 +869,12 @@ export const QualityCenterPage: React.FC = () => {
       <Card
         variant="borderless"
         style={{ borderRadius: 8, border: '1px solid #ebeef5', marginBottom: 20 }}
-        title="部署与回滚质量"
+        title={
+          <Space>
+            <RocketOutlined style={{ color: '#722ed1' }} />
+            <span>部署与回滚效能</span>
+          </Space>
+        }
         extra={
           <Button size="small" icon={<ReloadOutlined />} onClick={fetchDeployRollbackQuality}>
             刷新
@@ -575,15 +883,21 @@ export const QualityCenterPage: React.FC = () => {
       >
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col xs={24} sm={8}>
-            <Statistic title="部署成功次数" value={deployHealth.success} valueStyle={{ color: '#52c41a' }} />
+            <Statistic title="部署成功次数" value={deployHealth.success} styles={{ content: { color: '#52c41a' } }} />
           </Col>
           <Col xs={24} sm={8}>
-            <Statistic title="部署失败次数" value={deployHealth.failure} valueStyle={{ color: '#ff4d4f' }} />
+            <Statistic title="部署失败次数" value={deployHealth.failure} styles={{ content: { color: '#ff4d4f' } }} />
           </Col>
           <Col xs={24} sm={8}>
-            <Statistic title="回滚总次数" value={rollbackTotal} />
+            <Statistic
+              title="回滚总次数"
+              value={rollbackTotal}
+              prefix={<RollbackOutlined style={{ color: rollbackTotal > 0 ? '#ff7a45' : '#8c8c8c' }} />}
+            />
           </Col>
         </Row>
+
+        <div style={{ marginBottom: 8, fontWeight: 600 }}>高频部署服务 Top 5</div>
         <Table
           dataSource={topDeployed}
           rowKey={(r) => `${r.service_name}-${r.env_name}`}
@@ -598,7 +912,8 @@ export const QualityCenterPage: React.FC = () => {
           ]}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该时间范围暂无部署记录" /> }}
         />
-        <div style={{ marginTop: 16, marginBottom: 8 }}>
+
+        <div style={{ marginTop: 20, marginBottom: 8 }}>
           <Text strong style={{ fontSize: 14 }}>部署月度趋势</Text>
         </div>
         {topDeployed.length > 0 || deployMonthly.length > 0 ? (
@@ -619,6 +934,86 @@ export const QualityCenterPage: React.FC = () => {
         ) : (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无月度部署趋势数据" />
         )}
+
+        {/* 回滚统计记录明细 (GET /stat/v2/quality/rollback/stat) */}
+        <div style={{ marginTop: 24, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <RollbackOutlined style={{ color: '#ff7a45' }} />
+          <Text strong style={{ fontSize: 14 }}>环境服务回滚统计明细 ({rollbackRecords.length})</Text>
+        </div>
+        <Table<RollbackStatItem>
+          dataSource={rollbackRecords}
+          rowKey={(r, i) => `${r.project_name}-${r.service_name}-${r.rollback_time}-${i}`}
+          pagination={{ pageSize: 5, hideOnSinglePage: true }}
+          size="small"
+          columns={[
+            {
+              title: '回滚时间',
+              dataIndex: 'rollback_time',
+              key: 'rollback_time',
+              width: 170,
+              render: (t: number) => (t ? new Date(t * 1000).toLocaleString() : '-'),
+            },
+            {
+              title: '所属项目',
+              dataIndex: 'project_name',
+              key: 'project_name',
+              width: 130,
+              render: (p: string) => <Tag color="blue">{p || '-'}</Tag>,
+            },
+            {
+              title: '服务名称',
+              dataIndex: 'service_name',
+              key: 'service_name',
+              render: (s: string) => <Text strong>{s || '-'}</Text>,
+            },
+            {
+              title: '目标环境',
+              dataIndex: 'env_name',
+              key: 'env_name',
+              width: 110,
+              render: (e: string) => <Tag color="geekblue">{e || '-'}</Tag>,
+            },
+            {
+              title: '操作人',
+              dataIndex: 'rollback_by',
+              key: 'rollback_by',
+              width: 110,
+              render: (by: string) => <Text type="secondary">{by || '-'}</Text>,
+            },
+            {
+              title: '镜像变更 (回滚前 → 回滚后)',
+              key: 'image_change',
+              render: (_, r) => {
+                const before = r.rollback_before_image_tag?.map((img) => `${img.name}:${img.tag}`).join(', ');
+                const after = r.rollback_after_image_tag?.map((img) => `${img.name}:${img.tag}`).join(', ');
+                return (
+                  <div style={{ fontSize: 11 }}>
+                    <div>
+                      <Text type="secondary">前: </Text>
+                      <Text code>{before || '-'}</Text>
+                    </div>
+                    <div>
+                      <Text type="secondary">后: </Text>
+                      <Text code style={{ color: '#d4380d' }}>{after || '-'}</Text>
+                    </div>
+                  </div>
+                );
+              },
+            },
+            {
+              title: '回滚详情 / 原因',
+              dataIndex: 'rollback_detail',
+              key: 'rollback_detail',
+              ellipsis: true,
+              render: (d: string) => (
+                <Tooltip title={d || '服务配置/版本回滚'}>
+                  <span>{d || '服务配置/版本回滚'}</span>
+                </Tooltip>
+              ),
+            },
+          ]}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前时间范围无服务回滚记录" /> }}
+        />
       </Card>
 
       {/* Main Table */}
