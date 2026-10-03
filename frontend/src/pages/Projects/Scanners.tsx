@@ -298,13 +298,32 @@ export const ScannersPage: React.FC = () => {
   const handleSaveScanner = async () => {
     try {
       const values = await form.validateFields();
-      const payload: ScannerItem = {
+      // 对齐 service.Scanning 契约（handler/scanning.go:87-135）：
+      // - project_name 必填（操作日志+鉴权用）
+      // - advanced_settings 不能为 nil（service.CreateScanningModule 判空报错），且 hook_ctl.items 需可遍历
+      // - scanner_type 取后端枚举：sonarQube | ai_review | other
+      const scannerType =
+        values.scanner_type === 'ai-review' ? 'ai_review' : values.scanner_type === 'sonar' ? 'sonarQube' : 'other';
+      const payload = {
         name: values.name,
+        project_name: projectName,
         description: values.description,
-        scanner_type: values.scanner_type,
-        enable_ai_review: values.scanner_type === 'ai-review',
+        scanner_type: scannerType,
         repos: [{ repo_name: values.repo_name || 'main-repo', branch: 'main' }],
-        last_status: 'untested',
+        script: '#!/bin/bash\nset -e',
+        // 资源要求默认 low + 默认集群，与旧版 create.vue 一致
+        advanced_settings: {
+          timeout: 600,
+          cluster_id: '',
+          cluster_source: '',
+          res_req: 'low',
+          res_req_spec: { cpu_limit: 1000, memory_limit: 512 },
+          hook_ctl: { enabled: true, items: [] },
+          notify_ctls: [],
+          concurrency_limit: 1,
+        },
+        check_quality_gate: false,
+        outputs: [],
       };
 
       await http.post(`/api/aslan/testing/scanning?projectName=${projectName}`, payload);
