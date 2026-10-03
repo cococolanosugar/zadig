@@ -164,7 +164,7 @@ export const QualityCenterPage: React.FC = () => {
   // ---------- 测试任务详情 / 事件 / JUnit 报告 / 重启 ----------
   // 契约：GET /testing/testtask/{detail,events,report}?projectName=&testName=&taskID=
   //      POST /testing/testtask/restart?projectName=&testName=&taskID=
-  //      HTML 报告: GET /testing/testreport/html/testing/:project/:test/:taskID/*path
+  //      HTML 报告: GET /testing/report/html/testing/:project/:test/:taskID/*path（workflowv4: /testing/report/html/workflowv4/:project/:workflow/:job/:taskID/*path）
   interface JUnitCase {
     tc_name: string;
     classname?: string;
@@ -854,7 +854,7 @@ export const QualityCenterPage: React.FC = () => {
               size="small"
               onClick={() =>
                 window.open(
-                  `/api/aslan/testing/testreport/html/testing/${encodeURIComponent(detailTest.product_name || projectName || '')}/${encodeURIComponent(reportTask.name)}/${reportTask.taskId}/`,
+                  `/api/aslan/testing/report/html/testing/${encodeURIComponent(detailTest.product_name || projectName || '')}/${encodeURIComponent(reportTask.name)}/${reportTask.taskId}/`,
                   '_blank'
                 )
               }
