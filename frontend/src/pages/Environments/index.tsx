@@ -45,6 +45,7 @@ import EnvWorkloadsDrawer from './EnvWorkloadsDrawer';
 import HelmReleasesDrawer from './HelmReleasesDrawer';
 import EnvNodesDrawer from './EnvNodesDrawer';
 import EnvEventsDrawer from './EnvEventsDrawer';
+import EnvServiceHistoryDrawer from './EnvServiceHistoryDrawer';
 import LogViewer from '../../components/Terminal/LogViewer';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
@@ -162,6 +163,10 @@ export const EnvironmentsPage: React.FC = () => {
   // 节点列表与环境级事件抽屉状态
   const [nodesDrawerOpen, setNodesDrawerOpen] = useState(false);
   const [eventsDrawerOpen, setEventsDrawerOpen] = useState(false);
+
+  // 服务版本历史抽屉状态
+  const [historyServiceName, setHistoryServiceName] = useState<string>('');
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
 
   const fetchChangeLogs = useCallback(
     async (page = 1) => {
@@ -524,6 +529,17 @@ export const EnvironmentsPage: React.FC = () => {
           }
         >
           服务详情
+        </Button>,
+        <Button
+          key="history"
+          type="link"
+          icon={<HistoryOutlined />}
+          onClick={() => {
+            setHistoryServiceName(record.name);
+            setHistoryDrawerOpen(true);
+          }}
+        >
+          版本历史
         </Button>,
         <Button
           key="terminal"
@@ -957,6 +973,23 @@ export const EnvironmentsPage: React.FC = () => {
         projectName={activeProject || ''}
         envName={currentEnv || ''}
         production={currentEnvObj?.production ?? false}
+      />
+
+      {/* 服务版本历史抽屉 (对齐旧版 GET /environments/:name/version/:serviceName) */}
+      <EnvServiceHistoryDrawer
+        open={historyDrawerOpen}
+        onClose={() => {
+          setHistoryDrawerOpen(false);
+          setHistoryServiceName('');
+        }}
+        projectName={activeProject || ''}
+        envName={currentEnv || ''}
+        serviceName={historyServiceName}
+        isHelmChart={false}
+        production={currentEnvObj?.production ?? false}
+        onRollbackSuccess={() => {
+          loadWorkloadPods();
+        }}
       />
 
       {/* Global Variables Edit Modal (对齐旧版「更新全局变量」) */}

@@ -12,6 +12,7 @@ import {
   SaveOutlined,
   DownloadOutlined,
   CopyOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import http from '../../api/client';
@@ -19,6 +20,7 @@ import environmentApi from '../../api/environment';
 import LogViewer from '../../components/Terminal/LogViewer';
 import PodTerminal from '../../components/Terminal/PodTerminal';
 import YamlEditor from '../../components/Editor/YamlEditor';
+import EnvServiceHistoryDrawer from './EnvServiceHistoryDrawer';
 import { feedback } from '../../utils/feedback';
 
 const { Title, Text } = Typography;
@@ -123,6 +125,7 @@ export const ServiceDetailPage: React.FC = () => {
   const [podDetailOpen, setPodDetailOpen] = useState(false);
   const [podDetailLoading, setPodDetailLoading] = useState(false);
   const [podEvents, setPodEvents] = useState<Array<{ type?: string; reason?: string; message?: string; last_timestamp?: string }>>([]);
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
 
   // 当前环境是否生产环境（环境详情 ProductResp.is_prod）；pods/保存/导出按真实标志透传 production
   // 深链 /envs/detail/:service_name/production 时强制生产语境
@@ -450,6 +453,9 @@ export const ServiceDetailPage: React.FC = () => {
             </Space>
           </div>
           <div style={{ flex: 1 }} />
+          <Button icon={<HistoryOutlined />} onClick={() => setHistoryDrawerOpen(true)}>
+            版本历史
+          </Button>
           <Button icon={<ReloadOutlined />} onClick={() => { fetchPods(); fetchYaml(); fetchLiveYaml(); }}>
             刷新
           </Button>
@@ -682,6 +688,21 @@ export const ServiceDetailPage: React.FC = () => {
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未获取到 Pod 详情" />
         )}
       </Drawer>
+      {/* 服务版本历史抽屉 */}
+      <EnvServiceHistoryDrawer
+        open={historyDrawerOpen}
+        onClose={() => setHistoryDrawerOpen(false)}
+        projectName={projectName || ''}
+        envName={envName || ''}
+        serviceName={serviceName || ''}
+        isHelmChart={false}
+        production={envProduction}
+        onRollbackSuccess={() => {
+          fetchPods();
+          fetchYaml();
+          fetchLiveYaml();
+        }}
+      />
     </div>
   );
 };
