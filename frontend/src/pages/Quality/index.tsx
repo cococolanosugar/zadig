@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Card, Table, Typography, Button, Space, Input, Tag, Row, Col, Statistic, Empty, Spin, Modal, Form, Select, Drawer, Descriptions, Radio } from 'antd';
+import { Card, Table, Typography, Button, Space, Input, Tag, Row, Col, Statistic, Empty, Spin, Modal, Form, Select, Drawer, Descriptions, Radio, Timeline } from 'antd';
 import { Line } from '@ant-design/plots';
 import {
   CheckCircleOutlined,
@@ -160,6 +160,79 @@ export const QualityCenterPage: React.FC = () => {
       setDetailLoading(false);
     }
   }, []);
+
+  // ---------- 测试任务详情 / 事件 / JUnit 报告 / 重启 ----------
+  // 契约：GET /testing/testtask/{detail,events,report}?projectName=&testName=&taskID=
+  //      POST /testing/testtask/restart?projectName=&testName=&taskID=
+  //      HTML 报告: GET /testing/testreport/html/testing/:project/:test/:taskID/*path
+  interface JUnitCase {
+    tc_name: string;
+    classname?: string;
+    time?: number;
+    failure?: { message?: string; _content?: string } | null;
+    skipped?: { message?: string } | null;
+    error?: { message?: string; _content?: string } | null;
+    system_out?: string;
+  }
+  interface JUnitSuite {
+    name: string;
+    tests: number;
+    failures: number;
+    successes?: number;
+    skips?: number;
+    errors?: number;
+    time: number;
+    testcase?: JUnitCase[];
+  }
+  const [taskDetail, setTaskDetail] = useState<Record<string, unknown> | null>(null);
+  const [taskEvents, setTaskEvents] = useState<Array<{ event_type: string; time: string; message: string }>>([]);
+  const [junitSuites, setJunitSuites] = useState<JUnitSuite[]>([]);
+  const [reportTask, setReportTask] = useState<{ taskId: number | string; name: string } | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+
+  const openTaskReport = useCallback(
+    async (task: Record<string, unknown>) => {
+      const taskId = String(task.task_id ?? task.id ?? '');
+      if (!detailTest || !taskId) return;
+      const projectNameForTask = detailTest.product_name || projectName || '';
+      setReportTask({ taskId, name: detailTest.name });
+      setReportLoading(true);
+      setTaskDetail(null);
+      setTaskEvents([]);
+      setJunitSuites([]);
+      const base = `/api/aslan/testing/testtask`;
+      const qs = `projectName=${encodeURIComponent(projectNameForTask)}&testName=${encodeURIComponent(detailTest.name)}&taskID=${taskId}`;
+      const [detail, events, report] = await Promise.all([
+        http.get<Record<string, unknown>>(`${base}/detail?${qs}`, { skipErrorHandler: true }).catch(() => null),
+        http.get<Array<{ event_type: string; time: string; message: string }>>(`${base}/events?${qs}`, { skipErrorHandler: true }).catch(() => []),
+        http.get<JUnitSuite[]>(`${base}/report?${qs}`, { skipErrorHandler: true }).catch(() => []),
+      ]);
+      setTaskDetail(detail && typeof detail === 'object' ? detail : null);
+      setTaskEvents(Array.isArray(events) ? events : []);
+      setJunitSuites(Array.isArray(report) ? report : []);
+      setReportLoading(false);
+    },
+    [detailTest, projectName]
+  );
+
+  const handleRestartTask = useCallback(
+    async (task: Record<string, unknown>) => {
+      if (!detailTest) return;
+      const taskId = String(task.task_id ?? task.id ?? '');
+      try {
+        await http.post(
+          `/api/aslan/testing/testtask/restart?projectName=${encodeURIComponent(detailTest.product_name || projectName || '')}&testName=${encodeURIComponent(detailTest.name)}&taskID=${taskId}`,
+          {},
+          { skipErrorHandler: true }
+        );
+        feedback.message.success(`测试任务 #${taskId} 已重新入队`);
+      } catch (err: unknown) {
+        const msg = (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data?.message || '重启失败';
+        feedback.message.error(msg);
+      }
+    },
+    [detailTest, projectName]
+  );
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -714,6 +787,20 @@ export const QualityCenterPage: React.FC = () => {
                     return d ? `${d}s` : '-';
                   },
                 },
+              {
+                  title: '操作',
+                  key: 'actions',
+                  render: (_, r) => (
+                    <Space size={0}>
+                      <Button type="link" size="small" onClick={() => openTaskReport(r)}>
+                        详情/报告
+                      </Button>
+                      <Button type="link" size="small" onClick={() => handleRestartTask(r)}>
+                        重启
+                      </Button>
+                    </Space>
+                  ),
+                },
               ]}
               locale={{
                 emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无测试任务记录" />,
@@ -722,6 +809,154 @@ export const QualityCenterPage: React.FC = () => {
           </div>
         ) : (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未获取到测试详情" />
+        )}
+      </Drawer>
+
+      {/* 测试任务详情 / JUnit 报告 (对齐旧版测试报告页) */}
+      <Drawer
+        title={`任务详情: ${reportTask?.name || ''} #${reportTask?.taskId ?? ''}`}
+        placement="right"
+        open={!!reportTask}
+        onClose={() => setReportTask(null)}
+        size="large"
+        extra={
+          reportTask && detailTest ? (
+            <Button
+              size="small"
+              onClick={() =>
+                window.open(
+                  `/api/aslan/testing/testreport/html/testing/${encodeURIComponent(detailTest.product_name || projectName || '')}/${encodeURIComponent(reportTask.name)}/${reportTask.taskId}/`,
+                  '_blank'
+                )
+              }
+            >
+              打开 HTML 报告
+            </Button>
+          ) : null
+        }
+      >
+        {reportLoading ? (
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <Spin size="large" />
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* 任务概览 */}
+            {taskDetail && (
+              <Descriptions bordered column={2} size="small">
+                <Descriptions.Item label="状态">
+                  <Tag color={String(taskDetail.status) === 'passed' ? 'success' : String(taskDetail.status) === 'failed' ? 'error' : 'processing'}>
+                    {String(taskDetail.status || '-')}
+                  </Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label="触发人">{String(taskDetail.task_creator || '-')}</Descriptions.Item>
+                <Descriptions.Item label="开始时间">
+                  {taskDetail.start_time ? new Date(Number(taskDetail.start_time) * 1000).toLocaleString() : '-'}
+                </Descriptions.Item>
+                <Descriptions.Item label="结束时间">
+                  {taskDetail.end_time ? new Date(Number(taskDetail.end_time) * 1000).toLocaleString() : '-'}
+                </Descriptions.Item>
+              </Descriptions>
+            )}
+
+            {/* JUnit 测试报告 */}
+            <Card size="small" title="JUnit 测试报告">
+              {junitSuites.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {junitSuites.map((suite, i) => {
+                    const total = suite.tests || 0;
+                    const failed = (suite.failures || 0) + (suite.errors || 0);
+                    return (
+                      <div key={suite.name || i} style={{ border: '1px solid #f0f0f0', borderRadius: 6, padding: 12 }}>
+                        <Space wrap style={{ marginBottom: 8 }}>
+                          <Text strong>{suite.name || '默认套件'}</Text>
+                          <Tag color="blue">总数 {total}</Tag>
+                          <Tag color="success">成功 {suite.successes ?? total - failed - (suite.skips || 0)}</Tag>
+                          <Tag color="error">失败 {suite.failures || 0}</Tag>
+                          <Tag color="warning">错误 {suite.errors || 0}</Tag>
+                          <Tag color="default">跳过 {suite.skips || 0}</Tag>
+                          <Text type="secondary" style={{ fontSize: 12 }}>耗时 {suite.time ?? 0}s</Text>
+                        </Space>
+                        <Table
+                          rowKey={(c) => c.tc_name}
+                          dataSource={suite.testcase || []}
+                          pagination={false}
+                          size="small"
+                          columns={[
+                            {
+                              title: '用例',
+                              dataIndex: 'tc_name',
+                              render: (n: string) => <Text code>{n}</Text>,
+                            },
+                            {
+                              title: '结果',
+                              key: 'result',
+                              width: 90,
+                              render: (_, c: JUnitCase) =>
+                                c.failure ? (
+                                  <Tag color="error">失败</Tag>
+                                ) : c.error ? (
+                                  <Tag color="error">错误</Tag>
+                                ) : c.skipped ? (
+                                  <Tag color="default">跳过</Tag>
+                                ) : (
+                                  <Tag color="success">通过</Tag>
+                                ),
+                            },
+                            {
+                              title: '耗时 (s)',
+                              dataIndex: 'time',
+                              width: 90,
+                              render: (t: number) => Number(t ?? 0).toFixed(2),
+                            },
+                            {
+                              title: '失败信息',
+                              key: 'failure',
+                              render: (_, c: JUnitCase) =>
+                                c.failure?.message || c.error?.message ? (
+                                  <Text type="danger" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                                    {c.failure?.message || c.error?.message}
+                                  </Text>
+                                ) : c.system_out ? (
+                                  <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>{c.system_out}</Text>
+                                ) : (
+                                  '-'
+                                ),
+                            },
+                          ]}
+                          locale={{
+                            emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该套件无用例数据" />,
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无 JUnit 报告数据（任务可能未完成或未产出报告）" />
+              )}
+            </Card>
+
+            {/* 任务事件 */}
+            <Card size="small" title="任务事件">
+              {taskEvents.length > 0 ? (
+                <Timeline
+                  items={taskEvents.map((e, i) => ({
+                    key: i,
+                    color: e.event_type === 'error' ? 'red' : e.event_type === 'warning' ? 'orange' : 'blue',
+                    children: (
+                      <div>
+                        <Text type="secondary" style={{ fontSize: 12 }}>{e.time}</Text>
+                        <div style={{ fontSize: 13 }}>{e.message}</div>
+                      </div>
+                    ),
+                  }))}
+                />
+              ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无任务事件" />
+              )}
+            </Card>
+          </div>
         )}
       </Drawer>
     </div>
