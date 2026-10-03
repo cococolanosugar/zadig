@@ -43,6 +43,7 @@ import PodTerminal from '../../components/Terminal/PodTerminal';
 import EnvConfigDrawer from './EnvConfigDrawer';
 import EnvWorkloadsDrawer from './EnvWorkloadsDrawer';
 import HelmReleasesDrawer from './HelmReleasesDrawer';
+import HelmRendersetDrawer from './HelmRendersetDrawer';
 import EnvNodesDrawer from './EnvNodesDrawer';
 import EnvEventsDrawer from './EnvEventsDrawer';
 import EnvServiceHistoryDrawer from './EnvServiceHistoryDrawer';
@@ -167,6 +168,9 @@ export const EnvironmentsPage: React.FC = () => {
   // 服务版本历史抽屉状态
   const [historyServiceName, setHistoryServiceName] = useState<string>('');
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
+
+  // Helm 渲染配置抽屉状态
+  const [helmRendersetOpen, setHelmRendersetOpen] = useState(false);
 
   const fetchChangeLogs = useCallback(
     async (page = 1) => {
@@ -648,6 +652,13 @@ export const EnvironmentsPage: React.FC = () => {
                 Helm Releases
               </Button>
               <Button
+                icon={<CodeOutlined />}
+                onClick={() => setHelmRendersetOpen(true)}
+                disabled={!currentEnv}
+              >
+                Helm 渲染配置
+              </Button>
+              <Button
                 icon={<AppstoreOutlined />}
                 onClick={() => setConfigDrawerOpen(true)}
                 disabled={!currentEnv}
@@ -990,6 +1001,15 @@ export const EnvironmentsPage: React.FC = () => {
         onRollbackSuccess={() => {
           loadWorkloadPods();
         }}
+      />
+
+      {/* Helm 渲染配置抽屉 (对齐旧版 /rendersets/*) */}
+      <HelmRendersetDrawer
+        open={helmRendersetOpen}
+        onClose={() => setHelmRendersetOpen(false)}
+        projectName={activeProject || ''}
+        envName={currentEnv || ''}
+        production={currentEnvObj?.production ?? false}
       />
 
       {/* Global Variables Edit Modal (对齐旧版「更新全局变量」) */}

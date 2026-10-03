@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Drawer, Table, Tag, Button, Space, Typography, Empty, Spin, Card, Tooltip, Alert } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { SyncOutlined, DiffOutlined } from '@ant-design/icons';
+import { SyncOutlined, DiffOutlined, CodeOutlined } from '@ant-design/icons';
 import http from '../../api/client';
 import YamlDiffEditor from '../../components/Editor/YamlDiffEditor';
+import HelmRendersetDrawer from './HelmRendersetDrawer';
 import { feedback } from '../../utils/feedback';
 
 const { Text } = Typography;
@@ -67,6 +68,7 @@ export const HelmReleasesDrawer: React.FC<Props> = ({ open, onClose, envName, pr
   const [loading, setLoading] = useState(false);
   const [detailDiff, setDetailDiff] = useState<HelmReleaseDiff | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
+  const [rendersetOpen, setRendersetOpen] = useState(false);
 
   const prodParam = production ? 'true' : 'false';
 
@@ -187,9 +189,14 @@ export const HelmReleasesDrawer: React.FC<Props> = ({ open, onClose, envName, pr
       onClose={onClose}
       size="large"
       extra={
-        <Button icon={<SyncOutlined />} size="small" onClick={load} loading={loading}>
-          刷新
-        </Button>
+        <Space>
+          <Button icon={<CodeOutlined />} size="small" onClick={() => setRendersetOpen(true)}>
+            渲染配置 (Rendersets)
+          </Button>
+          <Button icon={<SyncOutlined />} size="small" onClick={load} loading={loading}>
+            刷新
+          </Button>
+        </Space>
       }
     >
       {loading ? (
@@ -216,7 +223,7 @@ export const HelmReleasesDrawer: React.FC<Props> = ({ open, onClose, envName, pr
                   type="warning"
                   showIcon
                   style={{ marginBottom: 12 }}
-                  message={`Chart 版本差异：当前 rev ${detailDiff.versionDiff.currentRevision} → 最新 rev ${detailDiff.versionDiff.latestRevision}`}
+                  title={`Chart 版本差异：当前 rev ${detailDiff.versionDiff.currentRevision} → 最新 rev ${detailDiff.versionDiff.latestRevision}`}
                 />
               )}
               {detailDiff.valuesDiff ? (
@@ -228,6 +235,15 @@ export const HelmReleasesDrawer: React.FC<Props> = ({ open, onClose, envName, pr
           )}
         </>
       )}
+
+      {/* Helm 渲染配置抽屉 */}
+      <HelmRendersetDrawer
+        open={rendersetOpen}
+        onClose={() => setRendersetOpen(false)}
+        projectName={projectName}
+        envName={envName}
+        production={production}
+      />
     </Drawer>
   );
 };
