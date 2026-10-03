@@ -109,6 +109,102 @@ export interface ConvertVariableKVAndYamlArgs {
   yaml?: string;
 }
 
+export interface HelmFileInfo {
+  parent: string;
+  name: string;
+  size: number;
+  is_dir: boolean;
+}
+
+export interface HelmServiceListResp {
+  service_infos: ServiceDetail[];
+  file_infos: HelmFileInfo[];
+  services: string[][];
+}
+
+export interface HelmServiceModuleResp {
+  service_modules: Array<{
+    name: string;
+    image: string;
+  }>;
+  service?: ServiceDetail;
+}
+
+export interface HelmChartEditInfo {
+  file_path: string;
+  file_content: string;
+  production?: boolean;
+}
+
+export interface HelmReleaseNamingRule {
+  service_name: string;
+  naming: string;
+}
+
+export interface HelmServiceCreationArgs {
+  source: 'repo' | 'gerrit' | 'publicRepo' | 'chartTemplate' | 'chartRepo' | string;
+  name: string;
+  createdBy?: string;
+  auto_sync?: boolean;
+  createFrom: Record<string, unknown>;
+  valuesData?: {
+    yamlSource?: string;
+    autoSync?: boolean;
+    customYaml?: string;
+  };
+  production?: boolean;
+}
+
+export interface BulkHelmServiceCreationArgs {
+  source: 'repo' | 'gerrit' | 'publicRepo' | 'chartTemplate' | 'chartRepo' | string;
+  createFrom: Record<string, unknown>;
+  createdBy?: string;
+  valuesData?: {
+    yamlSource?: string;
+    autoSync?: boolean;
+    customYaml?: string;
+  };
+  auto_sync?: boolean;
+  production?: boolean;
+}
+
+export interface BulkHelmServiceCreationResp {
+  successServices: string[];
+  failedServices: Array<{ path: string; error: string }>;
+}
+
+export interface PmHealthCheck {
+  protocol: 'http' | 'tcp';
+  port: number;
+  path?: string;
+  time_out: number; // 2-60
+  interval?: number; // 2-60
+  healthy_threshold?: number; // 2-10
+  unhealthy_threshold?: number; // 2-10
+  current_healthy_num?: number;
+  current_unhealthy_num?: number;
+}
+
+export interface PmServiceTemplate {
+  product_name: string;
+  service_name: string;
+  visibility?: string;
+  revision?: number;
+  type: 'pm' | string;
+  username?: string;
+  health_checks?: PmHealthCheck[];
+  start_cmd?: string;
+  stop_cmd?: string;
+  restart_cmd?: string;
+  env_name?: string;
+  variable_yaml?: string;
+  service_variable_kvs?: ServiceVariableKV[];
+}
+
+export interface PmServiceBuildObject {
+  pm_service_tmpl: PmServiceTemplate;
+}
+
 export const serviceApi = {
   // --- Service Detail & Base ---
   async getServiceDetail(
@@ -418,6 +514,157 @@ export const serviceApi = {
   ): Promise<ConvertVariableKVAndYamlArgs> {
     return http.post<ConvertVariableKVAndYamlArgs>(
       '/api/aslan/service/services/variable/convert',
+      payload
+    );
+  },
+
+  // --- 5. Helm Services (Helm 服务管理) ---
+  // 后端: pkg/microservice/aslan/core/service/handler/helm.go:33
+  async listHelmServices(
+    productName: string,
+    production = false,
+    removeApplicationLinked = false
+  ): Promise<HelmServiceListResp> {
+    return http.get<HelmServiceListResp>(
+      `/api/aslan/service/helm/${encodeURIComponent(productName)}?projectName=${encodeURIComponent(productName)}&production=${production}&removeApplicationLinked=${removeApplicationLinked}`
+    );
+  },
+
+  // 后端: pkg/microservice/aslan/core/service/handler/helm.go:80
+  async getHelmServiceModule(
+    productName: string,
+    serviceName: string,
+    revision = 0,
+    production = false
+  ): Promise<HelmServiceModuleResp> {
+    return http.get<HelmServiceModuleResp>(
+      `/api/aslan/service/helm/${encodeURIComponent(productName)}/${encodeURIComponent(serviceName)}/serviceModule?projectName=${encodeURIComponent(productName)}&revision=${revision}&production=${production}`
+    );
+  },
+
+  // 后端: pkg/microservice/aslan/core/service/handler/helm.go:132
+  async getHelmFilePath(
+    productName: string,
+    serviceName: string,
+    dir = '',
+    revision = 0,
+    production = false
+  ): Promise<HelmFileInfo[]> {
+    const res = await http.get<HelmFileInfo[]>(
+      `/api/aslan/service/helm/${encodeURIComponent(productName)}/${encodeURIComponent(serviceName)}/filePath?projectName=${encodeURIComponent(productName)}&dir=${encodeURIComponent(dir)}&revision=${revision}&production=${production}`
+    );
+    return Array.isArray(res) ? res : [];
+  },
+
+  // 后端: pkg/microservice/aslan/core/service/handler/helm.go:187
+  async getHelmFileContent(
+    productName: string,
+    serviceName: string,
+    filePath: string,
+    fileName: string,
+    revision = 0,
+    deliveryVersion = false,
+    production = false
+  ): Promise<string> {
+    const res = await http.get<string | { data?: string }>(
+      `/api/aslan/service/helm/${encodeURIComponent(productName)}/${encodeURIComponent(serviceName)}/fileContent?projectName=${encodeURIComponent(productName)}&filePath=${encodeURIComponent(filePath)}&fileName=${encodeURIComponent(fileName)}&revision=${revision}&deliveryVersion=${deliveryVersion}&production=${production}`
+    );
+    if (typeof res === 'string') return res;
+    if (res && typeof (res as { data?: string }).data === 'string') return (res as { data: string }).data;
+    return String(res || '');
+  },
+
+  // 后端: pkg/microservice/aslan/core/service/handler/helm.go:241
+  async updateHelmFileContent(
+    serviceName: string,
+    projectName: string,
+    payload: HelmChartEditInfo,
+    production = false
+  ): Promise<unknown> {
+    return http.put(
+      `/api/aslan/service/helm/${encodeURIComponent(serviceName)}/file?projectName=${encodeURIComponent(projectName)}&production=${production}`,
+      payload
+    );
+  },
+
+  // 后端: pkg/microservice/aslan/core/service/handler/helm.go:298
+  async createHelmService(
+    projectName: string,
+    payload: HelmServiceCreationArgs,
+    production = false
+  ): Promise<unknown> {
+    return http.post(
+      `/api/aslan/service/helm/services?projectName=${encodeURIComponent(projectName)}&production=${production}`,
+      payload
+    );
+  },
+
+  // 后端: pkg/microservice/aslan/core/service/handler/helm.go:366
+  async updateHelmService(
+    projectName: string,
+    payload: HelmServiceCreationArgs,
+    production = false
+  ): Promise<unknown> {
+    return http.put(
+      `/api/aslan/service/helm/services?projectName=${encodeURIComponent(projectName)}&production=${production}`,
+      payload
+    );
+  },
+
+  // 后端: pkg/microservice/aslan/core/service/handler/helm.go:435
+  async createBulkHelmServices(
+    projectName: string,
+    payload: BulkHelmServiceCreationArgs,
+    production = false
+  ): Promise<BulkHelmServiceCreationResp> {
+    return http.post<BulkHelmServiceCreationResp>(
+      `/api/aslan/service/helm/services/bulk?projectName=${encodeURIComponent(projectName)}&production=${production}`,
+      payload
+    );
+  },
+
+  // 后端: pkg/microservice/aslan/core/service/handler/service.go:568
+  async updateHelmReleaseNaming(
+    projectName: string,
+    payload: HelmReleaseNamingRule,
+    production = false
+  ): Promise<unknown> {
+    return http.put(
+      `/api/aslan/service/helm/services/releaseNaming?projectName=${encodeURIComponent(projectName)}&production=${production}`,
+      payload
+    );
+  },
+
+  // --- 6. PM (Host) Services (主机服务) ---
+  // 后端: pkg/microservice/aslan/core/service/handler/service.go:873
+  async createPmService(
+    projectName: string,
+    payload: PmServiceBuildObject
+  ): Promise<unknown> {
+    return http.post(
+      `/api/aslan/service/pm/${encodeURIComponent(projectName)}?projectName=${encodeURIComponent(projectName)}`,
+      payload
+    );
+  },
+
+  // 后端: pkg/microservice/aslan/core/service/handler/service.go:945
+  async updatePmService(
+    projectName: string,
+    payload: PmServiceBuildObject
+  ): Promise<unknown> {
+    return http.put(
+      `/api/aslan/service/pm/${encodeURIComponent(projectName)}?projectName=${encodeURIComponent(projectName)}`,
+      payload
+    );
+  },
+
+  // 后端: pkg/microservice/aslan/core/service/handler/service.go:507
+  async updatePmHealthCheckStatus(
+    projectName: string,
+    payload: PmServiceTemplate
+  ): Promise<unknown> {
+    return http.put(
+      `/api/aslan/service/pm/healthCheckUpdate?projectName=${encodeURIComponent(projectName)}`,
       payload
     );
   },
