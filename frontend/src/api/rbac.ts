@@ -36,14 +36,6 @@ export interface RoleBindingResp {
   roles: string[];
 }
 
-// types.RoleTemplate — GET /api/v1/policy/role-templates
-export interface RoleTemplate {
-  id: number;
-  name: string;
-  desc: string;
-  type: number;
-}
-
 // ---------- API ----------
 
 const nsQuery = (projectName: string) => `namespace=${encodeURIComponent(projectName)}`;
@@ -113,19 +105,6 @@ export const rbacApi = {
     );
   },
 
-  /** 更新用户绑定（替换该用户全部角色）：POST /api/v1/policy/role-bindings/user/:uid?namespace=，body {roles} */
-  async updateRoleBindingForUser(
-    projectName: string,
-    uid: string,
-    roles: string[]
-  ): Promise<unknown> {
-    return http.post(
-      `/api/v1/policy/role-bindings/user/${encodeURIComponent(uid)}?${nsQuery(projectName)}`,
-      { roles },
-      { skipErrorHandler: true }
-    );
-  },
-
   /** 移除用户绑定：DELETE /api/v1/policy/role-bindings/user/:uid?namespace= */
   async deleteRoleBindingForUser(projectName: string, uid: string): Promise<unknown> {
     return http.delete(
@@ -142,18 +121,6 @@ export const rbacApi = {
     );
   },
 
-  /** 全局角色模板（新建角色可基于模板选择动作） */
-  async listRoleTemplates(): Promise<RoleTemplate[]> {
-    try {
-      const res = await http.get<RoleTemplate[]>('/api/v1/policy/role-templates', {
-        skipErrorHandler: true,
-      });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
-  },
-
   /** 权限动作定义（resource → verbs），用于新建角色的动作选择器 */
   async getResourceActions(): Promise<ResourceAction[]> {
     try {
@@ -164,14 +131,6 @@ export const rbacApi = {
     } catch {
       return [];
     }
-  },
-
-  /** 当前用户在项目内的权限规则。GET /api/v1/policy/permission/project/:name */
-  async getMyProjectRules(projectName: string): Promise<Record<string, unknown>> {
-    return http.get<Record<string, unknown>>(
-      `/api/v1/policy/permission/project/${encodeURIComponent(projectName)}`,
-      { skipErrorHandler: true }
-    );
   },
 };
 
