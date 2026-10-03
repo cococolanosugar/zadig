@@ -43,6 +43,10 @@ import {
   ExportOutlined,
   ApartmentOutlined,
   KeyOutlined,
+  CodeOutlined,
+  CopyOutlined,
+  EyeOutlined,
+  EyeInvisibleOutlined,
 } from '@ant-design/icons';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -53,6 +57,9 @@ import systemConfigApi, {
   type SystemServerURL,
   type ExternalLinkItem,
   type WorkflowHookSettings,
+  type KeyVaultGroupItem,
+  type KeyVaultKVItem,
+  type CreateKeyVaultArgs,
 } from '../../../api/systemConfig';
 import { feedback } from '../../../utils/feedback';
 
@@ -176,6 +183,15 @@ export const SystemConfigPage: React.FC = () => {
   const [workflowHookForm] = Form.useForm();
   const [savingHook, setSavingHook] = useState(false);
   const [hookLicenseBlocked, setHookLicenseBlocked] = useState(false);
+
+  // 工作流参数 (KeyVault) 状态
+  const [keyVaultGroups, setKeyVaultGroups] = useState<KeyVaultGroupItem[]>([]);
+  const [keyVaultModalOpen, setKeyVaultModalOpen] = useState(false);
+  const [keyVaultForm] = Form.useForm();
+  const [editingKeyVaultId, setEditingKeyVaultId] = useState<string | null>(null);
+  const [savingKeyVault, setSavingKeyVault] = useState(false);
+  const [revealedSecrets, setRevealedSecrets] = useState<Record<string, string>>({});
+  const [revealingSecretId, setRevealingSecretId] = useState<string | null>(null);
 
   const loadTabData = useCallback(async (tab: string) => {
     setLoading(true);
@@ -305,6 +321,13 @@ export const SystemConfigPage: React.FC = () => {
           ) {
             setHookLicenseBlocked(true);
           }
+        }
+      } else if (tab === 'workflowParam') {
+        try {
+          const res = await systemConfigApi.listKeyVaultItems(undefined, true);
+          setKeyVaultGroups(res.groups || []);
+        } catch {
+          // ignore
         }
       }
     } catch {
@@ -521,6 +544,120 @@ export const SystemConfigPage: React.FC = () => {
     } finally {
       setSavingHook(false);
     }
+  };
+
+  const handleOpenCreateKeyVault = (initialGroup?: string) => {
+    setEditingKeyVaultId(null);
+    keyVaultForm.resetFields();
+    if (initialGroup) {
+      keyVaultForm.setFieldsValue({ group: initialGroup });
+    }
+    setKeyVaultModalOpen(true);
+  };
+
+  const handleOpenEditKeyVault = (record: KeyVaultKVItem) => {
+    setEditingKeyVaultId(record.id);
+    keyVaultForm.setFieldsValue({
+      group: record.group,
+      key: record.key,
+      value: record.value || '',
+      sensitive: Boolean(record.sensitive),
+      description: record.description || '',
+    });
+    setKeyVaultModalOpen(true);
+  };
+
+  const handleSaveKeyVault = async (values: CreateKeyVaultArgs) => {
+    setSavingKeyVault(true);
+    try {
+      if (editingKeyVaultId) {
+        await systemConfigApi.updateKeyVaultItem(editingKeyVaultId, values);
+        feedback.message.success('参数配置已更新');
+      } else {
+        await systemConfigApi.createKeyVaultItem(values);
+        feedback.message.success('工作流参数创建成功');
+      }
+      setKeyVaultModalOpen(false);
+      keyVaultForm.resetFields();
+      const res = await systemConfigApi.listKeyVaultItems(undefined, true);
+      setKeyVaultGroups(res.groups || []);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '保存参数失败';
+      feedback.message.error(msg);
+    } finally {
+      setSavingKeyVault(false);
+    }
+  };
+
+  const handleDeleteKeyVaultItem = (record: KeyVaultKVItem) => {
+    feedback.modal?.confirm({
+      title: `确认删除参数 "${record.key}"？`,
+      content: `所属分组: ${record.group}。删除后引用该参数的工作流流水线可能在执行时报错，操作不可恢复。`,
+      okText: '确认删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await systemConfigApi.deleteKeyVaultItem(record.id);
+          feedback.message.success('参数已删除');
+          const res = await systemConfigApi.listKeyVaultItems(undefined, true);
+          setKeyVaultGroups(res.groups || []);
+        } catch (err: unknown) {
+          const msg =
+            (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '删除参数失败';
+          feedback.message.error(msg);
+        }
+      },
+    });
+  };
+
+  const handleDeleteKeyVaultGroup = (group: string) => {
+    feedback.modal?.confirm({
+      title: `确认删除分组 "${group}" 及其下所有参数？`,
+      content: '删除分组将级联删除该分组下的所有键值参数，请谨慎操作！',
+      okText: '确认删除分组',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await systemConfigApi.deleteKeyVaultGroup(group);
+          feedback.message.success(`已删除分组 ${group}`);
+          const res = await systemConfigApi.listKeyVaultItems(undefined, true);
+          setKeyVaultGroups(res.groups || []);
+        } catch (err: unknown) {
+          const msg =
+            (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '删除分组失败';
+          feedback.message.error(msg);
+        }
+      },
+    });
+  };
+
+  const handleToggleRevealSecret = async (record: KeyVaultKVItem) => {
+    if (revealedSecrets[record.id]) {
+      const copy = { ...revealedSecrets };
+      delete copy[record.id];
+      setRevealedSecrets(copy);
+      return;
+    }
+    setRevealingSecretId(record.id);
+    try {
+      const item = await systemConfigApi.getKeyVaultItem(record.id);
+      setRevealedSecrets((prev) => ({ ...prev, [record.id]: item.value || '' }));
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '获取明文密钥失败';
+      feedback.message.error(msg);
+    } finally {
+      setRevealingSecretId(null);
+    }
+  };
+
+  const handleCopyParamExpression = (group: string, key: string) => {
+    const expr = `parameter.${group}.${key}`;
+    navigator.clipboard?.writeText(expr);
+    feedback.message.success(`已复制参数引用: {{${expr}}}`);
   };
 
   const handleTabChange = (key: string) => {
@@ -756,6 +893,14 @@ export const SystemConfigPage: React.FC = () => {
       label: (
         <span>
           <ApartmentOutlined /> 全局工作流 Hook
+        </span>
+      ),
+    },
+    {
+      key: 'workflowParam',
+      label: (
+        <span>
+          <CodeOutlined /> 工作流参数
         </span>
       ),
     },
@@ -1642,6 +1787,189 @@ export const SystemConfigPage: React.FC = () => {
               </Form.Item>
             </Form>
           </div>
+        ) : activeTab === 'workflowParam' ? (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <Text strong style={{ fontSize: 14 }}>全局工作流参数库 (KeyVault)</Text>
+                <Text type="secondary" style={{ marginLeft: 8, fontSize: 13 }}>
+                  集中配置跨项目/流水线复用的全局参数与敏感凭据，在工作流步骤中通过 <code>{'{{parameter.<group>.<key>}}'}</code> 语法引用
+                </Text>
+              </div>
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => handleOpenCreateKeyVault()}>
+                新建工作流参数
+              </Button>
+            </div>
+
+            {keyVaultGroups.length === 0 ? (
+              <Empty
+                description="暂无系统全局工作流参数，点击右上角新建"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                style={{ padding: '40px 0' }}
+              />
+            ) : (
+              <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+                {keyVaultGroups.map((g) => (
+                  <Card
+                    key={g.group}
+                    title={
+                      <Space size={8}>
+                        <Tag color="blue">{g.group}</Tag>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          ({(g.kvs || []).length} 个参数)
+                        </Text>
+                      </Space>
+                    }
+                    extra={
+                      <Space size={8}>
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<PlusOutlined />}
+                          onClick={() => handleOpenCreateKeyVault(g.group)}
+                        >
+                          加到此组
+                        </Button>
+                        <Button
+                          type="link"
+                          danger
+                          size="small"
+                          icon={<DeleteOutlined />}
+                          onClick={() => handleDeleteKeyVaultGroup(g.group)}
+                        >
+                          删除分组
+                        </Button>
+                      </Space>
+                    }
+                    variant="borderless"
+                    style={{ background: '#fafbfc', border: '1px solid #eef0f3', borderRadius: 8 }}
+                    styles={{ body: { padding: '8px 16px' } }}
+                  >
+                    <Table
+                      dataSource={g.kvs || []}
+                      rowKey="id"
+                      pagination={false}
+                      size="small"
+                      columns={[
+                        {
+                          title: '参数键名 (Key)',
+                          dataIndex: 'key',
+                          key: 'key',
+                          width: 220,
+                          render: (key: string) => (
+                            <div>
+                              <Space size={4}>
+                                <Text strong style={{ color: '#1677ff' }}>{key}</Text>
+                                <Button
+                                  type="text"
+                                  size="small"
+                                  icon={<CopyOutlined />}
+                                  title="复制工作流引用格式"
+                                  onClick={() => handleCopyParamExpression(g.group, key)}
+                                />
+                              </Space>
+                              <div style={{ fontSize: 11, color: '#8c8c8c', fontFamily: 'monospace' }}>
+                                parameter.{g.group}.{key}
+                              </div>
+                            </div>
+                          ),
+                        },
+                        {
+                          title: '参数描述',
+                          dataIndex: 'description',
+                          key: 'description',
+                          render: (desc: string) => desc || <Text type="secondary">-</Text>,
+                        },
+                        {
+                          title: '类型 / 敏感性',
+                          dataIndex: 'sensitive',
+                          key: 'sensitive',
+                          width: 140,
+                          render: (sensitive: boolean) =>
+                            sensitive ? (
+                              <Tag color="volcano">敏感凭据 (加密)</Tag>
+                            ) : (
+                              <Tag color="cyan">普通参数</Tag>
+                            ),
+                        },
+                        {
+                          title: '参数取值',
+                          key: 'value',
+                          render: (_, record: KeyVaultKVItem) => {
+                            const isRevealed = Boolean(revealedSecrets[record.id]);
+                            const isRevealing = revealingSecretId === record.id;
+                            if (record.sensitive) {
+                              return (
+                                <Space size={8}>
+                                  <Text code style={{ fontFamily: 'monospace' }}>
+                                    {isRevealed ? revealedSecrets[record.id] : '••••••••••••'}
+                                  </Text>
+                                  <Button
+                                    type="link"
+                                    size="small"
+                                    loading={isRevealing}
+                                    icon={isRevealed ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                                    onClick={() => handleToggleRevealSecret(record)}
+                                  >
+                                    {isRevealed ? '隐藏' : '查看明文'}
+                                  </Button>
+                                </Space>
+                              );
+                            }
+                            return (
+                              <Text code style={{ fontFamily: 'monospace' }}>
+                                {record.value || '-'}
+                              </Text>
+                            );
+                          },
+                        },
+                        {
+                          title: '更新人',
+                          dataIndex: 'updated_by',
+                          key: 'updated_by',
+                          width: 110,
+                          render: (by: string) => by || '-',
+                        },
+                        {
+                          title: '更新时间',
+                          dataIndex: 'updated_at',
+                          key: 'updated_at',
+                          width: 160,
+                          render: (t: number) => (t ? dayjs.unix(t).format('YYYY-MM-DD HH:mm:ss') : '-'),
+                        },
+                        {
+                          title: '操作',
+                          key: 'action',
+                          width: 130,
+                          render: (_, record: KeyVaultKVItem) => (
+                            <Space size={6}>
+                              <Button
+                                type="link"
+                                size="small"
+                                icon={<EditOutlined />}
+                                onClick={() => handleOpenEditKeyVault(record)}
+                              >
+                                编辑
+                              </Button>
+                              <Button
+                                type="link"
+                                danger
+                                size="small"
+                                icon={<DeleteOutlined />}
+                                onClick={() => handleDeleteKeyVaultItem(record)}
+                              >
+                                删除
+                              </Button>
+                            </Space>
+                          ),
+                        },
+                      ]}
+                    />
+                  </Card>
+                ))}
+              </Space>
+            )}
+          </div>
         ) : activeTab === 'aiCodeReview' ? (
           <div style={{ maxWidth: 720 }}>
             <Form form={aiReviewForm} layout="vertical">
@@ -1777,6 +2105,65 @@ export const SystemConfigPage: React.FC = () => {
             ]}
           >
             <Input placeholder="例如: https://grafana.example.com" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 工作流参数 Modal */}
+      <Modal
+        title={editingKeyVaultId ? '编辑工作流参数' : '新建工作流参数'}
+        open={keyVaultModalOpen}
+        onCancel={() => setKeyVaultModalOpen(false)}
+        onOk={() => keyVaultForm.submit()}
+        confirmLoading={savingKeyVault}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Form form={keyVaultForm} layout="vertical" onFinish={handleSaveKeyVault}>
+          <Form.Item
+            name="group"
+            label="参数分组 (Group)"
+            rules={[
+              { required: true, message: '请输入或选择参数分组' },
+              { pattern: /^[a-zA-Z0-9_-]+$/, message: '分组名称仅支持字母、数字、下划线与中划线' },
+            ]}
+            extra="分组用于组织参数命名空间，例如 common、db、deploy"
+          >
+            <Input placeholder="例如: default 或 global 或 sonar" disabled={Boolean(editingKeyVaultId)} />
+          </Form.Item>
+
+          <Form.Item
+            name="key"
+            label="参数键名 (Key)"
+            rules={[
+              { required: true, message: '请输入参数键名' },
+              { pattern: /^[a-zA-Z0-9_]+$/, message: '键名仅支持字母、数字与下划线' },
+            ]}
+            extra="工作流中引用的变量名，例如 DB_PASSWORD 或 TOKEN"
+          >
+            <Input placeholder="例如: DOCKER_REGISTRY_USER" disabled={Boolean(editingKeyVaultId)} />
+          </Form.Item>
+
+          <Form.Item
+            name="value"
+            label="参数取值 (Value)"
+            rules={[{ required: !editingKeyVaultId, message: '请输入参数取值' }]}
+            extra={editingKeyVaultId ? '若不修改取值，请留空' : undefined}
+          >
+            <Input.TextArea rows={3} placeholder="请输入参数值或敏感密钥明文" />
+          </Form.Item>
+
+          <Form.Item
+            name="sensitive"
+            label="敏感凭据保护 (Sensitive)"
+            valuePropName="checked"
+            extra="启用后系统自动对该值进行加密存储并在界面脱敏，在工作流任务执行日志中自动过滤掩码"
+          >
+            <Switch />
+          </Form.Item>
+
+          <Form.Item name="description" label="参数描述 (Description)">
+            <Input placeholder="描述该参数的用途或关联系统" />
           </Form.Item>
         </Form>
       </Modal>
