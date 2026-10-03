@@ -596,7 +596,6 @@ export const PipelineExecutionPage: React.FC = () => {
         open={debugModalOpen}
         onCancel={() => setDebugModalOpen(false)}
         width={960}
-        destroyOnClose
         styles={{ body: { padding: '12px 16px' } }}
         footer={
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

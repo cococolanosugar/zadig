@@ -876,7 +876,6 @@ export const PipelinesPage: React.FC = () => {
         onOk={handleSaveView}
         confirmLoading={viewSubmitting}
         width={680}
-        destroyOnClose
         okText="保存视图"
         cancelText="取消"
       >
