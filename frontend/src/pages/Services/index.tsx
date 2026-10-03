@@ -44,6 +44,7 @@ import ImportFromRepoModal, { SyncServiceInfo } from './ImportFromRepoModal';
 import ImportFromTemplateModal, { SyncTemplateServiceInfo } from './ImportFromTemplateModal';
 import ServiceModulesDrawer from './ServiceModulesDrawer';
 import ServiceVariablesDrawer from './ServiceVariablesDrawer';
+import HelmServiceDrawer from './HelmServiceDrawer';
 
 const { Title, Text } = Typography;
 
@@ -93,6 +94,9 @@ export const ServicesPage: React.FC = () => {
 
   // 变量配置与转换抽屉
   const [variablesDrawerOpen, setVariablesDrawerOpen] = useState(false);
+
+  // Helm 服务管理抽屉
+  const [helmDrawerOpen, setHelmDrawerOpen] = useState(false);
 
   const loadServices = useCallback(async () => {
     if (!activeProject) {
@@ -463,6 +467,12 @@ spec:
                 变量配置
               </Button>
               <Button
+                icon={<CloudServerOutlined />}
+                onClick={() => setHelmDrawerOpen(true)}
+              >
+                Helm 服务
+              </Button>
+              <Button
                 type="primary"
                 icon={<SaveOutlined />}
                 onClick={handleSaveYaml}
@@ -508,6 +518,12 @@ spec:
                         setSyncTemplateInfo(null);
                         setTemplateModalOpen(true);
                       },
+                    },
+                    {
+                      key: 'helm',
+                      icon: <CloudServerOutlined />,
+                      label: 'Helm 服务管理 / 导入',
+                      onClick: () => setHelmDrawerOpen(true),
                     },
                   ],
                 }}
@@ -812,6 +828,17 @@ spec:
             });
           }
         }}
+      />
+
+      {/* Helm Service Management Drawer */}
+      <HelmServiceDrawer
+        open={helmDrawerOpen}
+        onClose={() => {
+          setHelmDrawerOpen(false);
+          loadServices();
+        }}
+        projectName={activeProject || ''}
+        isProduction={isProduction}
       />
     </div>
   );
