@@ -312,6 +312,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
             options={[
               { label: '构建任务 (zadig-build)', value: 'zadig-build' },
               { label: '部署任务 (zadig-deploy)', value: 'zadig-deploy' },
+              { label: 'Helm 部署任务 (helm-deploy)', value: 'helm-deploy' },
               { label: '测试任务 (zadig-test)', value: 'zadig-test' },
               { label: '代码扫描 (zadig-scanning)', value: 'zadig-scanning' },
               { label: '镜像分发 (zadig-distribute-image)', value: 'zadig-distribute-image' },
