@@ -33,6 +33,7 @@ import {
   EditOutlined,
   DeleteOutlined,
   MoreOutlined,
+  DiffOutlined,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
@@ -47,6 +48,7 @@ import HelmRendersetDrawer from './HelmRendersetDrawer';
 import EnvNodesDrawer from './EnvNodesDrawer';
 import EnvEventsDrawer from './EnvEventsDrawer';
 import EnvServiceHistoryDrawer from './EnvServiceHistoryDrawer';
+import ServiceDiffModal from './ServiceDiffModal';
 import LogViewer from '../../components/Terminal/LogViewer';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
@@ -171,6 +173,10 @@ export const EnvironmentsPage: React.FC = () => {
 
   // Helm 渲染配置抽屉状态
   const [helmRendersetOpen, setHelmRendersetOpen] = useState(false);
+
+  // 服务模板差异对比弹窗状态
+  const [diffTargetService, setDiffTargetService] = useState<string>('');
+  const [diffModalOpen, setDiffModalOpen] = useState(false);
 
   const fetchChangeLogs = useCallback(
     async (page = 1) => {
@@ -544,6 +550,17 @@ export const EnvironmentsPage: React.FC = () => {
           }}
         >
           版本历史
+        </Button>,
+        <Button
+          key="diff"
+          type="link"
+          icon={<DiffOutlined />}
+          onClick={() => {
+            setDiffTargetService(record.name);
+            setDiffModalOpen(true);
+          }}
+        >
+          服务差异
         </Button>,
         <Button
           key="terminal"
@@ -1009,6 +1026,19 @@ export const EnvironmentsPage: React.FC = () => {
         onClose={() => setHelmRendersetOpen(false)}
         projectName={activeProject || ''}
         envName={currentEnv || ''}
+        production={currentEnvObj?.production ?? false}
+      />
+
+      {/* 服务模板差异对比弹窗 (对齐旧版 GET /diff/products/:name/service/:svc) */}
+      <ServiceDiffModal
+        open={diffModalOpen}
+        onClose={() => {
+          setDiffModalOpen(false);
+          setDiffTargetService('');
+        }}
+        projectName={activeProject || ''}
+        envName={currentEnv || ''}
+        serviceName={diffTargetService}
         production={currentEnvObj?.production ?? false}
       />
 
