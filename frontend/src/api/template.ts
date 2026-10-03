@@ -169,9 +169,6 @@ export const templateCrudApi = {
   async deleteYamlTemplate(id: string): Promise<unknown> {
     return http.delete(`/api/aslan/template/yaml/${id}`, { skipErrorHandler: true });
   },
-  async getYamlTemplateDetail(id: string): Promise<YamlTemplateItem> {
-    return http.get<YamlTemplateItem>(`/api/aslan/template/yaml/${id}`, { skipErrorHandler: true });
-  },
   async createDockerfileTemplate(payload: { name: string; content: string }): Promise<unknown> {
     return http.post('/api/aslan/template/dockerfile', payload, { skipErrorHandler: true });
   },
@@ -180,8 +177,5 @@ export const templateCrudApi = {
   },
   async deleteDockerfileTemplate(id: string): Promise<unknown> {
     return http.delete(`/api/aslan/template/dockerfile/${id}`, { skipErrorHandler: true });
-  },
-  async getDockerfileTemplateDetail(id: string): Promise<DockerfileTemplateItem> {
-    return http.get<DockerfileTemplateItem>(`/api/aslan/template/dockerfile/${id}`, { skipErrorHandler: true });
   },
 };
