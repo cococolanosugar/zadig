@@ -61,6 +61,7 @@ import systemConfigApi, {
   type KeyVaultKVItem,
   type CreateKeyVaultArgs,
 } from '../../../api/systemConfig';
+import emailApi from '../../../api/email';
 import { feedback } from '../../../utils/feedback';
 
 const { Title, Text } = Typography;
@@ -193,13 +194,24 @@ export const SystemConfigPage: React.FC = () => {
   const [revealedSecrets, setRevealedSecrets] = useState<Record<string, string>>({});
   const [revealingSecretId, setRevealingSecretId] = useState<string | null>(null);
 
+  // Email states
+  const [existingHostSaved, setExistingHostSaved] = useState(false);
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [testingEmail, setTestingEmail] = useState(false);
+
   const loadTabData = useCallback(async (tab: string) => {
     setLoading(true);
     try {
       if (tab === 'mail') {
-        const emailRes = await http.get<Record<string, unknown>>('/api/v1/emails/host', { skipErrorHandler: true });
+        const emailRes = await emailApi.getEmailHost();
         if (emailRes) {
-          emailForm.setFieldsValue(emailRes);
+          setExistingHostSaved(Boolean(emailRes.name));
+          emailForm.setFieldsValue({
+            name: emailRes.name,
+            port: emailRes.port || 465,
+            user_name: emailRes.username || emailRes.user_name || '',
+            is_ssl: emailRes.isTLS !== undefined ? emailRes.isTLS : emailRes.is_ssl !== false,
+          });
         }
       } else if (tab === 'concurrency' || tab === 'workflowTasks') {
         const res = await http.get<{ workflow_concurrency: number; build_concurrency: number }>(
@@ -677,30 +689,46 @@ export const SystemConfigPage: React.FC = () => {
     }
   };
 
-  const mapEmailValues = (v: Record<string, unknown>) => ({
-    name: v.name,
-    port: Number(v.port) || 465,
-    username: v.user_name,
-    password: v.password,
-    isTLS: v.is_ssl !== false,
-  });
-
   const handleSaveEmail = async (values: Record<string, unknown>) => {
+    setSavingEmail(true);
     try {
-      await http.post('/api/v1/emails/host', mapEmailValues(values));
+      await emailApi.saveEmailHost({
+        name: String(values.name || '').trim(),
+        port: Number(values.port) || 465,
+        username: String(values.user_name || '').trim(),
+        password: values.password ? String(values.password) : undefined,
+        isTLS: values.is_ssl !== false,
+      });
+      setExistingHostSaved(true);
       feedback.message.success('SMTP 邮箱配置保存成功');
-    } catch (err: any) {
-      feedback.message.error(err?.response?.data?.message || err?.message || '邮箱服务器配置保存失败');
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '邮箱服务器配置保存失败';
+      feedback.message.error(msg);
+    } finally {
+      setSavingEmail(false);
     }
   };
 
   const handleTestEmail = async () => {
+    setTestingEmail(true);
     try {
       const values = await emailForm.validateFields();
-      await http.post('/api/v1/emails/host/validate', mapEmailValues(values));
-      feedback.message.success('SMTP 连接验证通过');
-    } catch (err: any) {
-      feedback.message.error(err?.response?.data?.message || err?.message || 'SMTP 连接验证失败，请检查服务器地址与凭据');
+      await emailApi.validateEmailHost({
+        name: String(values.name || '').trim(),
+        port: Number(values.port) || 465,
+        username: String(values.user_name || '').trim(),
+        password: values.password ? String(values.password) : undefined,
+        isTLS: values.is_ssl !== false,
+      });
+      feedback.message.success('SMTP 连接验证通过，服务器地址与端口有效');
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'SMTP 连接验证失败，请检查服务器地址、端口与授权码';
+      feedback.message.error(msg);
+    } finally {
+      setTestingEmail(false);
     }
   };
 
@@ -950,7 +978,14 @@ export const SystemConfigPage: React.FC = () => {
             <Spin size="large" />
           </div>
         ) : activeTab === 'mail' ? (
-          <div style={{ maxWidth: 640 }}>
+          <div style={{ maxWidth: 660 }}>
+            <Alert
+              title="SMTP 邮件服务器配置与安全传输说明"
+              description="用于系统用户激活邀请、流水线执行失败告警、环境审批抄送等邮件通知。系统对授权凭据进行加密存储与脱敏保护；若无需修改授权码可保留输入框空白，点击「验证 SMTP 连接」将即时检测与邮件服务提供商的通信状态。"
+              type="info"
+              showIcon
+              style={{ marginBottom: 20 }}
+            />
             <Form
               form={emailForm}
               layout="vertical"
@@ -987,7 +1022,8 @@ export const SystemConfigPage: React.FC = () => {
               <Form.Item
                 name="password"
                 label="发信密码 / 授权码"
-                rules={[{ required: true, message: '请输入发信授权码' }]}
+                rules={[{ required: !existingHostSaved, message: '请输入发信授权码' }]}
+                extra={existingHostSaved ? '凭据在服务端加密安全存储且脱敏回显。若保持原密码不变请直接留空。' : undefined}
               >
                 <Input.Password placeholder="请输入邮箱服务专用授权码" />
               </Form.Item>
@@ -998,10 +1034,10 @@ export const SystemConfigPage: React.FC = () => {
 
               <Form.Item style={{ marginTop: 24 }}>
                 <Space orientation="horizontal" size={12}>
-                  <Button type="primary" htmlType="submit" icon={<SaveOutlined />}>
+                  <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={savingEmail}>
                     保存配置
                   </Button>
-                  <Button icon={<SendOutlined />} onClick={handleTestEmail}>
+                  <Button icon={<SendOutlined />} onClick={handleTestEmail} loading={testingEmail}>
                     验证 SMTP 连接
                   </Button>
                 </Space>
