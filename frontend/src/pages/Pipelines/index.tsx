@@ -416,13 +416,13 @@ export const PipelinesPage: React.FC = () => {
                       仅看收藏
                     </Button>,
                   ]}
-                  dataSource={
-                    favoriteOnly
-                      ? workflows.filter((w) => w.isFavorite)
-                      : isGlobalRoute && selectedProjectFilter !== 'all'
-                        ? workflows.filter((w) => (w.project || (w as any).project_name) === selectedProjectFilter)
-                        : workflows
-                  }
+                  dataSource={workflows.filter((w) => {
+                    if (favoriteOnly && !w.isFavorite) return false;
+                    if (isGlobalRoute && selectedProjectFilter !== 'all') {
+                      return (w.project || (w as any).project_name) === selectedProjectFilter;
+                    }
+                    return true;
+                  })}
                   columns={columns}
                   cardBordered={false}
                   pagination={{ pageSize: 10 }}

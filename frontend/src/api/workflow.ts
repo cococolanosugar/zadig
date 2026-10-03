@@ -406,7 +406,7 @@ export const workflowApi = {
 
   /**
    * Manual error handling for a failed job (decision: reject=终止 | ignore=忽略继续).
-   * POST /api/aslan/workflow/v4/taskV4/handle/error
+   * POST /api/aslan/workflow/v4/workflowtask/handle/error
    */
   async handleJobError(args: {
     workflow_name: string;
@@ -415,18 +415,18 @@ export const workflowApi = {
     decision: 'reject' | 'ignore';
   }): Promise<unknown> {
     return http.post(
-      '/api/aslan/workflow/v4/taskV4/handle/error',
+      '/api/aslan/workflow/v4/workflowtask/handle/error',
       { ...args, task_id: Number(args.task_id) },
       { skipErrorHandler: true }
     );
   },
 
   /**
-   * Re-run a single failed job. POST /api/aslan/workflow/v4/taskV4/revert/:workflowName/:jobName/task/:taskID
+   * Re-run a single failed job. POST /api/aslan/workflow/v4/workflowtask/revert/:workflowName/:jobName/task/:taskID
    */
   async revertJob(workflowName: string, jobName: string, taskId: number | string): Promise<unknown> {
     return http.post(
-      `/api/aslan/workflow/v4/taskV4/revert/${encodeURIComponent(workflowName)}/${encodeURIComponent(jobName)}/task/${taskId}`,
+      `/api/aslan/workflow/v4/workflowtask/revert/${encodeURIComponent(workflowName)}/${encodeURIComponent(jobName)}/task/${taskId}`,
       {},
       { skipErrorHandler: true }
     );
