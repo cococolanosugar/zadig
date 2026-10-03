@@ -57,8 +57,10 @@ const mapScanTask = (t: Record<string, unknown>): ScanningTaskItem => ({
   create_time: t.created_at as number,
   duration: t.run_time as number,
 });
+
 import type { ColumnsType } from 'antd/es/table';
 import http from '../../api/client';
+import { normalizeJobName } from '../../utils/jobname';
 import { feedback } from '../../utils/feedback';
 
 const { Text, Title } = Typography;
@@ -172,7 +174,7 @@ export const ScannersPage: React.FC = () => {
       }
       try {
         const res = await http.get<{ file_names?: string[] }>(
-          `/api/aslan/testing/scanning/${scanner.id}/task/${taskId}/artifact_info?jobName=${encodeURIComponent(scanner.name)}`,
+          `/api/aslan/testing/scanning/${scanner.id}/task/${taskId}/artifact_info?jobName=${encodeURIComponent(normalizeJobName(scanner.name))}`,
           { skipErrorHandler: true }
         );
         setArtifactFiles(res?.file_names || []);
@@ -211,7 +213,7 @@ export const ScannersPage: React.FC = () => {
     if (!taskDrawer || !projectName) return;
     try {
       const res = await http.get(
-        `/api/aslan/testing/scanning/artifact?id=${encodeURIComponent(taskDrawer.scannerId)}&jobName=${encodeURIComponent(taskDrawer.scannerName)}&taskID=${taskDrawer.taskId}&projectName=${encodeURIComponent(projectName)}`,
+        `/api/aslan/testing/scanning/artifact?id=${encodeURIComponent(taskDrawer.scannerId)}&jobName=${encodeURIComponent(normalizeJobName(taskDrawer.scannerName))}&taskID=${taskDrawer.taskId}&projectName=${encodeURIComponent(projectName)}`,
         { skipErrorHandler: true, responseType: 'blob' }
       );
       const blob = res instanceof Blob ? res : new Blob([res as BlobPart], { type: 'application/octet-stream' });

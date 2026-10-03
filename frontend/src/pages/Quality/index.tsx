@@ -12,6 +12,7 @@ import {
 } from '@ant-design/icons';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
+import { normalizeJobName } from '../../utils/jobname';
 
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -235,14 +236,15 @@ export const QualityCenterPage: React.FC = () => {
     [detailTest, projectName]
   );
 
-  // 测试任务产物（GET /testing/testtask/artifact?projectName=&testName=&jobName=&taskID= → 二进制）
+  // 测试工作流 job.Name = GenerateExecutionModuleJobName(testName)（test_task.go:442）
+  // 归一规则（小写→码点截32→去尾'-'）见 utils/jobname.ts
   const handleDownloadTestArtifact = useCallback(
     async (task: Record<string, unknown>) => {
       if (!detailTest) return;
       const taskId = String(task.task_id ?? task.id ?? '');
       try {
         const res = await http.get(
-          `/api/aslan/testing/testtask/artifact?projectName=${encodeURIComponent(detailTest.product_name || projectName || '')}&testName=${encodeURIComponent(detailTest.name)}&jobName=${encodeURIComponent(detailTest.name.toLowerCase().slice(0, 32))}&taskID=${taskId}`,
+          `/api/aslan/testing/testtask/artifact?projectName=${encodeURIComponent(detailTest.product_name || projectName || '')}&testName=${encodeURIComponent(detailTest.name)}&jobName=${encodeURIComponent(normalizeJobName(detailTest.name))}&taskID=${taskId}`,
           { skipErrorHandler: true, responseType: 'blob' }
         );
         const blob = res instanceof Blob ? res : new Blob([res as BlobPart], { type: 'application/octet-stream' });
