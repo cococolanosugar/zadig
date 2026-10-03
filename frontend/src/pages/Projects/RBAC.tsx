@@ -91,7 +91,8 @@ const RBACPage: React.FC = () => {
   useEffect(() => {
     loadBindings();
     loadRoles();
-    settingsApi.getUsers().then(setUsers);
+    // 用户来源用 /api/v1/users/brief（无管理员限制；/users/search 仅系统管理员可用）
+    settingsApi.getUsersBrief().then(setUsers);
     settingsApi.getUserGroups().then(setGroups);
     rbacApi.getResourceActions().then(setActions);
     // eslint-disable-next-line react-hooks/exhaustive-deps
