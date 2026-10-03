@@ -155,3 +155,33 @@ export const templateApi = {
 };
 
 export default templateApi;
+
+// ---------- 模板 CRUD（对齐 templatestore 路由契约） ----------
+// YAML 模板：POST/PUT /template/yaml body {name, content, variable_yaml?}; DELETE /template/yaml/:id
+// Dockerfile 模板：POST/PUT /template/dockerfile body {name, content}; DELETE /template/dockerfile/:id
+export const templateCrudApi = {
+  async createYamlTemplate(payload: { name: string; content: string; variable_yaml?: string }): Promise<unknown> {
+    return http.post('/api/aslan/template/yaml', payload, { skipErrorHandler: true });
+  },
+  async updateYamlTemplate(id: string, payload: { name: string; content: string; variable_yaml?: string }): Promise<unknown> {
+    return http.put(`/api/aslan/template/yaml/${id}`, payload, { skipErrorHandler: true });
+  },
+  async deleteYamlTemplate(id: string): Promise<unknown> {
+    return http.delete(`/api/aslan/template/yaml/${id}`, { skipErrorHandler: true });
+  },
+  async getYamlTemplateDetail(id: string): Promise<YamlTemplateItem> {
+    return http.get<YamlTemplateItem>(`/api/aslan/template/yaml/${id}`, { skipErrorHandler: true });
+  },
+  async createDockerfileTemplate(payload: { name: string; content: string }): Promise<unknown> {
+    return http.post('/api/aslan/template/dockerfile', payload, { skipErrorHandler: true });
+  },
+  async updateDockerfileTemplate(id: string, payload: { name: string; content: string }): Promise<unknown> {
+    return http.put(`/api/aslan/template/dockerfile/${id}`, payload, { skipErrorHandler: true });
+  },
+  async deleteDockerfileTemplate(id: string): Promise<unknown> {
+    return http.delete(`/api/aslan/template/dockerfile/${id}`, { skipErrorHandler: true });
+  },
+  async getDockerfileTemplateDetail(id: string): Promise<DockerfileTemplateItem> {
+    return http.get<DockerfileTemplateItem>(`/api/aslan/template/dockerfile/${id}`, { skipErrorHandler: true });
+  },
+};
