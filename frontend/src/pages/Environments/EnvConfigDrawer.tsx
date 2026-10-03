@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Drawer, Tabs, Table, Typography, Tag, Empty, Space, Button, Tooltip, Modal, Input, Popconfirm } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { ReloadOutlined, PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { ReloadOutlined, PlusOutlined, EditOutlined, DeleteOutlined, HistoryOutlined } from '@ant-design/icons';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
+import EnvConfigHistoryModal from './EnvConfigHistoryModal';
 
 const { Text } = Typography;
 
@@ -110,6 +111,23 @@ export const EnvConfigDrawer: React.FC<{
   const [cfgMode, setCfgMode] = useState<'create' | 'edit'>('create');
   const [cfgType, setCfgType] = useState<ResourceTab>('configmap');
   const [cfgEditingName, setCfgEditingName] = useState<string>('');
+
+  // 配置版本历史与回滚状态
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyTarget, setHistoryTarget] = useState<{
+    name: string;
+    type: string;
+    yaml?: string;
+  } | null>(null);
+
+  const openCfgHistory = (objectName: string, type: string, currentYaml?: string) => {
+    setHistoryTarget({
+      name: objectName,
+      type,
+      yaml: currentYaml,
+    });
+    setHistoryModalOpen(true);
+  };
 
   const openCfgCreate = () => {
     setCfgMode('create');
@@ -229,6 +247,14 @@ export const EnvConfigDrawer: React.FC<{
       key: 'cfg_action',
       render: (_, r) => (
         <Space size={0}>
+          <Button
+            type="link"
+            size="small"
+            icon={<HistoryOutlined />}
+            onClick={() => openCfgHistory(r.cm_name, 'ConfigMap', r.yaml_data)}
+          >
+            历史
+          </Button>
           <Button type="link" size="small" icon={<EditOutlined />} disabled={r.auto_sync === true} onClick={() => openCfgEdit(r.cm_name, r.yaml_data)}>
             编辑
           </Button>
@@ -255,11 +281,21 @@ export const EnvConfigDrawer: React.FC<{
       title: '操作',
       key: 'cfg_action',
       render: (_, r) => (
-        <Popconfirm title={`确定删除 Secret [${r.secret_name}]？`} onConfirm={() => handleDeleteCfg(r.secret_name, 'secret')} okText="删除" cancelText="取消">
-          <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-            删除
+        <Space size={0}>
+          <Button
+            type="link"
+            size="small"
+            icon={<HistoryOutlined />}
+            onClick={() => openCfgHistory(r.secret_name, 'Secret', r.yaml_data)}
+          >
+            历史
           </Button>
-        </Popconfirm>
+          <Popconfirm title={`确定删除 Secret [${r.secret_name}]？`} onConfirm={() => handleDeleteCfg(r.secret_name, 'secret')} okText="删除" cancelText="取消">
+            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -279,11 +315,21 @@ export const EnvConfigDrawer: React.FC<{
       title: '操作',
       key: 'cfg_action',
       render: (_, r) => (
-        <Popconfirm title={`确定删除 Ingress [${r.ingress_name}]？`} onConfirm={() => handleDeleteCfg(r.ingress_name, 'ingress')} okText="删除" cancelText="取消">
-          <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-            删除
+        <Space size={0}>
+          <Button
+            type="link"
+            size="small"
+            icon={<HistoryOutlined />}
+            onClick={() => openCfgHistory(r.ingress_name, 'Ingress', r.yaml_data)}
+          >
+            历史
           </Button>
-        </Popconfirm>
+          <Popconfirm title={`确定删除 Ingress [${r.ingress_name}]？`} onConfirm={() => handleDeleteCfg(r.ingress_name, 'ingress')} okText="删除" cancelText="取消">
+            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -303,11 +349,21 @@ export const EnvConfigDrawer: React.FC<{
       title: '操作',
       key: 'cfg_action',
       render: (_, r) => (
-        <Popconfirm title={`确定删除 PVC [${r.pvc_name}]？`} onConfirm={() => handleDeleteCfg(r.pvc_name, 'pvc')} okText="删除" cancelText="取消">
-          <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-            删除
+        <Space size={0}>
+          <Button
+            type="link"
+            size="small"
+            icon={<HistoryOutlined />}
+            onClick={() => openCfgHistory(r.pvc_name, 'PVC', r.yaml_data)}
+          >
+            历史
           </Button>
-        </Popconfirm>
+          <Popconfirm title={`确定删除 PVC [${r.pvc_name}]？`} onConfirm={() => handleDeleteCfg(r.pvc_name, 'pvc')} okText="删除" cancelText="取消">
+            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -489,6 +545,23 @@ export const EnvConfigDrawer: React.FC<{
           />
         </div>
       </Modal>
+
+      {historyTarget && (
+        <EnvConfigHistoryModal
+          open={historyModalOpen}
+          onClose={() => {
+            setHistoryModalOpen(false);
+            setHistoryTarget(null);
+          }}
+          projectName={projectName}
+          envName={envName}
+          objectName={historyTarget.name}
+          commonEnvCfgType={historyTarget.type}
+          currentYaml={historyTarget.yaml}
+          production={production}
+          onRollbackSuccess={loadResources}
+        />
+      )}
     </Drawer>
   );
 };

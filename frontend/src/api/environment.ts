@@ -353,7 +353,65 @@ export const environmentApi = {
       { skipErrorHandler: true }
     );
   },
+
+  /**
+   * Get common env config (ConfigMap/Secret/Ingress/PVC) history revisions.
+   * GET /api/aslan/environment/envcfgs/:name/cfg/:objectName?projectName=&commonEnvCfgType=&production=
+   */
+  async getCommonEnvCfgHistory(
+    projectName: string,
+    envName: string,
+    objectName: string,
+    commonEnvCfgType: string,
+    production = false
+  ): Promise<CommonEnvCfgHistoryItem[]> {
+    const prodParam = production ? '&production=true' : '';
+    return http.get<CommonEnvCfgHistoryItem[]>(
+      `/api/aslan/environment/envcfgs/${encodeURIComponent(envName)}/cfg/${encodeURIComponent(objectName)}?projectName=${encodeURIComponent(projectName)}&commonEnvCfgType=${encodeURIComponent(commonEnvCfgType)}${prodParam}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Rollback common env config (ConfigMap/Secret/Ingress/PVC) to historical revision.
+   * PUT /api/aslan/environment/envcfgs/:name?projectName=&production=&rollback=true
+   */
+  async rollbackCommonEnvCfg(
+    projectName: string,
+    envName: string,
+    payload: RollbackCommonEnvCfgArgs,
+    production = false
+  ): Promise<void> {
+    const prodParam = production ? '&production=true' : '';
+    return http.put<void>(
+      `/api/aslan/environment/envcfgs/${encodeURIComponent(envName)}?projectName=${encodeURIComponent(projectName)}&rollback=true${prodParam}`,
+      payload,
+      { skipErrorHandler: true }
+    );
+  },
 };
+
+export interface CommonEnvCfgHistoryItem {
+  id?: string;
+  product_name: string;
+  create_time: number;
+  update_user_name: string;
+  env_name: string;
+  name: string;
+  yaml_data: string;
+  source_detail?: Record<string, unknown>;
+}
+
+export interface RollbackCommonEnvCfgArgs {
+  env_name: string;
+  product_name: string;
+  name: string;
+  common_env_cfg_type: string; // 'ConfigMap' | 'Secret' | 'Ingress' | 'PVC'
+  yaml_data: string;
+  auto_sync?: boolean;
+  restart_associated_svc?: boolean;
+  production?: boolean;
+}
 
 export interface UpdateContainerImagePayload {
   type: string; // e.g. 'Deployment', 'DaemonSet', 'StatefulSet', 'Job', 'CronJob'
