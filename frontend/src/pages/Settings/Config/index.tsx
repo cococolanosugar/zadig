@@ -37,6 +37,9 @@ import {
   ReloadOutlined,
   SafetyCertificateOutlined,
   CompassOutlined,
+  LinkOutlined,
+  EditOutlined,
+  ExportOutlined,
 } from '@ant-design/icons';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -45,6 +48,7 @@ import systemConfigApi, {
   type CleanCacheState,
   type SecurityAndPrivacySettings,
   type SystemServerURL,
+  type ExternalLinkItem,
 } from '../../../api/systemConfig';
 import { feedback } from '../../../utils/feedback';
 
@@ -157,6 +161,13 @@ export const SystemConfigPage: React.FC = () => {
   const [announcementForm] = Form.useForm();
   const [editingAnnouncementId, setEditingAnnouncementId] = useState<string | null>(null);
 
+  // 外部链接状态
+  const [externalLinks, setExternalLinks] = useState<ExternalLinkItem[]>([]);
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkForm] = Form.useForm();
+  const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
+  const [savingLink, setSavingLink] = useState(false);
+
   const loadTabData = useCallback(async (tab: string) => {
     setLoading(true);
     try {
@@ -253,6 +264,13 @@ export const SystemConfigPage: React.FC = () => {
               server_url: res.server_url || '',
             });
           }
+        } catch {
+          // ignore
+        }
+      } else if (tab === 'externalLink') {
+        try {
+          const res = await systemConfigApi.listExternalLinks();
+          setExternalLinks(res);
         } catch {
           // ignore
         }
@@ -380,6 +398,68 @@ export const SystemConfigPage: React.FC = () => {
     } finally {
       setSavingServerUrl(false);
     }
+  };
+
+  const handleOpenCreateLink = () => {
+    setEditingLinkId(null);
+    linkForm.resetFields();
+    setLinkModalOpen(true);
+  };
+
+  const handleOpenEditLink = (record: ExternalLinkItem) => {
+    setEditingLinkId(record.id || null);
+    linkForm.setFieldsValue({
+      name: record.name,
+      url: record.url,
+    });
+    setLinkModalOpen(true);
+  };
+
+  const handleSaveLink = async (values: { name: string; url: string }) => {
+    setSavingLink(true);
+    try {
+      if (editingLinkId) {
+        await systemConfigApi.updateExternalLink(editingLinkId, values);
+        feedback.message.success('外部链接更新成功');
+      } else {
+        await systemConfigApi.createExternalLink(values);
+        feedback.message.success('外部链接创建成功');
+      }
+      setLinkModalOpen(false);
+      linkForm.resetFields();
+      const res = await systemConfigApi.listExternalLinks();
+      setExternalLinks(res);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '保存外部链接失败';
+      feedback.message.error(msg);
+    } finally {
+      setSavingLink(false);
+    }
+  };
+
+  const handleDeleteLink = (record: ExternalLinkItem) => {
+    if (!record.id) return;
+    const linkId = record.id;
+    feedback.modal?.confirm({
+      title: `确认删除外部链接 "${record.name}"？`,
+      content: '删除后链接将从导航与快捷菜单中移除，操作不可恢复。',
+      okText: '确认删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await systemConfigApi.deleteExternalLink(linkId);
+          feedback.message.success('外部链接已删除');
+          const res = await systemConfigApi.listExternalLinks();
+          setExternalLinks(res);
+        } catch (err: unknown) {
+          const msg =
+            (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '删除外部链接失败';
+          feedback.message.error(msg);
+        }
+      },
+    });
   };
 
   const handleTabChange = (key: string) => {
@@ -599,6 +679,14 @@ export const SystemConfigPage: React.FC = () => {
       label: (
         <span>
           <CompassOutlined /> 系统地址
+        </span>
+      ),
+    },
+    {
+      key: 'externalLink',
+      label: (
+        <span>
+          <LinkOutlined /> 外部链接
         </span>
       ),
     },
@@ -1286,6 +1374,89 @@ export const SystemConfigPage: React.FC = () => {
               </Form.Item>
             </Form>
           </div>
+        ) : activeTab === 'externalLink' ? (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <Text strong style={{ fontSize: 14 }}>快捷外部链接列表</Text>
+                <Text type="secondary" style={{ marginLeft: 8, fontSize: 13 }}>
+                  配置常用系统（如监控看板、代码托管、企业知识库等）的快捷访问链接
+                </Text>
+              </div>
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreateLink}>
+                添加外部链接
+              </Button>
+            </div>
+            <Table
+              dataSource={externalLinks}
+              rowKey={(r) => r.id || `${r.name}-${r.url}`}
+              columns={[
+                {
+                  title: '链接名称',
+                  dataIndex: 'name',
+                  key: 'name',
+                  render: (name: string) => <Text strong>{name}</Text>,
+                },
+                {
+                  title: '链接地址',
+                  dataIndex: 'url',
+                  key: 'url',
+                  render: (url: string) => (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                    >
+                      <span>{url}</span>
+                      <ExportOutlined style={{ fontSize: 12 }} />
+                    </a>
+                  ),
+                },
+                {
+                  title: '更新人',
+                  dataIndex: 'update_by',
+                  key: 'update_by',
+                  render: (by: string) => by || '-',
+                },
+                {
+                  title: '更新时间',
+                  dataIndex: 'update_time',
+                  key: 'update_time',
+                  render: (time: number) => (time ? dayjs.unix(time).format('YYYY-MM-DD HH:mm:ss') : '-'),
+                },
+                {
+                  title: '操作',
+                  key: 'action',
+                  width: 160,
+                  render: (_, record: ExternalLinkItem) => (
+                    <Space size={8}>
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<EditOutlined />}
+                        onClick={() => handleOpenEditLink(record)}
+                      >
+                        编辑
+                      </Button>
+                      <Button
+                        type="link"
+                        danger
+                        size="small"
+                        icon={<DeleteOutlined />}
+                        onClick={() => handleDeleteLink(record)}
+                      >
+                        删除
+                      </Button>
+                    </Space>
+                  ),
+                },
+              ]}
+              locale={{
+                emptyText: <Empty description="暂无外部链接配置" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+              }}
+            />
+          </div>
         ) : activeTab === 'aiCodeReview' ? (
           <div style={{ maxWidth: 720 }}>
             <Form form={aiReviewForm} layout="vertical">
@@ -1384,6 +1555,43 @@ export const SystemConfigPage: React.FC = () => {
           </Form.Item>
           <Form.Item name="image_from" label="来源" initialValue="custom">
             <Input placeholder="例如: custom 或 koderover" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 外部链接 Modal */}
+      <Modal
+        title={editingLinkId ? '编辑外部链接' : '添加外部链接'}
+        open={linkModalOpen}
+        onCancel={() => setLinkModalOpen(false)}
+        onOk={() => linkForm.submit()}
+        confirmLoading={savingLink}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Form form={linkForm} layout="vertical" onFinish={handleSaveLink}>
+          <Form.Item
+            name="name"
+            label="链接名称"
+            rules={[
+              { required: true, message: '请输入链接名称' },
+              { max: 64, message: '链接名称不能超过 64 个字符' },
+            ]}
+          >
+            <Input placeholder="例如: 监控看板 Grafana 或 需求管理 Jira" />
+          </Form.Item>
+          <Form.Item
+            name="url"
+            label="链接地址"
+            rules={[
+              { required: true, message: '请输入链接地址' },
+              {
+                pattern: /^https?:\/\/.+/,
+                message: '链接地址必须以 http:// 或 https:// 开头',
+              },
+            ]}
+          >
+            <Input placeholder="例如: https://grafana.example.com" />
           </Form.Item>
         </Form>
       </Modal>
