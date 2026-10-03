@@ -36,6 +36,7 @@ import {
   ClearOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
+  CompassOutlined,
 } from '@ant-design/icons';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -43,6 +44,7 @@ import http from '../../../api/client';
 import systemConfigApi, {
   type CleanCacheState,
   type SecurityAndPrivacySettings,
+  type SystemServerURL,
 } from '../../../api/systemConfig';
 import { feedback } from '../../../utils/feedback';
 
@@ -136,6 +138,10 @@ export const SystemConfigPage: React.FC = () => {
   // 安全与隐私 (Security)
   const [securityForm] = Form.useForm();
   const [savingSecurity, setSavingSecurity] = useState(false);
+
+  // 系统地址 (ServerURL)
+  const [serverUrlForm] = Form.useForm();
+  const [savingServerUrl, setSavingServerUrl] = useState(false);
 
   // Data states
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
@@ -239,13 +245,24 @@ export const SystemConfigPage: React.FC = () => {
         } catch {
           // ignore
         }
+      } else if (tab === 'serverUrl') {
+        try {
+          const res = await systemConfigApi.getServerURL();
+          if (res) {
+            serverUrlForm.setFieldsValue({
+              server_url: res.server_url || '',
+            });
+          }
+        } catch {
+          // ignore
+        }
       }
     } catch {
       // Graceful fallback
     } finally {
       setLoading(false);
     }
-  }, [emailForm, concurrencyForm, proxyForm, aiReviewForm, cronForm, securityForm]);
+  }, [emailForm, concurrencyForm, proxyForm, aiReviewForm, cronForm, securityForm, serverUrlForm]);
 
   useEffect(() => {
     loadTabData(activeTab);
@@ -346,6 +363,22 @@ export const SystemConfigPage: React.FC = () => {
       feedback.message.error(msg);
     } finally {
       setSavingSecurity(false);
+    }
+  };
+
+  const handleSaveServerUrl = async (values: SystemServerURL) => {
+    setSavingServerUrl(true);
+    try {
+      await systemConfigApi.updateServerURL({
+        server_url: (values.server_url || '').trim(),
+      });
+      feedback.message.success('系统地址配置已保存');
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '保存系统地址失败';
+      feedback.message.error(msg);
+    } finally {
+      setSavingServerUrl(false);
     }
   };
 
@@ -558,6 +591,14 @@ export const SystemConfigPage: React.FC = () => {
       label: (
         <span>
           <SafetyCertificateOutlined /> 安全与隐私
+        </span>
+      ),
+    },
+    {
+      key: 'serverUrl',
+      label: (
+        <span>
+          <CompassOutlined /> 系统地址
         </span>
       ),
     },
@@ -1195,6 +1236,52 @@ export const SystemConfigPage: React.FC = () => {
               <Form.Item>
                 <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={savingSecurity}>
                   保存安全设置
+                </Button>
+              </Form.Item>
+            </Form>
+          </div>
+        ) : activeTab === 'serverUrl' ? (
+          <div style={{ maxWidth: 680 }}>
+            <Alert
+              title="系统访问地址说明"
+              description="系统地址主要用于代码源 Webhook 回调、通知消息回链（邮件、企业微信、飞书、钉钉）、第三方 OAuth 认证跳转等场景。请确保填写的地址在各个集成系统及团队成员浏览器端均可正常解析和访问。"
+              type="info"
+              showIcon
+              style={{ marginBottom: 20 }}
+            />
+            <Form form={serverUrlForm} layout="vertical" onFinish={handleSaveServerUrl}>
+              <Form.Item
+                label="系统服务访问地址 (Server URL)"
+                extra="必须包含协议头 (http:// 或 https://)，末尾无需斜杠"
+                required
+              >
+                <Space.Compact style={{ width: '100%' }}>
+                  <Form.Item
+                    name="server_url"
+                    noStyle
+                    rules={[
+                      { required: true, message: '请输入系统服务访问地址' },
+                      {
+                        pattern: /^https?:\/\/.+/,
+                        message: '系统地址必须以 http:// 或 https:// 开头',
+                      },
+                    ]}
+                  >
+                    <Input placeholder="例如: http://192.168.31.174:8380 或 https://zadig.example.com" />
+                  </Form.Item>
+                  <Button
+                    onClick={() => {
+                      serverUrlForm.setFieldsValue({ server_url: window.location.origin });
+                    }}
+                  >
+                    填入当前访问地址
+                  </Button>
+                </Space.Compact>
+              </Form.Item>
+
+              <Form.Item style={{ marginTop: 24 }}>
+                <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={savingServerUrl}>
+                  保存系统地址
                 </Button>
               </Form.Item>
             </Form>
