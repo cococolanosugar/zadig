@@ -91,11 +91,12 @@ export const SprintsPage: React.FC = () => {
     if (!projectName) return;
     setLoading(true);
     try {
-      // 注意：无尾斜杠；后端 gin 路由注册为 sprint.GET("")
-      const res = await http.get<SprintItem[]>(
-        `/api/aslan/sprint_management/v1/sprint?projectName=${projectName}`
+      // 注意：无尾斜杠；后端 ListSprintOption 的 pageNum/pageSize 为 binding:required，
+      // 响应为 ListSprintResp {list,total}
+      const res = await http.get<{ list?: SprintItem[]; total?: number }>(
+        `/api/aslan/sprint_management/v1/sprint?projectName=${projectName}&pageNum=1&pageSize=200`
       );
-      setSprints(Array.isArray(res) ? res : []);
+      setSprints(Array.isArray(res?.list) ? res.list : []);
     } catch (err: unknown) {
       setSprints([]);
       const msg = err instanceof Error ? err.message : '获取迭代列表失败';
@@ -108,11 +109,12 @@ export const SprintsPage: React.FC = () => {
   const loadTemplates = useCallback(async () => {
     if (!projectName) return;
     try {
-      const res = await http.get<SprintTemplateItem[]>(
-        `/api/aslan/sprint_management/v1/sprint_template?projectName=${projectName}`,
+      // 后端 ListSprintTemplateOption 同样 required pageNum/pageSize，响应 {list}
+      const res = await http.get<{ list?: SprintTemplateItem[] }>(
+        `/api/aslan/sprint_management/v1/sprint_template?projectName=${projectName}&pageNum=1&pageSize=200`,
         { skipErrorHandler: true }
       );
-      setTemplates(Array.isArray(res) ? res : []);
+      setTemplates(Array.isArray(res?.list) ? res.list : []);
     } catch {
       setTemplates([]);
     }
