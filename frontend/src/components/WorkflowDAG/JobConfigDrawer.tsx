@@ -40,7 +40,10 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
   const [testOptions, setTestOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [scanOptions, setScanOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [clusterOptions, setClusterOptions] = useState<Array<{ label: string; value: string }>>([]);
+  const [serviceOptions, setServiceOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [customDeploySource, setCustomDeploySource] = useState<'runtime' | 'fromjob'>('runtime');
+  const [istioStrategyType, setIstioStrategyType] = useState<'weight' | 'header'>('weight');
+  const [fetchingBgYamlIndex, setFetchingBgYamlIndex] = useState<number | null>(null);
   const [notificationWebhookType, setNotificationWebhookType] = useState<string>('dingding');
   const [deployType, setDeployType] = useState<'k8s' | 'helm'>('k8s');
   const [vmDeploySource, setVmDeploySource] = useState<'runtime' | 'fromjob'>('runtime');
@@ -57,6 +60,9 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
       setCustomDeploySource(cdSrc);
       const notifType = (job.spec?.webhook_type as string) || 'dingding';
       setNotificationWebhookType(notifType);
+      const bgSrc = (job.spec?.source as 'runtime' | 'fixed') || 'runtime';
+      const iStrat = (job.spec?.grayscale_strategy as 'weight' | 'header') || 'weight';
+      setIstioStrategyType(iStrat);
 
       form.setFieldsValue({
         name: job.name,
@@ -123,11 +129,73 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         fixed_workflow_list: Array.isArray(job.spec?.fixed_workflow_list) && job.spec.fixed_workflow_list.length > 0
           ? job.spec.fixed_workflow_list
           : [{ project_name: (job.spec?.project_name as string) || '', workflow_name: '', service_name: '' }],
+        // k8s-blue-green-deploy
+        bg_production: !!job.spec?.production,
+        bg_env: (job.spec?.env as string) || 'dev',
+        bg_source: bgSrc,
+        bg_services: Array.isArray(job.spec?.services) && job.spec.services.length > 0
+          ? job.spec.services
+          : [{ service_name: '', blue_service_yaml: '', blue_service_name: '', green_service_name: '' }],
+        // k8s-blue-green-release
+        bg_from_job: (job.spec?.from_job as string) || '',
+        // k8s-canary-deploy
+        canary_cluster_id: (job.spec?.cluster_id as string) || '',
+        canary_namespace: (job.spec?.namespace as string) || '',
+        canary_targets: Array.isArray(job.spec?.targets) && job.spec.targets.length > 0
+          ? job.spec.targets
+          : [{ k8s_service_name: '', container_name: '', image: '', canary_percentage: 20, deploy_timeout: 10 }],
+        // k8s-canary-release
+        canary_from_job: (job.spec?.from_job as string) || '',
+        canary_release_timeout: Number(job.spec?.release_timeout) || 10,
+        // k8s-gray-release
+        gray_cluster_id: (job.spec?.cluster_id as string) || '',
+        gray_namespace: (job.spec?.namespace as string) || '',
+        gray_from_job: (job.spec?.from_job as string) || '',
+        gray_scale: Number(job.spec?.gray_scale) || 20,
+        gray_deploy_timeout: Number(job.spec?.deploy_timeout) || 10,
+        gray_targets: Array.isArray(job.spec?.targets) && job.spec.targets.length > 0
+          ? job.spec.targets
+          : [{ workload_type: 'Deployment', workload_name: '', container_name: '', image: '', replica: 1 }],
+        // k8s-gray-rollback
+        gray_rollback_cluster_id: (job.spec?.cluster_id as string) || '',
+        gray_rollback_namespace: (job.spec?.namespace as string) || '',
+        gray_rollback_timeout: Number(job.spec?.rollback_timeout) || 10,
+        gray_rollback_targets: Array.isArray(job.spec?.targets) && job.spec.targets.length > 0
+          ? job.spec.targets
+          : [{ workload_type: 'Deployment', workload_name: '' }],
+        // istio-release
+        istio_cluster_id: (job.spec?.cluster_id as string) || '',
+        istio_namespace: (job.spec?.namespace as string) || '',
+        istio_from_job: (job.spec?.from_job as string) || '',
+        istio_weight: job.spec?.weight !== undefined ? Number(job.spec?.weight) : 30,
+        istio_replica_percentage: Number(job.spec?.replica_percentage) || 0,
+        istio_timeout: Number(job.spec?.timeout) || 10,
+        istio_targets: Array.isArray(job.spec?.targets) && job.spec.targets.length > 0
+          ? job.spec.targets
+          : [{ workload_name: '', container_name: '', image: '' }],
+        // istio-rollback
+        istio_rollback_cluster_id: (job.spec?.cluster_id as string) || '',
+        istio_rollback_namespace: (job.spec?.namespace as string) || '',
+        istio_rollback_timeout: Number(job.spec?.timeout) || 10,
+        istio_rollback_targets: Array.isArray(job.spec?.targets) && job.spec.targets.length > 0
+          ? job.spec.targets
+          : [{ workload_name: '', container_name: '' }],
+        // update-env-istio-config
+        istio_base_env: (job.spec?.base_env as string) || 'dev',
+        istio_production: !!job.spec?.production,
+        istio_source: (job.spec?.source as string) || 'fixed',
+        istio_grayscale_strategy: iStrat,
+        istio_weight_configs: Array.isArray(job.spec?.weight_configs) && job.spec.weight_configs.length > 0
+          ? job.spec.weight_configs
+          : [{ env_name: (job.spec?.base_env as string) || 'dev', weight: 80 }, { env_name: 'qa', weight: 20 }],
+        istio_header_match_configs: Array.isArray(job.spec?.header_match_configs) && job.spec.header_match_configs.length > 0
+          ? job.spec.header_match_configs
+          : [{ key: 'x-env', value: 'gray' }],
       });
     }
   }, [job, form]);
 
-  // 按需加载环境/测试/扫描/集群列表
+  // 按需加载环境/测试/扫描/集群/服务列表
   useEffect(() => {
     if (!visible || !job) return;
     const projectName = job.spec?.project_name as string | undefined;
@@ -137,7 +205,9 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
       job.type === 'zadig-helm-chart-deploy' ||
       job.type === 'zadig-vm-deploy' ||
       job.type === 'zadig-restart' ||
-      job.type === 'offline-service'
+      job.type === 'offline-service' ||
+      job.type === 'k8s-blue-green-deploy' ||
+      job.type === 'update-env-istio-config'
     ) {
       http
         .get<Array<{ name: string; alias?: string }>>(`/api/aslan/environment/environments?projectName=${projectName || ''}`, {
@@ -149,8 +219,28 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         })
         .catch(() => setEnvOptions([]));
     }
+    // 服务列表
+    if (job.type === 'k8s-blue-green-deploy' || job.type === 'zadig-deploy') {
+      http
+        .get<Array<{ service_name: string }>>(`/api/aslan/service/services?projectName=${projectName || ''}`, {
+          skipErrorHandler: true,
+        })
+        .then((res) => {
+          const list = Array.isArray(res) ? res : [];
+          setServiceOptions(list.map((s) => ({ label: s.service_name, value: s.service_name })));
+        })
+        .catch(() => setServiceOptions([]));
+    }
     // 集群列表
-    if (job.type === 'custom-deploy' || job.type === 'k8s-resource-patch') {
+    if (
+      job.type === 'custom-deploy' ||
+      job.type === 'k8s-resource-patch' ||
+      job.type === 'k8s-canary-deploy' ||
+      job.type === 'k8s-gray-release' ||
+      job.type === 'k8s-gray-rollback' ||
+      job.type === 'istio-release' ||
+      job.type === 'istio-rollback'
+    ) {
       http
         .get<Array<{ id?: string; _id?: string; name?: string }>>(`/api/aslan/cluster/clusters?projectName=${projectName || ''}`, {
           skipErrorHandler: true,
@@ -255,6 +345,40 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
     }
   };
 
+  const handleFetchBgYaml = async (index: number) => {
+    const projectName = (job?.spec?.project_name as string) || '';
+    const env = form.getFieldValue('bg_env') || (job?.spec?.env as string) || '';
+    const bgServices = form.getFieldValue('bg_services') || [];
+    const item = bgServices[index];
+    const serviceName = item?.service_name;
+
+    if (!serviceName) {
+      feedback.message.warning('请先输入或选择服务名称');
+      return;
+    }
+    if (!env) {
+      feedback.message.warning('请先选择目标环境');
+      return;
+    }
+
+    try {
+      setFetchingBgYamlIndex(index);
+      const yaml = await workflowApi.getBlueGreenServiceYaml(projectName, env, serviceName);
+      if (yaml && typeof yaml === 'string') {
+        const nextList = [...bgServices];
+        nextList[index] = { ...nextList[index], blue_service_yaml: yaml };
+        form.setFieldsValue({ bg_services: nextList });
+        feedback.message.success(`已拉取服务 ${serviceName} 的当前 K8s Service YAML`);
+      } else {
+        feedback.message.info(`未检索到服务 ${serviceName} 在环境 ${env} 中的 YAML 定义`);
+      }
+    } catch {
+      feedback.message.warning('拉取服务 YAML 失败或当前环境未部署该服务');
+    } finally {
+      setFetchingBgYamlIndex(null);
+    }
+  };
+
   const handleFinish = (values: Record<string, unknown>) => {
     if (!job) return;
     const isHelm = job.type === 'zadig-deploy' && values.deploy_type === 'helm';
@@ -343,6 +467,95 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
               trigger_type: (values.trigger_type as string) || 'fixed',
               is_enable_check: !!values.is_enable_check,
               fixed_workflow_list: Array.isArray(values.fixed_workflow_list) ? values.fixed_workflow_list : [],
+            }
+          : {}),
+        // k8s-blue-green-deploy
+        ...(job.type === 'k8s-blue-green-deploy'
+          ? {
+              version: 'v2',
+              production: !!values.bg_production,
+              env: (values.bg_env as string) || '',
+              source: (values.bg_source as string) || 'runtime',
+              services: Array.isArray(values.bg_services) ? values.bg_services : [],
+            }
+          : {}),
+        // k8s-blue-green-release
+        ...(job.type === 'k8s-blue-green-release'
+          ? {
+              from_job: (values.bg_from_job as string) || '',
+            }
+          : {}),
+        // k8s-canary-deploy
+        ...(job.type === 'k8s-canary-deploy'
+          ? {
+              cluster_id: (values.canary_cluster_id as string) || '',
+              namespace: (values.canary_namespace as string) || '',
+              targets: Array.isArray(values.canary_targets) ? values.canary_targets : [],
+            }
+          : {}),
+        // k8s-canary-release
+        ...(job.type === 'k8s-canary-release'
+          ? {
+              from_job: (values.canary_from_job as string) || '',
+              release_timeout: Number(values.canary_release_timeout) || 10,
+            }
+          : {}),
+        // k8s-gray-release
+        ...(job.type === 'k8s-gray-release'
+          ? {
+              cluster_id: (values.gray_cluster_id as string) || '',
+              namespace: (values.gray_namespace as string) || '',
+              from_job: (values.gray_from_job as string) || '',
+              gray_scale: Number(values.gray_scale) || 20,
+              deploy_timeout: Number(values.gray_deploy_timeout) || 10,
+              targets: Array.isArray(values.gray_targets) ? values.gray_targets : [],
+            }
+          : {}),
+        // k8s-gray-rollback
+        ...(job.type === 'k8s-gray-rollback'
+          ? {
+              cluster_id: (values.gray_rollback_cluster_id as string) || '',
+              namespace: (values.gray_rollback_namespace as string) || '',
+              rollback_timeout: Number(values.gray_rollback_timeout) || 10,
+              targets: Array.isArray(values.gray_rollback_targets) ? values.gray_rollback_targets : [],
+            }
+          : {}),
+        // istio-release
+        ...(job.type === 'istio-release'
+          ? {
+              cluster_id: (values.istio_cluster_id as string) || '',
+              namespace: (values.istio_namespace as string) || '',
+              from_job: (values.istio_from_job as string) || '',
+              weight: values.istio_weight !== undefined ? Number(values.istio_weight) : 30,
+              replica_percentage: Number(values.istio_replica_percentage) || 0,
+              timeout: Number(values.istio_timeout) || 10,
+              targets: Array.isArray(values.istio_targets) ? values.istio_targets : [],
+            }
+          : {}),
+        // istio-rollback
+        ...(job.type === 'istio-rollback'
+          ? {
+              cluster_id: (values.istio_rollback_cluster_id as string) || '',
+              namespace: (values.istio_rollback_namespace as string) || '',
+              timeout: Number(values.istio_rollback_timeout) || 10,
+              targets: Array.isArray(values.istio_rollback_targets) ? values.istio_rollback_targets : [],
+            }
+          : {}),
+        // update-env-istio-config
+        ...(job.type === 'update-env-istio-config'
+          ? {
+              base_env: (values.istio_base_env as string) || '',
+              production: !!values.istio_production,
+              source: (values.istio_source as string) || 'fixed',
+              grayscale_strategy: (values.istio_grayscale_strategy as string) || 'weight',
+              weight_configs:
+                values.istio_grayscale_strategy === 'weight' && Array.isArray(values.istio_weight_configs)
+                  ? values.istio_weight_configs
+                  : [],
+              header_match_configs:
+                values.istio_grayscale_strategy === 'header' && Array.isArray(values.istio_header_match_configs)
+                  ? values.istio_header_match_configs
+                  : [],
             }
           : {}),
       },
@@ -1418,6 +1631,1016 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
                 )}
               </Form.List>
             </Form.Item>
+          </>
+        )}
+
+        {job?.type === 'k8s-blue-green-deploy' && (
+          <>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="bg_env"
+                  label="目标环境"
+                  rules={[{ required: true, message: '请选择蓝绿部署目标环境' }]}
+                >
+                  <Select
+                    showSearch
+                    options={envOptions}
+                    placeholder="选择部署环境"
+                    notFoundContent="暂无可用环境"
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="bg_production"
+                  label="环境属性"
+                  valuePropName="checked"
+                  tooltip="是否为生产发布环境"
+                >
+                  <Switch checkedChildren="生产环境" unCheckedChildren="测试环境" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Form.Item name="bg_source" label="服务指定方式" initialValue="runtime">
+              <Radio.Group
+                options={[
+                  { label: '运行时选择服务与镜像', value: 'runtime' },
+                  { label: '固定服务部署清单', value: 'fixed' },
+                ]}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="蓝绿部署服务清单 (Services)"
+              tooltip="指定蓝绿部署的目标服务与对应 Service 配置"
+            >
+              <Form.List name="bg_services">
+                {(fields, { add, remove }) => (
+                  <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+                    {fields.map(({ key, name, ...restField }) => (
+                      <Card
+                        key={key}
+                        size="small"
+                        variant="borderless"
+                        style={{ background: 'var(--ant-color-fill-quaternary, #f9f9f9)' }}
+                        title={`蓝绿服务 #${name + 1}`}
+                        extra={
+                          <Space orientation="horizontal">
+                            <Button
+                              size="small"
+                              type="link"
+                              loading={fetchingBgYamlIndex === name}
+                              onClick={() => handleFetchBgYaml(name)}
+                            >
+                              拉取当前环境 Service YAML
+                            </Button>
+                            {fields.length > 1 && (
+                              <Button
+                                type="text"
+                                danger
+                                icon={<DeleteOutlined />}
+                                onClick={() => remove(name)}
+                              >
+                                删除
+                              </Button>
+                            )}
+                          </Space>
+                        }
+                      >
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'service_name']}
+                              label="部署服务名"
+                              rules={[{ required: true, message: '请输入或选择服务名' }]}
+                            >
+                              {serviceOptions.length > 0 ? (
+                                <Select
+                                  showSearch
+                                  options={serviceOptions}
+                                  placeholder="选择服务"
+                                />
+                              ) : (
+                                <Input placeholder="例如: backend-api" />
+                              )}
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'blue_service_name']}
+                              label="蓝版本 Service 名称 (可选)"
+                              tooltip="留空将默认按系统蓝绿命名规则自动生成"
+                            >
+                              <Input placeholder="例如: backend-api-blue" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Form.Item
+                          {...restField}
+                          name={[name, 'blue_service_yaml']}
+                          label="Blue Service YAML 定义"
+                          tooltip="蓝绿路由 Service 的 K8s 资源定义（可点击右上角自动拉取环境现有 YAML）"
+                        >
+                          <Input.TextArea
+                            rows={4}
+                            placeholder="apiVersion: v1&#10;kind: Service&#10;metadata:&#10;  name: my-svc&#10;spec:&#10;  selector:&#10;    app: my-svc"
+                            style={{ fontFamily: 'monospace' }}
+                          />
+                        </Form.Item>
+                      </Card>
+                    ))}
+                    <Button
+                      type="dashed"
+                      onClick={() => add({ service_name: '', blue_service_yaml: '', blue_service_name: '' })}
+                      block
+                      icon={<PlusOutlined />}
+                    >
+                      添加蓝绿服务条目
+                    </Button>
+                  </Space>
+                )}
+              </Form.List>
+            </Form.Item>
+          </>
+        )}
+
+        {job?.type === 'k8s-blue-green-release' && (
+          <Form.Item
+            name="bg_from_job"
+            label="关联前序蓝绿部署任务 (FromJob)"
+            rules={[{ required: true, message: '请输入前序蓝绿部署任务名' }]}
+            tooltip="确认发布并切换流量至蓝版本，必须引用同工作流中前序的 k8s-blue-green-deploy 任务"
+          >
+            <Input placeholder="例如: blue-green-deploy" />
+          </Form.Item>
+        )}
+
+        {job?.type === 'k8s-canary-deploy' && (
+          <>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="canary_cluster_id"
+                  label="目标集群"
+                  rules={[{ required: true, message: '请选择集群' }]}
+                >
+                  <Select
+                    showSearch
+                    options={clusterOptions}
+                    placeholder="请选择 Kubernetes 集群"
+                    notFoundContent="暂无可用集群"
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="canary_namespace"
+                  label="命名空间 (Namespace)"
+                  rules={[{ required: true, message: '请输入命名空间' }]}
+                >
+                  <Input placeholder="例如: default 或 qa-env" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Form.Item
+              label="金丝雀部署目标 (Targets)"
+              tooltip="配置金丝雀发布的服务、容器与灰度流量比例"
+            >
+              <Form.List name="canary_targets">
+                {(fields, { add, remove }) => (
+                  <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+                    {fields.map(({ key, name, ...restField }) => (
+                      <Card
+                        key={key}
+                        size="small"
+                        variant="borderless"
+                        style={{ background: 'var(--ant-color-fill-quaternary, #f9f9f9)' }}
+                        title={`金丝雀目标 #${name + 1}`}
+                        extra={
+                          fields.length > 1 ? (
+                            <Button
+                              type="text"
+                              danger
+                              icon={<DeleteOutlined />}
+                              onClick={() => remove(name)}
+                            >
+                              删除
+                            </Button>
+                          ) : null
+                        }
+                      >
+                        <Row gutter={16}>
+                          <Col span={8}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'k8s_service_name']}
+                              label="K8s 服务名"
+                              rules={[{ required: true, message: '请输入服务名' }]}
+                            >
+                              <Input placeholder="例如: web-svc" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={8}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'container_name']}
+                              label="容器名称"
+                              rules={[{ required: true, message: '请输入容器名' }]}
+                            >
+                              <Input placeholder="例如: nginx" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={8}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'canary_percentage']}
+                              label="金丝雀流量比例 (%)"
+                              rules={[{ required: true, message: '请输入 1-100 的百分比' }]}
+                              initialValue={20}
+                            >
+                              <InputNumber min={1} max={100} style={{ width: '100%' }} />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Row gutter={16}>
+                          <Col span={16}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'image']}
+                              label="金丝雀镜像地址"
+                              rules={[{ required: true, message: '请输入镜像地址' }]}
+                            >
+                              <Input placeholder="例如: nginx:alpine 或 ccr.ccs.tencentyun.com/ns/svc:v2" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={8}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'deploy_timeout']}
+                              label="部署超时 (分钟)"
+                              initialValue={10}
+                            >
+                              <InputNumber min={1} max={1440} style={{ width: '100%' }} />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                      </Card>
+                    ))}
+                    <Button
+                      type="dashed"
+                      onClick={() =>
+                        add({
+                          k8s_service_name: '',
+                          container_name: '',
+                          image: '',
+                          canary_percentage: 20,
+                          deploy_timeout: 10,
+                        })
+                      }
+                      block
+                      icon={<PlusOutlined />}
+                    >
+                      添加金丝雀目标
+                    </Button>
+                  </Space>
+                )}
+              </Form.List>
+            </Form.Item>
+          </>
+        )}
+
+        {job?.type === 'k8s-canary-release' && (
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="canary_from_job"
+                label="关联前序金丝雀部署任务 (FromJob)"
+                rules={[{ required: true, message: '请输入前序金丝雀部署任务名' }]}
+                tooltip="确认发布并全量切流，必须引用前序阶段的 k8s-canary-deploy 任务"
+              >
+                <Input placeholder="例如: canary-deploy" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="canary_release_timeout"
+                label="发布超时时间 (分钟)"
+                initialValue={10}
+              >
+                <InputNumber min={1} max={1440} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+        )}
+
+        {job?.type === 'k8s-gray-release' && (
+          <>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="gray_cluster_id"
+                  label="目标集群"
+                  rules={[{ required: true, message: '请选择集群' }]}
+                >
+                  <Select
+                    showSearch
+                    options={clusterOptions}
+                    placeholder="请选择 Kubernetes 集群"
+                    notFoundContent="暂无可用集群"
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="gray_namespace"
+                  label="命名空间 (Namespace)"
+                  rules={[{ required: true, message: '请输入命名空间' }]}
+                >
+                  <Input placeholder="例如: default 或 qa-env" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item
+                  name="gray_from_job"
+                  label="前序灰度任务名称"
+                  tooltip="若为流水线中的首个灰度部署任务，请留空；若为后续推进/全量发布步骤，请填写首个任务名"
+                >
+                  <Input placeholder="首个任务留空，后续步骤必填" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  name="gray_scale"
+                  label="灰度比例 (%)"
+                  rules={[{ required: true, message: '请输入 1-100 的百分比' }]}
+                  tooltip="本次灰度释放的流量/副本比例；流水线中最后一个灰度任务必须为 100"
+                  initialValue={20}
+                >
+                  <InputNumber min={1} max={100} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  name="gray_deploy_timeout"
+                  label="部署超时 (分钟)"
+                  initialValue={10}
+                >
+                  <InputNumber min={1} max={1440} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Form.Item
+              label="灰度部署目标工作负载 (Targets)"
+              tooltip="指定需要进行灰度更新的工作负载"
+            >
+              <Form.List name="gray_targets">
+                {(fields, { add, remove }) => (
+                  <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+                    {fields.map(({ key, name, ...restField }) => (
+                      <Card
+                        key={key}
+                        size="small"
+                        variant="borderless"
+                        style={{ background: 'var(--ant-color-fill-quaternary, #f9f9f9)' }}
+                        title={`灰度目标 #${name + 1}`}
+                        extra={
+                          fields.length > 1 ? (
+                            <Button
+                              type="text"
+                              danger
+                              icon={<DeleteOutlined />}
+                              onClick={() => remove(name)}
+                            >
+                              删除
+                            </Button>
+                          ) : null
+                        }
+                      >
+                        <Row gutter={16}>
+                          <Col span={6}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'workload_type']}
+                              label="负载类型"
+                              initialValue="Deployment"
+                            >
+                              <Select
+                                options={[
+                                  { label: 'Deployment', value: 'Deployment' },
+                                  { label: 'StatefulSet', value: 'StatefulSet' },
+                                ]}
+                              />
+                            </Form.Item>
+                          </Col>
+                          <Col span={6}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'workload_name']}
+                              label="负载名称"
+                              rules={[{ required: true, message: '请输入工作负载名称' }]}
+                            >
+                              <Input placeholder="例如: web-app" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={6}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'container_name']}
+                              label="容器名称"
+                              rules={[{ required: true, message: '请输入容器名称' }]}
+                            >
+                              <Input placeholder="例如: app" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={6}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'replica']}
+                              label="副本数 (可选)"
+                            >
+                              <InputNumber min={1} max={100} style={{ width: '100%' }} placeholder="可选" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Form.Item
+                          {...restField}
+                          name={[name, 'image']}
+                          label="镜像地址"
+                          tooltip="可选，首个发布步骤若从前序构建获取或固定镜像"
+                        >
+                          <Input placeholder="例如: nginx:alpine" />
+                        </Form.Item>
+                      </Card>
+                    ))}
+                    <Button
+                      type="dashed"
+                      onClick={() =>
+                        add({
+                          workload_type: 'Deployment',
+                          workload_name: '',
+                          container_name: '',
+                          image: '',
+                          replica: 1,
+                        })
+                      }
+                      block
+                      icon={<PlusOutlined />}
+                    >
+                      添加灰度目标负载
+                    </Button>
+                  </Space>
+                )}
+              </Form.List>
+            </Form.Item>
+          </>
+        )}
+
+        {job?.type === 'k8s-gray-rollback' && (
+          <>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="gray_rollback_cluster_id"
+                  label="目标集群"
+                  rules={[{ required: true, message: '请选择集群' }]}
+                >
+                  <Select
+                    showSearch
+                    options={clusterOptions}
+                    placeholder="请选择 Kubernetes 集群"
+                    notFoundContent="暂无可用集群"
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="gray_rollback_namespace"
+                  label="命名空间 (Namespace)"
+                  rules={[{ required: true, message: '请输入命名空间' }]}
+                >
+                  <Input placeholder="例如: default 或 qa-env" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Form.Item
+              name="gray_rollback_timeout"
+              label="回滚超时时间 (分钟)"
+              initialValue={10}
+            >
+              <InputNumber min={1} max={1440} style={{ width: 200 }} />
+            </Form.Item>
+
+            <Form.Item
+              label="回滚目标清单 (可选)"
+              tooltip="可指定具体需要回滚的工作负载，留空则由系统自动检索当前集群命名空间中的灰度状态"
+            >
+              <Form.List name="gray_rollback_targets">
+                {(fields, { add, remove }) => (
+                  <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+                    {fields.map(({ key, name, ...restField }) => (
+                      <Card
+                        key={key}
+                        size="small"
+                        variant="borderless"
+                        style={{ background: 'var(--ant-color-fill-quaternary, #f9f9f9)' }}
+                        title={`回滚项 #${name + 1}`}
+                        extra={
+                          <Button
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => remove(name)}
+                          >
+                            删除
+                          </Button>
+                        }
+                      >
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'workload_type']}
+                              label="负载类型"
+                              initialValue="Deployment"
+                            >
+                              <Select
+                                options={[
+                                  { label: 'Deployment', value: 'Deployment' },
+                                  { label: 'StatefulSet', value: 'StatefulSet' },
+                                ]}
+                              />
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'workload_name']}
+                              label="负载名称"
+                              rules={[{ required: true, message: '请输入工作负载名' }]}
+                            >
+                              <Input placeholder="例如: web-app" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                      </Card>
+                    ))}
+                    <Button
+                      type="dashed"
+                      onClick={() => add({ workload_type: 'Deployment', workload_name: '' })}
+                      block
+                      icon={<PlusOutlined />}
+                    >
+                      添加指定回滚目标
+                    </Button>
+                  </Space>
+                )}
+              </Form.List>
+            </Form.Item>
+          </>
+        )}
+
+        {job?.type === 'istio-release' && (
+          <>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="istio_cluster_id"
+                  label="目标集群"
+                  rules={[{ required: true, message: '请选择集群' }]}
+                >
+                  <Select
+                    showSearch
+                    options={clusterOptions}
+                    placeholder="请选择 Kubernetes 集群"
+                    notFoundContent="暂无可用集群"
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="istio_namespace"
+                  label="命名空间 (Namespace)"
+                  rules={[{ required: true, message: '请输入命名空间' }]}
+                >
+                  <Input placeholder="例如: default 或 qa-env" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row gutter={16}>
+              <Col span={6}>
+                <Form.Item
+                  name="istio_from_job"
+                  label="前序 Istio 任务名称"
+                  tooltip="首个 Istio 发布任务留空；后续推进/全量发布步骤填写首个任务名"
+                >
+                  <Input placeholder="首个任务留空" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item
+                  name="istio_weight"
+                  label="流量权重 (%)"
+                  rules={[{ required: true, message: '请输入 0-100 的权重值' }]}
+                  tooltip="本次发布的流量权重（0-100），最后发布步骤需为 100"
+                  initialValue={30}
+                >
+                  <InputNumber min={0} max={100} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item
+                  name="istio_replica_percentage"
+                  label="副本比例 (%)"
+                  tooltip="可选，灰度实例副本比例"
+                  initialValue={0}
+                >
+                  <InputNumber min={0} max={100} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item
+                  name="istio_timeout"
+                  label="部署超时 (分钟)"
+                  initialValue={10}
+                >
+                  <InputNumber min={1} max={1440} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Form.Item
+              label="Istio 发布目标清单 (Targets)"
+              tooltip="指定通过 Istio 进行流量灰度发布的工作负载"
+            >
+              <Form.List name="istio_targets">
+                {(fields, { add, remove }) => (
+                  <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+                    {fields.map(({ key, name, ...restField }) => (
+                      <Card
+                        key={key}
+                        size="small"
+                        variant="borderless"
+                        style={{ background: 'var(--ant-color-fill-quaternary, #f9f9f9)' }}
+                        title={`发布目标 #${name + 1}`}
+                        extra={
+                          fields.length > 1 ? (
+                            <Button
+                              type="text"
+                              danger
+                              icon={<DeleteOutlined />}
+                              onClick={() => remove(name)}
+                            >
+                              删除
+                            </Button>
+                          ) : null
+                        }
+                      >
+                        <Row gutter={16}>
+                          <Col span={8}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'workload_name']}
+                              label="工作负载名称"
+                              rules={[{ required: true, message: '请输入工作负载名称' }]}
+                            >
+                              <Input placeholder="例如: payment-api" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={8}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'container_name']}
+                              label="容器名称"
+                              rules={[{ required: true, message: '请输入容器名称' }]}
+                            >
+                              <Input placeholder="例如: payment" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={8}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'image']}
+                              label="发布镜像地址"
+                            >
+                              <Input placeholder="例如: payment:v2.0" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                      </Card>
+                    ))}
+                    <Button
+                      type="dashed"
+                      onClick={() => add({ workload_name: '', container_name: '', image: '' })}
+                      block
+                      icon={<PlusOutlined />}
+                    >
+                      添加 Istio 发布目标
+                    </Button>
+                  </Space>
+                )}
+              </Form.List>
+            </Form.Item>
+          </>
+        )}
+
+        {job?.type === 'istio-rollback' && (
+          <>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="istio_rollback_cluster_id"
+                  label="目标集群"
+                  rules={[{ required: true, message: '请选择集群' }]}
+                >
+                  <Select
+                    showSearch
+                    options={clusterOptions}
+                    placeholder="请选择 Kubernetes 集群"
+                    notFoundContent="暂无可用集群"
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="istio_rollback_namespace"
+                  label="命名空间 (Namespace)"
+                  rules={[{ required: true, message: '请输入命名空间' }]}
+                >
+                  <Input placeholder="例如: default 或 qa-env" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Form.Item
+              name="istio_rollback_timeout"
+              label="回滚超时时间 (分钟)"
+              initialValue={10}
+            >
+              <InputNumber min={1} max={1440} style={{ width: 200 }} />
+            </Form.Item>
+
+            <Form.Item
+              label="回滚目标清单 (可选)"
+              tooltip="可指定具体需要回滚的 Istio 路由负载，留空由系统自动检索"
+            >
+              <Form.List name="istio_rollback_targets">
+                {(fields, { add, remove }) => (
+                  <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+                    {fields.map(({ key, name, ...restField }) => (
+                      <Card
+                        key={key}
+                        size="small"
+                        variant="borderless"
+                        style={{ background: 'var(--ant-color-fill-quaternary, #f9f9f9)' }}
+                        title={`回滚项 #${name + 1}`}
+                        extra={
+                          <Button
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => remove(name)}
+                          >
+                            删除
+                          </Button>
+                        }
+                      >
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'workload_name']}
+                              label="工作负载名"
+                              rules={[{ required: true, message: '请输入负载名' }]}
+                            >
+                              <Input placeholder="例如: payment-api" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'container_name']}
+                              label="容器名"
+                              rules={[{ required: true, message: '请输入容器名' }]}
+                            >
+                              <Input placeholder="例如: payment" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                      </Card>
+                    ))}
+                    <Button
+                      type="dashed"
+                      onClick={() => add({ workload_name: '', container_name: '' })}
+                      block
+                      icon={<PlusOutlined />}
+                    >
+                      添加回滚目标
+                    </Button>
+                  </Space>
+                )}
+              </Form.List>
+            </Form.Item>
+          </>
+        )}
+
+        {job?.type === 'update-env-istio-config' && (
+          <>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="istio_base_env"
+                  label="基准环境 (BaseEnv)"
+                  rules={[{ required: true, message: '请选择基准环境' }]}
+                >
+                  <Select
+                    showSearch
+                    options={envOptions}
+                    placeholder="选择基准环境"
+                    notFoundContent="暂无可用环境"
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="istio_production"
+                  label="环境类型"
+                  valuePropName="checked"
+                >
+                  <Switch checkedChildren="生产环境" unCheckedChildren="非生产环境" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item name="istio_source" label="策略来源" initialValue="fixed">
+                  <Radio.Group
+                    options={[
+                      { label: '固定灰度策略 (Fixed)', value: 'fixed' },
+                      { label: '运行时策略 (Runtime)', value: 'runtime' },
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="istio_grayscale_strategy" label="灰度策略类型" initialValue="weight">
+                  <Radio.Group
+                    onChange={(e) => setIstioStrategyType(e.target.value)}
+                    options={[
+                      { label: '权重分流 (Weight)', value: 'weight' },
+                      { label: 'Header 匹配 (HeaderMatch)', value: 'header' },
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            {istioStrategyType === 'weight' && (
+              <Form.Item
+                label="环境流量权重配置 (WeightConfigs)"
+                tooltip="按环境分配流量权重，各环境权重之和应为 100%"
+              >
+                <Form.List name="istio_weight_configs">
+                  {(fields, { add, remove }) => (
+                    <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+                      {fields.map(({ key, name, ...restField }) => (
+                        <Card
+                          key={key}
+                          size="small"
+                          variant="borderless"
+                          style={{ background: 'var(--ant-color-fill-quaternary, #f9f9f9)' }}
+                          title={`权重配置 #${name + 1}`}
+                          extra={
+                            fields.length > 1 ? (
+                              <Button
+                                type="text"
+                                danger
+                                icon={<DeleteOutlined />}
+                                onClick={() => remove(name)}
+                              >
+                                删除
+                              </Button>
+                            ) : null
+                          }
+                        >
+                          <Row gutter={16}>
+                            <Col span={12}>
+                              <Form.Item
+                                {...restField}
+                                name={[name, 'env_name']}
+                                label="环境名称"
+                                rules={[{ required: true, message: '请输入或选择环境' }]}
+                              >
+                                <Select
+                                  showSearch
+                                  options={envOptions}
+                                  placeholder="选择环境"
+                                />
+                              </Form.Item>
+                            </Col>
+                            <Col span={12}>
+                              <Form.Item
+                                {...restField}
+                                name={[name, 'weight']}
+                                label="流量权重 (%)"
+                                rules={[{ required: true, message: '请输入 0-100 的权重值' }]}
+                              >
+                                <InputNumber min={0} max={100} style={{ width: '100%' }} />
+                              </Form.Item>
+                            </Col>
+                          </Row>
+                        </Card>
+                      ))}
+                      <Button
+                        type="dashed"
+                        onClick={() => add({ env_name: '', weight: 50 })}
+                        block
+                        icon={<PlusOutlined />}
+                      >
+                        添加权重环境条目
+                      </Button>
+                    </Space>
+                  )}
+                </Form.List>
+              </Form.Item>
+            )}
+
+            {istioStrategyType === 'header' && (
+              <Form.Item
+                label="Header 请求头匹配规则 (HeaderMatchConfigs)"
+                tooltip="符合匹配规则的请求将分流至灰度环境"
+              >
+                <Form.List name="istio_header_match_configs">
+                  {(fields, { add, remove }) => (
+                    <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+                      {fields.map(({ key, name, ...restField }) => (
+                        <Card
+                          key={key}
+                          size="small"
+                          variant="borderless"
+                          style={{ background: 'var(--ant-color-fill-quaternary, #f9f9f9)' }}
+                          title={`匹配规则 #${name + 1}`}
+                          extra={
+                            fields.length > 1 ? (
+                              <Button
+                                type="text"
+                                danger
+                                icon={<DeleteOutlined />}
+                                onClick={() => remove(name)}
+                              >
+                                删除
+                              </Button>
+                            ) : null
+                          }
+                        >
+                          <Row gutter={16}>
+                            <Col span={12}>
+                              <Form.Item
+                                {...restField}
+                                name={[name, 'key']}
+                                label="Header 键名 (Key)"
+                                rules={[{ required: true, message: '请输入 Header 键' }]}
+                              >
+                                <Input placeholder="例如: x-user-group 或 env" />
+                              </Form.Item>
+                            </Col>
+                            <Col span={12}>
+                              <Form.Item
+                                {...restField}
+                                name={[name, 'value']}
+                                label="Header 匹配值 (Value)"
+                                rules={[{ required: true, message: '请输入 Header 值' }]}
+                              >
+                                <Input placeholder="例如: internal 或 gray" />
+                              </Form.Item>
+                            </Col>
+                          </Row>
+                        </Card>
+                      ))}
+                      <Button
+                        type="dashed"
+                        onClick={() => add({ key: '', value: '' })}
+                        block
+                        icon={<PlusOutlined />}
+                      >
+                        添加 Header 匹配规则
+                      </Button>
+                    </Space>
+                  )}
+                </Form.List>
+              </Form.Item>
+            )}
           </>
         )}
       </Form>

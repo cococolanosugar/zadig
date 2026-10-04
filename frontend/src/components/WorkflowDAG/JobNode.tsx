@@ -14,6 +14,12 @@ import {
   StopOutlined,
   BellOutlined,
   BranchesOutlined,
+  SwapOutlined,
+  SendOutlined,
+  SlidersOutlined,
+  RollbackOutlined,
+  ApartmentOutlined,
+  ControlOutlined,
 } from '@ant-design/icons';
 import type { JobType } from '../../api/workflow';
 
@@ -39,6 +45,22 @@ export const JobNode = memo(({ data }: { data: JobNodeData }) => {
       case 'zadig-vm-deploy':
       case 'custom-deploy':
         return <CloudUploadOutlined style={{ color: '#52c41a' }} />;
+      case 'k8s-blue-green-deploy':
+        return <SwapOutlined style={{ color: '#13c2c2' }} />;
+      case 'k8s-blue-green-release':
+      case 'k8s-canary-release':
+        return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
+      case 'k8s-canary-deploy':
+        return <SendOutlined style={{ color: '#fa8c16' }} />;
+      case 'k8s-gray-release':
+        return <SlidersOutlined style={{ color: '#1890ff' }} />;
+      case 'k8s-gray-rollback':
+      case 'istio-rollback':
+        return <RollbackOutlined style={{ color: '#ff4d4f' }} />;
+      case 'istio-release':
+        return <ApartmentOutlined style={{ color: '#722ed1' }} />;
+      case 'update-env-istio-config':
+        return <ControlOutlined style={{ color: '#13c2c2' }} />;
       case 'k8s-resource-patch':
         return <CodeOutlined style={{ color: '#1890ff' }} />;
       case 'offline-service':
