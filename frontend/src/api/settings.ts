@@ -125,7 +125,10 @@ export interface UserGroupItem {
   group_id?: string;
   name: string;
   description?: string;
-  type?: string;
+  type?: 'system' | 'custom' | string;
+  system_role_names?: string[];
+  user_total?: number;
+  uids?: string[];
 }
 
 export interface RoleItem {
@@ -134,8 +137,20 @@ export interface RoleItem {
   type?: string;
 }
 
-// GET /api/vm/vms — aslan core/vm AgentBriefListResp
+export interface AgentAccessCmdPlatform {
+  amd64?: Record<string, string>;
+  arm64?: Record<string, string>;
+}
+
+export interface AgentAccessCmds {
+  linux_platform?: AgentAccessCmdPlatform;
+  macos_platform?: AgentAccessCmdPlatform;
+  windows_platform?: AgentAccessCmdPlatform;
+}
+
+// GET /api/aslan/vm/vms — aslan core/vm AgentBriefListResp
 export interface VMItem {
+  id?: string;
   name: string;
   label?: string;
   status: string;
@@ -366,11 +381,11 @@ export const settingsApi = {
     return http.delete(`/api/v1/users/${uid}`);
   },
 
-  async getUserGroups(): Promise<UserGroupItem[]> {
+  async getUserGroups(name?: string, pageNum = 1, pageSize = 200): Promise<UserGroupItem[]> {
     try {
-      // 后端 listUserGroupResp {group_list, total}（user_group.go:93-96）；该接口无管理员限制
+      const query = name ? `&name=${encodeURIComponent(name)}` : '';
       const res = await http.get<{ group_list?: UserGroupItem[]; total?: number } | UserGroupItem[]>(
-        '/api/v1/user-group',
+        `/api/v1/user-group?page_num=${pageNum}&page_size=${pageSize}${query}`,
         { skipErrorHandler: true }
       );
       if (Array.isArray(res)) return res;
@@ -378,6 +393,30 @@ export const settingsApi = {
     } catch {
       return [];
     }
+  },
+
+  async createUserGroup(payload: { name: string; description?: string; uids?: string[] }): Promise<UserGroupItem> {
+    return http.post('/api/v1/user-group', payload);
+  },
+
+  async updateUserGroup(id: string, payload: { name: string; description?: string }): Promise<unknown> {
+    return http.put(`/api/v1/user-group/${id}`, payload);
+  },
+
+  async deleteUserGroup(id: string): Promise<unknown> {
+    return http.delete(`/api/v1/user-group/${id}`);
+  },
+
+  async getUserGroupDetail(id: string): Promise<UserGroupItem> {
+    return http.get(`/api/v1/user-group/${id}`);
+  },
+
+  async bulkAddUsersToGroup(id: string, uids: string[]): Promise<unknown> {
+    return http.post(`/api/v1/user-group/${id}/bulk-create-users`, { uids });
+  },
+
+  async bulkRemoveUsersFromGroup(id: string, uids: string[]): Promise<unknown> {
+    return http.post(`/api/v1/user-group/${id}/bulk-delete-users`, { uids });
   },
 
   /** 用户简表：POST /api/v1/users/brief 无管理员限制（区别于 /users/search 仅系统管理员） */
@@ -410,14 +449,73 @@ export const settingsApi = {
     }
   },
 
-  // --- VM Hosts (mounted at /api/vm, not /api/aslan/vm) ---
-  async getVMs(): Promise<VMItem[]> {
+  // --- VM Hosts (mounted at /api/aslan/vm and /api/vm) ---
+  async getVMs(label?: string): Promise<VMItem[]> {
     try {
-      const res = await http.get<VMItem[]>('/api/vm/vms', { skipErrorHandler: true });
+      const query = label ? `?label=${encodeURIComponent(label)}` : '';
+      const res = await http.get<VMItem[]>(`/api/aslan/vm/vms${query}`, { skipErrorHandler: true });
+      const vmList = Array.isArray(res) ? res : [];
+      try {
+        const pks = await http.get<Array<{ id: string; name: string }>>('/api/aslan/system/privateKey/internal', {
+          skipErrorHandler: true,
+        });
+        if (Array.isArray(pks)) {
+          const pkMap = new Map<string, string>();
+          pks.forEach((pk) => {
+            if (pk.name && pk.id) pkMap.set(pk.name, pk.id);
+          });
+          return vmList.map((vm) => ({
+            ...vm,
+            id: vm.id || pkMap.get(vm.name),
+          }));
+        }
+      } catch {
+        // fallback to raw vms
+      }
+      return vmList;
+    } catch {
+      return [];
+    }
+  },
+
+  async getVMLabels(projectName = ''): Promise<string[]> {
+    try {
+      const res = await http.get<string[]>(`/api/aslan/vm/labels?projectName=${projectName}`, { skipErrorHandler: true });
       return Array.isArray(res) ? res : [];
     } catch {
       return [];
     }
+  },
+
+  async createAgentHost(payload: { name: string; label?: string; ip?: string }): Promise<{ vm_id: string }> {
+    return http.post('/api/aslan/system/privateKey', {
+      name: payload.name,
+      label: payload.label || '',
+      ip: payload.ip || '',
+      type: 'agent',
+      agent: {},
+      schedule_workflow: true,
+    });
+  },
+
+  async deleteHost(id: string): Promise<unknown> {
+    return http.delete(`/api/aslan/system/privateKey/${id}`);
+  },
+
+  async getVMAccessCmd(vmId: string): Promise<AgentAccessCmds> {
+    return http.get(`/api/aslan/vm/${vmId}/agent/access`);
+  },
+
+  async offlineVM(vmId: string): Promise<unknown> {
+    return http.put(`/api/aslan/vm/${vmId}/agent/offline`);
+  },
+
+  async recoveryVM(vmId: string): Promise<unknown> {
+    return http.put(`/api/aslan/vm/${vmId}/agent/recovery`);
+  },
+
+  async upgradeVMAgent(vmId: string): Promise<{ upgrade_cmd?: Record<string, string>; upgrade?: boolean }> {
+    return http.put(`/api/aslan/vm/${vmId}/agent/upgrade`);
   },
 
   // --- Helm Chart Repos ---

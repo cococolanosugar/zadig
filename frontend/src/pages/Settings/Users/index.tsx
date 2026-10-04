@@ -13,6 +13,7 @@ import {
   UserOutlined,
   TeamOutlined,
   SafetyCertificateOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import {
   settingsApi,
@@ -22,6 +23,7 @@ import {
 } from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
 import { useAuthStore } from '../../../stores/auth';
+import { GroupMembersDrawer } from './GroupMembersDrawer';
 
 const { Text } = Typography;
 
@@ -31,6 +33,56 @@ export const UsersPage: React.FC = () => {
   const groupActionRef = useRef<ActionType>(null);
   const userInfo = useAuthStore((state) => state.userInfo);
   const currentAccount = userInfo?.account || '';
+
+  // User Group management state
+  const [selectedGroupForMembers, setSelectedGroupForMembers] = useState<UserGroupItem | null>(null);
+  const [membersDrawerOpen, setMembersDrawerOpen] = useState<boolean>(false);
+  const [editingGroup, setEditingGroup] = useState<UserGroupItem | null>(null);
+  const [editGroupModalVisible, setEditGroupModalVisible] = useState<boolean>(false);
+
+  const handleCreateGroup = async (values: Record<string, unknown>) => {
+    try {
+      await settingsApi.createUserGroup({
+        name: values.name as string,
+        description: values.description as string,
+        uids: [],
+      });
+      feedback.message.success('用户组创建成功！');
+      groupActionRef.current?.reload();
+      return true;
+    } catch (err: any) {
+      feedback.message.error(err?.response?.data?.message || err?.message || '创建用户组失败');
+      return false;
+    }
+  };
+
+  const handleUpdateGroup = async (values: Record<string, unknown>) => {
+    if (!editingGroup) return false;
+    try {
+      await settingsApi.updateUserGroup(editingGroup.id, {
+        name: values.name as string,
+        description: values.description as string,
+      });
+      feedback.message.success('用户组信息更新成功！');
+      setEditGroupModalVisible(false);
+      setEditingGroup(null);
+      groupActionRef.current?.reload();
+      return true;
+    } catch (err: any) {
+      feedback.message.error(err?.response?.data?.message || err?.message || '更新用户组失败');
+      return false;
+    }
+  };
+
+  const handleDeleteGroup = async (id: string, name: string) => {
+    try {
+      await settingsApi.deleteUserGroup(id);
+      feedback.message.success(`用户组「${name}」已成功删除`);
+      groupActionRef.current?.reload();
+    } catch (err: any) {
+      feedback.message.error(err?.response?.data?.message || err?.message || '删除用户组失败');
+    }
+  };
 
   const handleDeleteUser = async (uid: string) => {
     try {
@@ -123,18 +175,103 @@ export const UsersPage: React.FC = () => {
       title: '用户组名称',
       dataIndex: 'name',
       key: 'name',
-      render: (text) => (
+      render: (text, record) => (
         <Space orientation="horizontal">
           <TeamOutlined style={{ color: '#52c41a' }} />
           <Text strong>{String(text)}</Text>
+          {record.type === 'system' && <Tag color="blue">系统预设</Tag>}
         </Space>
       ),
     },
     {
-      title: '描述',
+      title: '描述说明',
       dataIndex: 'description',
       key: 'description',
       render: (text) => <Text type="secondary">{String(text || '无描述')}</Text>,
+    },
+    {
+      title: '成员总数',
+      dataIndex: 'user_total',
+      key: 'user_total',
+      width: 120,
+      render: (val, record) => (
+        <Button
+          type="link"
+          size="small"
+          onClick={() => {
+            setSelectedGroupForMembers(record);
+            setMembersDrawerOpen(true);
+          }}
+        >
+          {`${val ?? 0} 人`}
+        </Button>
+      ),
+    },
+    {
+      title: '关联系统角色',
+      dataIndex: 'system_role_names',
+      key: 'system_role_names',
+      render: (_, record) => {
+        const roles = record.system_role_names;
+        if (!roles || roles.length === 0) return <Text type="secondary">-</Text>;
+        return (
+          <Space wrap size={[4, 4]}>
+            {roles.map((r, i) => (
+              <Tag key={i} color="orange">
+                {r}
+              </Tag>
+            ))}
+          </Space>
+        );
+      },
+    },
+    {
+      title: '操作',
+      valueType: 'option',
+      key: 'option',
+      width: 200,
+      render: (_, record) => [
+        <Button
+          key="members"
+          type="link"
+          size="small"
+          icon={<TeamOutlined />}
+          onClick={() => {
+            setSelectedGroupForMembers(record);
+            setMembersDrawerOpen(true);
+          }}
+        >
+          成员管理
+        </Button>,
+        record.type !== 'system' ? (
+          <Button
+            key="edit"
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => {
+              setEditingGroup(record);
+              setEditGroupModalVisible(true);
+            }}
+          >
+            编辑
+          </Button>
+        ) : null,
+        record.type !== 'system' ? (
+          <Popconfirm
+            key="delete"
+            title="确定删除此用户组？"
+            description={`删除「${record.name}」后，关联该组的权限策略将失效。`}
+            onConfirm={() => handleDeleteGroup(record.id, record.name)}
+            okText="删除"
+            cancelText="取消"
+          >
+            <Button key="del" type="link" size="small" danger icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
+        ) : null,
+      ],
     },
   ];
 
@@ -267,6 +404,31 @@ export const UsersPage: React.FC = () => {
                   };
                 }}
                 columns={groupColumns}
+                toolBarRender={() => [
+                  <ModalForm
+                    key="add-group"
+                    title="新建用户组"
+                    trigger={
+                      <Button type="primary" icon={<PlusOutlined />}>
+                        新建用户组
+                      </Button>
+                    }
+                    width={480}
+                    onFinish={handleCreateGroup}
+                  >
+                    <ProFormText
+                      name="name"
+                      label="用户组名称"
+                      placeholder="例如: 前端开发组 / QA测试组"
+                      rules={[{ required: true, message: '请输入用户组名称' }]}
+                    />
+                    <ProFormText
+                      name="description"
+                      label="描述说明"
+                      placeholder="用户组职能或负责业务域说明"
+                    />
+                  </ModalForm>,
+                ]}
               />
             ),
           },
@@ -296,6 +458,42 @@ export const UsersPage: React.FC = () => {
             ),
           },
         ]}
+      />
+
+      {/* Edit Group Modal */}
+      <ModalForm
+        title={`编辑用户组: ${editingGroup?.name || ''}`}
+        open={editGroupModalVisible}
+        onOpenChange={setEditGroupModalVisible}
+        width={480}
+        initialValues={editingGroup ? { name: editingGroup.name, description: editingGroup.description } : undefined}
+        params={{ id: editingGroup?.id }}
+        request={async () => ({
+          name: editingGroup?.name || '',
+          description: editingGroup?.description || '',
+        })}
+        onFinish={handleUpdateGroup}
+      >
+        <ProFormText
+          name="name"
+          label="用户组名称"
+          rules={[{ required: true, message: '请输入用户组名称' }]}
+        />
+        <ProFormText
+          name="description"
+          label="描述说明"
+        />
+      </ModalForm>
+
+      {/* Members Management Drawer */}
+      <GroupMembersDrawer
+        open={membersDrawerOpen}
+        onClose={() => {
+          setMembersDrawerOpen(false);
+          setSelectedGroupForMembers(null);
+        }}
+        group={selectedGroupForMembers}
+        onSuccess={() => groupActionRef.current?.reload()}
       />
     </div>
   );
