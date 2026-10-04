@@ -410,6 +410,44 @@ export const settingsApi = {
   async testProxyConnection(payload: ProxyConfig): Promise<unknown> {
     return http.post('/api/aslan/system/proxyManage/connectionTest', payload);
   },
+
+  // --- Capacity Strategy & Cleanup (pkg/microservice/aslan/core/system/handler/capacity.go) ---
+  async getCapacityStrategy(target = 'WorkflowTaskRetention'): Promise<CapacityStrategy> {
+    return http.get<CapacityStrategy>(`/api/aslan/system/capacity/target/${encodeURIComponent(target)}`);
+  },
+
+  async updateCapacityStrategy(payload: CapacityStrategy): Promise<unknown> {
+    return http.post('/api/aslan/system/capacity', payload);
+  },
+
+  async runSystemGC(dryRun = false): Promise<unknown> {
+    return http.post('/api/aslan/system/capacity/gc', { dryrun: dryRun });
+  },
+
+  async cleanSystemCache(): Promise<unknown> {
+    return http.post('/api/aslan/system/capacity/clean');
+  },
+
+  // --- System Language Persistence (pkg/microservice/aslan/core/system/handler/language.go) ---
+  async getSystemLanguage(): Promise<string> {
+    const res = await http.get<{ language: string }>('/api/aslan/system/language');
+    return res.language;
+  },
+
+  async setSystemLanguage(language: string): Promise<unknown> {
+    return http.put('/api/aslan/system/language', { language });
+  },
 };
+
+export interface CapacityRetention {
+  max_days: number;
+  max_items: number;
+}
+
+export interface CapacityStrategy {
+  id?: string;
+  target: string;
+  retention?: CapacityRetention;
+}
 
 export default settingsApi;

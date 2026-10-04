@@ -37,6 +37,23 @@ export const releasePlanApi = {
   async deletePlan(id: string): Promise<void> {
     await http.delete(`/api/aslan/release_plan/v1/${id}`);
   },
+
+  // --- Release Plan Hook Setting (pkg/microservice/aslan/core/release_plan/handler/router.go:46-47) ---
+  async getHookSettings(): Promise<ReleasePlanHookSettings> {
+    return http.get<ReleasePlanHookSettings>('/api/aslan/release_plan/v1/hook/setting');
+  },
+
+  async updateHookSettings(payload: ReleasePlanHookSettings): Promise<void> {
+    await http.put('/api/aslan/release_plan/v1/hook/setting', payload);
+  },
 };
+
+export interface ReleasePlanHookSettings {
+  enable: boolean;
+  enable_call_back: boolean;
+  hook_address: string;
+  hook_secret: string;
+  hook_events: string[];
+}
 
 export default releasePlanApi;

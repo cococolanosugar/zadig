@@ -15,6 +15,9 @@ import {
   Descriptions,
   Popconfirm,
   Badge,
+  Switch,
+  Checkbox,
+  Spin,
 } from 'antd';
 import {
   ScheduleOutlined,
@@ -25,6 +28,7 @@ import {
   ReloadOutlined,
   CalendarOutlined,
   InfoCircleOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
@@ -50,6 +54,12 @@ export const ReleasePlanPage: React.FC = () => {
   const [createModalVisible, setCreateModalVisible] = useState<boolean>(false);
   const [creating, setCreating] = useState<boolean>(false);
   const [form] = Form.useForm();
+
+  // Hook Settings Modal state
+  const [hookModalVisible, setHookModalVisible] = useState<boolean>(false);
+  const [hookLoading, setHookLoading] = useState<boolean>(false);
+  const [savingHook, setSavingHook] = useState<boolean>(false);
+  const [hookForm] = Form.useForm();
 
   // Drawer state
   const [detailDrawerVisible, setDetailDrawerVisible] = useState<boolean>(false);
@@ -120,6 +130,46 @@ export const ReleasePlanPage: React.FC = () => {
       fetchPlans();
     } catch (err: any) {
       feedback.message.error(err?.message || '删除发布计划失败');
+    }
+  };
+
+  const handleOpenHookModal = async () => {
+    setHookModalVisible(true);
+    setHookLoading(true);
+    try {
+      const data = await releasePlanApi.getHookSettings();
+      hookForm.setFieldsValue({
+        enable: data.enable ?? false,
+        enable_call_back: data.enable_call_back ?? false,
+        hook_address: data.hook_address || '',
+        hook_secret: data.hook_secret || '',
+        hook_events: data.hook_events || [],
+      });
+    } catch (err: any) {
+      feedback.message.error(err?.response?.data?.message || err?.message || '获取 Hook 设置失败');
+    } finally {
+      setHookLoading(false);
+    }
+  };
+
+  const handleSaveHook = async () => {
+    try {
+      const values = await hookForm.validateFields();
+      setSavingHook(true);
+      await releasePlanApi.updateHookSettings({
+        enable: Boolean(values.enable),
+        enable_call_back: Boolean(values.enable_call_back),
+        hook_address: values.hook_address || '',
+        hook_secret: values.hook_secret || '',
+        hook_events: values.hook_events || [],
+      });
+      feedback.message.success('发布计划 Hook 设置保存成功');
+      setHookModalVisible(false);
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      feedback.message.error(err?.response?.data?.message || err?.message || '保存 Hook 设置失败');
+    } finally {
+      setSavingHook(false);
     }
   };
 
@@ -254,6 +304,9 @@ export const ReleasePlanPage: React.FC = () => {
           />
           <Button icon={<ReloadOutlined />} onClick={fetchPlans} loading={loading}>
             刷新
+          </Button>
+          <Button icon={<SettingOutlined />} onClick={handleOpenHookModal}>
+            Hook 设置
           </Button>
           <Button
             type="primary"
@@ -401,6 +454,84 @@ export const ReleasePlanPage: React.FC = () => {
           </div>
         )}
       </Drawer>
+
+      {/* Hook Settings Modal */}
+      <Modal
+        title="发布计划 Hook 设置"
+        open={hookModalVisible}
+        onOk={handleSaveHook}
+        onCancel={() => setHookModalVisible(false)}
+        confirmLoading={savingHook}
+        okText="保存配置"
+        cancelText="取消"
+        width={580}
+      >
+        <Spin spinning={hookLoading}>
+          <Form
+            form={hookForm}
+            layout="vertical"
+            style={{ marginTop: 16 }}
+            initialValues={{
+              enable: false,
+              enable_call_back: false,
+              hook_events: [],
+            }}
+          >
+            <Form.Item
+              name="enable"
+              label="启用 Webhook 事件通知"
+              valuePropName="checked"
+              extra="开启后，发布计划状态变更时将向目标地址发送 HTTP POST Webhook 请求。"
+            >
+              <Switch />
+            </Form.Item>
+            <Form.Item
+              name="hook_address"
+              label="Webhook 地址"
+              rules={[
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    if (getFieldValue('enable') && !value) {
+                      return Promise.reject(new Error('启用通知时必须填写 Webhook 地址'));
+                    }
+                    return Promise.resolve();
+                  },
+                }),
+              ]}
+            >
+              <Input placeholder="https://api.example.com/webhook/release" />
+            </Form.Item>
+            <Form.Item
+              name="hook_secret"
+              label="签名密钥 (Secret)"
+              extra="用于生成 X-Zadig-Signature 请求签名防篡改校验，可选。"
+            >
+              <Input.Password placeholder="输入签名校验密钥" />
+            </Form.Item>
+            <Form.Item
+              name="hook_events"
+              label="触发事件类型"
+              extra="勾选需要向 Webhook 发送通知的发布阶段事件。"
+            >
+              <Checkbox.Group
+                options={[
+                  { label: '完成规划 (finish_planning)', value: 'finish_planning' },
+                  { label: '开始执行 (start_execute)', value: 'start_execute' },
+                  { label: '所有任务完成 (all_job_done)', value: 'all_job_done' },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item
+              name="enable_call_back"
+              label="开启回调状态接收 (Callback)"
+              valuePropName="checked"
+              extra="允许外部系统通过回调接口更新发布计划状态或注入审批结果。"
+            >
+              <Switch />
+            </Form.Item>
+          </Form>
+        </Spin>
+      </Modal>
     </div>
   );
 };
