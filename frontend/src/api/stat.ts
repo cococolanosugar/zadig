@@ -90,6 +90,47 @@ export interface AiAnalysisResp {
   token_num?: number;
 }
 
+export interface StatDashboardConfig {
+  id: string;
+  type: 'efficiency' | 'quality' | string;
+  name: string;
+  source: 'zadig' | 'external' | string;
+  function: string;
+  weight: number;
+  api_config?: {
+    external_system_id: string;
+    api_path: string;
+    queries?: Array<{ key: string; value: string }>;
+  };
+}
+
+export interface StatDashboardItem {
+  type: string;
+  id: string;
+  data: number | string | boolean | null;
+  score: number;
+  error?: string;
+  has_value: boolean;
+}
+
+export interface StatDashboardByProject {
+  project_key: string;
+  project_name: string;
+  score: number;
+  facts: StatDashboardItem[];
+}
+
+export interface StatDashboardBasicData {
+  build_total: number;
+  build_success: number;
+  test_total: number;
+  test_success: number;
+  deploy_total: number;
+  deploy_success: number;
+  production_deploy_total: number;
+  production_deploy_success: number;
+}
+
 export const statApi = {
   // --- Group A: 质量/效能度量 (POST /stat/quality/* & GET /stat/v2/quality/rollback/stat) ---
   // 0. 构建健康度 (成功/失败总数)
@@ -143,6 +184,45 @@ export const statApi = {
   // 8. 触发 AI 统计分析
   getAiAnalysis(body: AiAnalysisReq): Promise<AiAnalysisResp> {
     return http.post('/api/aslan/stat/v2/ai/analysis', body);
+  },
+
+  // --- Group C: 效能看板与指标配置 (v2 config & dashboard) ---
+  // 9. 获取看板指标配置列表
+  listDashboardConfigs(): Promise<StatDashboardConfig[]> {
+    return http
+      .get<{ configs: StatDashboardConfig[] }>('/api/aslan/stat/v2/config')
+      .then((res) => (Array.isArray(res?.configs) ? res.configs : []));
+  },
+
+  // 10. 创建看板指标配置
+  createDashboardConfig(payload: StatDashboardConfig): Promise<unknown> {
+    return http.post('/api/aslan/stat/v2/config', payload);
+  },
+
+  // 11. 更新看板指标配置
+  updateDashboardConfig(id: string, payload: StatDashboardConfig): Promise<unknown> {
+    return http.put(`/api/aslan/stat/v2/config/${id}`, payload);
+  },
+
+  // 12. 删除看板指标配置 (移除指标项)
+  deleteDashboardConfig(id: string): Promise<unknown> {
+    return http.delete(`/api/aslan/stat/v2/config/${id}`);
+  },
+
+  // 13. 获取自定义看板项目评分及事实数据
+  getStatsDashboard(startTime: number, endTime: number): Promise<StatDashboardByProject[]> {
+    return http
+      .get<{ dashboard: StatDashboardByProject[] }>(
+        `/api/aslan/stat/v2/dashboard?start_time=${startTime}&end_time=${endTime}`
+      )
+      .then((res) => (Array.isArray(res?.dashboard) ? res.dashboard : []));
+  },
+
+  // 14. 获取全局基础效能概览
+  getStatsDashboardGeneral(startTime: number, endTime: number): Promise<StatDashboardBasicData> {
+    return http.get<StatDashboardBasicData>(
+      `/api/aslan/stat/v2/dashboard/general?start_time=${startTime}&end_time=${endTime}`
+    );
   },
 };
 
