@@ -16,6 +16,7 @@ import {
 } from 'antd';
 import { SaveOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { workflowApi, type WorkflowJob } from '../../api/workflow';
+import { settingsApi } from '../../api/settings';
 import { feedback } from '../../utils/feedback';
 import YamlEditor from '../Editor/YamlEditor';
 import http from '../../api/client';
@@ -47,6 +48,9 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
   const [notificationWebhookType, setNotificationWebhookType] = useState<string>('dingding');
   const [deployType, setDeployType] = useState<'k8s' | 'helm'>('k8s');
   const [vmDeploySource, setVmDeploySource] = useState<'runtime' | 'fromjob'>('runtime');
+  const [approvalType, setApprovalType] = useState<string>('native');
+  const [approvalSource, setApprovalSource] = useState<string>('runtime');
+  const [userOptions, setUserOptions] = useState<Array<{ label: string; value: string; name: string }>>([]);
   const [mergingImage, setMergingImage] = useState(false);
   const [validatingSQL, setValidatingSQL] = useState(false);
 
@@ -63,6 +67,16 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
       const bgSrc = (job.spec?.source as 'runtime' | 'fixed') || 'runtime';
       const iStrat = (job.spec?.grayscale_strategy as 'weight' | 'header') || 'weight';
       setIstioStrategyType(iStrat);
+
+      const appType = (job.spec?.type as string) || 'native';
+      setApprovalType(appType);
+      const appSrc = (job.spec?.source as string) || 'runtime';
+      setApprovalSource(appSrc);
+      const nativeApp = (job.spec?.native_approval as Record<string, any>) || {};
+      const nativeUsers = Array.isArray(nativeApp.approve_users)
+        ? nativeApp.approve_users.map((u: any) => u.user_id || u.uid || u.user_name).filter(Boolean)
+        : [];
+      const appTimeoutHours = Math.round(Number(job.spec?.timeout || nativeApp.timeout || 1440) / 60) || 24;
 
       form.setFieldsValue({
         name: job.name,
@@ -191,14 +205,38 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         istio_header_match_configs: Array.isArray(job.spec?.header_match_configs) && job.spec.header_match_configs.length > 0
           ? job.spec.header_match_configs
           : [{ key: 'x-env', value: 'gray' }],
+        // approval
+        approval_title: (job.spec?.approval_title as string) || '',
+        approval_type: appType,
+        approval_source: appSrc,
+        approval_job_name: (job.spec?.job_name as string) || '',
+        approval_timeout: appTimeoutHours,
+        needed_approvers: Number(nativeApp.needed_approvers) || 1,
+        approve_users: nativeUsers,
+        description: (job.spec?.description as string) || '',
       });
     }
   }, [job, form]);
 
-  // 按需加载环境/测试/扫描/集群/服务列表
+  // 按需加载环境/测试/扫描/集群/服务列表/审批用户列表
   useEffect(() => {
     if (!visible || !job) return;
     const projectName = job.spec?.project_name as string | undefined;
+    // 审批用户列表
+    if (job.type === 'approval') {
+      settingsApi
+        .getUsersBrief()
+        .then((users) => {
+          setUserOptions(
+            users.map((u) => ({
+              label: `${u.name || u.account}${u.email ? ` (${u.email})` : ''}`,
+              value: u.uid || u.account,
+              name: u.name || u.account,
+            }))
+          );
+        })
+        .catch(() => setUserOptions([]));
+    }
     // 环境列表
     if (
       job.type === 'zadig-deploy' ||
@@ -556,6 +594,32 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
                 values.istio_grayscale_strategy === 'header' && Array.isArray(values.istio_header_match_configs)
                   ? values.istio_header_match_configs
                   : [],
+            }
+          : {}),
+        // approval
+        ...(job.type === 'approval'
+          ? {
+              type: (values.approval_type as string) || 'native',
+              source: (values.approval_source as string) || 'runtime',
+              job_name: values.approval_source === 'fromjob' ? (values.approval_job_name as string) : undefined,
+              origin_job_name: values.approval_source === 'fromjob' ? (values.approval_job_name as string) : undefined,
+              approval_title: (values.approval_title as string) || '',
+              description: (values.description as string) || '',
+              timeout: (Number(values.approval_timeout) || 24) * 60,
+              native_approval: {
+                timeout: (Number(values.approval_timeout) || 24) * 60,
+                needed_approvers: Number(values.needed_approvers) || 1,
+                approve_users: Array.isArray(values.approve_users)
+                  ? values.approve_users.map((uid: string) => {
+                      const matched = userOptions.find((u) => u.value === uid);
+                      return {
+                        type: 'user',
+                        user_id: uid,
+                        user_name: matched ? matched.name : uid,
+                      };
+                    })
+                  : [],
+              },
             }
           : {}),
       },
@@ -1126,18 +1190,105 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         {job?.type === 'approval' && (
           <>
             <Form.Item
+              name="approval_title"
+              label="审批标题"
+              rules={[{ required: true, message: '请输入审批标题' }]}
+            >
+              <Input placeholder="例如: 生产环境发布前置审批" />
+            </Form.Item>
+
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item name="approval_type" label="审批方式" initialValue="native">
+                  <Radio.Group
+                    onChange={(e) => setApprovalType(e.target.value)}
+                    options={[
+                      { label: '平台原生', value: 'native' },
+                      { label: '飞书审批', value: 'lark' },
+                      { label: '钉钉审批', value: 'dingtalk' },
+                      { label: '企业微信', value: 'workwx' },
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="approval_source" label="审批人来源" initialValue="runtime">
+                  <Radio.Group
+                    onChange={(e) => setApprovalSource(e.target.value)}
+                    options={[
+                      { label: '运行时指定', value: 'runtime' },
+                      { label: '从前序任务获取', value: 'fromjob' },
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            {approvalSource === 'fromjob' && (
+              <Form.Item
+                name="approval_job_name"
+                label="前序任务名称"
+                rules={[{ required: true, message: '请输入前序任务名称' }]}
+              >
+                <Input placeholder="例如: approval-decision-job" />
+              </Form.Item>
+            )}
+
+            {approvalSource === 'runtime' && approvalType === 'native' && (
+              <Row gutter={16}>
+                <Col span={16}>
+                  <Form.Item
+                    name="approve_users"
+                    label="审批人"
+                    tooltip="仅审批人可执行审批"
+                    rules={[{ required: true, message: '请选择审批人' }]}
+                  >
+                    <Select
+                      mode="multiple"
+                      showSearch={{ optionFilterProp: 'label' }}
+                      placeholder="请选择审批人员"
+                      options={userOptions}
+                      notFoundContent="暂无用户"
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name="needed_approvers"
+                    label="会签人数"
+                    tooltip="其中一名审批人同意或拒绝即可（若会签人数为1）"
+                    initialValue={1}
+                    rules={[{ required: true, message: '请输入会签人数' }]}
+                  >
+                    <InputNumber min={1} max={100} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+            )}
+
+            {approvalSource === 'runtime' && approvalType !== 'native' && (
+              <Form.Item label="第三方平台审批">
+                <Typography.Text type="secondary">
+                  当前选择的是 {approvalType === 'lark' ? '飞书' : approvalType === 'dingtalk' ? '钉钉' : '企业微信'} 审批模式，工作流执行至本步骤时将向对应审批应用自动发起审批单。
+                </Typography.Text>
+              </Form.Item>
+            )}
+
+            <Form.Item
+              name="approval_timeout"
+              label="审批超时 (小时，超时自动终止)"
+              initialValue={24}
+              rules={[{ required: true, message: '请输入审批超时时间' }]}
+            >
+              <InputNumber min={1} max={168} style={{ width: 140 }} />
+            </Form.Item>
+
+            <Form.Item
               name="description"
               label="审批说明"
               rules={[{ required: true, message: '请输入审批说明' }]}
             >
               <Input.TextArea rows={3} placeholder="说明本次发布审批的背景与影响范围" />
-            </Form.Item>
-            <Form.Item
-              name="approve_timeout"
-              label="审批超时 (小时，超时自动终止)"
-              initialValue={24}
-            >
-              <InputNumber min={1} max={168} style={{ width: 140 }} />
             </Form.Item>
           </>
         )}
