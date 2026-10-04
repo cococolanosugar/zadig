@@ -420,6 +420,250 @@ export const environmentApi = {
       return false;
     }
   },
+
+  /**
+   * Check whether workloads have K8s Services.
+   * GET /api/aslan/environment/environments/:name/check/workloads/k8services?projectName=&production=
+   * pkg/microservice/aslan/core/environment/handler/router.go:190
+   */
+  async checkWorkloadsK8sServices(
+    projectName: string,
+    envName: string,
+    production = false
+  ): Promise<string[]> {
+    const prodParam = production ? '&production=true' : '';
+    const res = await http.get<string[]>(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/check/workloads/k8services?projectName=${encodeURIComponent(projectName)}${prodParam}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * Enable share env (self-test mode).
+   * POST /api/aslan/environment/environments/:name/share/enable?projectName=
+   * pkg/microservice/aslan/core/environment/handler/router.go:191
+   */
+  async enableShareEnv(projectName: string, envName: string): Promise<void> {
+    return http.post(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/share/enable?projectName=${encodeURIComponent(projectName)}`
+    );
+  },
+
+  /**
+   * Disable share env (self-test mode).
+   * DELETE /api/aslan/environment/environments/:name/share/enable?projectName=
+   * pkg/microservice/aslan/core/environment/handler/router.go:192
+   */
+  async disableShareEnv(projectName: string, envName: string): Promise<void> {
+    return http.delete(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/share/enable?projectName=${encodeURIComponent(projectName)}`
+    );
+  },
+
+  /**
+   * Check share env ready status (op: 'enable' | 'disable').
+   * GET /api/aslan/environment/environments/:name/check/sharenv/:op/ready?projectName=
+   * pkg/microservice/aslan/core/environment/handler/router.go:193
+   */
+  async checkShareEnvReady(
+    projectName: string,
+    envName: string,
+    op: 'enable' | 'disable'
+  ): Promise<ShareEnvReadyResponse> {
+    return http.get<ShareEnvReadyResponse>(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/check/sharenv/${op}/ready?projectName=${encodeURIComponent(projectName)}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Get portal service configuration for share env.
+   * GET /api/aslan/environment/environments/:name/share/portal/:serviceName?projectName=
+   * pkg/microservice/aslan/core/environment/handler/router.go:194
+   */
+  async getPortalService(
+    projectName: string,
+    envName: string,
+    serviceName: string
+  ): Promise<PortalServiceResponse> {
+    return http.get<PortalServiceResponse>(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/share/portal/${encodeURIComponent(serviceName)}?projectName=${encodeURIComponent(projectName)}`
+    );
+  },
+
+  /**
+   * Setup portal service configuration for share env.
+   * POST /api/aslan/environment/environments/:name/share/portal/:serviceName?projectName=
+   * pkg/microservice/aslan/core/environment/handler/router.go:195
+   */
+  async setupPortalService(
+    projectName: string,
+    envName: string,
+    serviceName: string,
+    servers: PortalServerConfig[]
+  ): Promise<void> {
+    return http.post(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/share/portal/${encodeURIComponent(serviceName)}?projectName=${encodeURIComponent(projectName)}`,
+      servers
+    );
+  },
+
+  /**
+   * Enable Istio grayscale release for production environment.
+   * POST /api/aslan/environment/environments/:name/istioGrayscale/enable?projectName=&production=true
+   * pkg/microservice/aslan/core/environment/handler/router.go:197
+   */
+  async enableIstioGrayscale(projectName: string, envName: string): Promise<void> {
+    return http.post(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/istioGrayscale/enable?projectName=${encodeURIComponent(projectName)}&production=true`
+    );
+  },
+
+  /**
+   * Disable Istio grayscale release for production environment.
+   * DELETE /api/aslan/environment/environments/:name/istioGrayscale/enable?projectName=&production=true
+   * pkg/microservice/aslan/core/environment/handler/router.go:198
+   */
+  async disableIstioGrayscale(projectName: string, envName: string): Promise<void> {
+    return http.delete(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/istioGrayscale/enable?projectName=${encodeURIComponent(projectName)}&production=true`
+    );
+  },
+
+  /**
+   * Check Istio grayscale ready status (op: 'enable' | 'disable').
+   * GET /api/aslan/environment/environments/:name/check/istioGrayscale/:op/ready?projectName=&production=true
+   * pkg/microservice/aslan/core/environment/handler/router.go:199
+   */
+  async checkIstioGrayscaleReady(
+    projectName: string,
+    envName: string,
+    op: 'enable' | 'disable'
+  ): Promise<IstioGrayscaleReadyResponse> {
+    return http.get<IstioGrayscaleReadyResponse>(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/check/istioGrayscale/${op}/ready?projectName=${encodeURIComponent(projectName)}&production=true`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * Get Istio grayscale configuration.
+   * GET /api/aslan/environment/environments/:name/istioGrayscale/config?projectName=&production=true
+   * pkg/microservice/aslan/core/environment/handler/router.go:200
+   */
+  async getIstioGrayscaleConfig(
+    projectName: string,
+    envName: string
+  ): Promise<IstioGrayscaleConfig> {
+    return http.get<IstioGrayscaleConfig>(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/istioGrayscale/config?projectName=${encodeURIComponent(projectName)}&production=true`
+    );
+  },
+
+  /**
+   * Set Istio grayscale configuration.
+   * POST /api/aslan/environment/environments/:name/istioGrayscale/config?projectName=&production=true
+   * pkg/microservice/aslan/core/environment/handler/router.go:201
+   */
+  async setIstioGrayscaleConfig(
+    projectName: string,
+    envName: string,
+    data: SetIstioGrayscaleConfigPayload
+  ): Promise<void> {
+    return http.post(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/istioGrayscale/config?projectName=${encodeURIComponent(projectName)}&production=true`,
+      data
+    );
+  },
+
+  /**
+   * Get portal service for Istio grayscale.
+   * GET /api/aslan/environment/environments/:name/istioGrayscale/portal/:serviceName?projectName=&production=true
+   * pkg/microservice/aslan/core/environment/handler/router.go:202
+   */
+  async getIstioGrayscalePortalService(
+    projectName: string,
+    envName: string,
+    serviceName: string
+  ): Promise<PortalServiceResponse> {
+    return http.get<PortalServiceResponse>(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/istioGrayscale/portal/${encodeURIComponent(serviceName)}?projectName=${encodeURIComponent(projectName)}&production=true`
+    );
+  },
+
+  /**
+   * Setup portal service for Istio grayscale.
+   * POST /api/aslan/environment/environments/:name/istioGrayscale/portal/:serviceName?projectName=&production=true
+   * pkg/microservice/aslan/core/environment/handler/router.go:203
+   */
+  async setupIstioGrayscalePortalService(
+    projectName: string,
+    envName: string,
+    serviceName: string,
+    servers: PortalServerConfig[]
+  ): Promise<void> {
+    return http.post(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/istioGrayscale/portal/${encodeURIComponent(serviceName)}?projectName=${encodeURIComponent(projectName)}&production=true`,
+      servers
+    );
+  },
+
+  /**
+   * Check if Istio is installed on the cluster.
+   * GET /api/aslan/cluster/istio/check/:id
+   * pkg/microservice/aslan/core/multicluster/handler/router.go:59
+   */
+  async checkClusterIstio(clusterId?: string): Promise<boolean> {
+    try {
+      let targetClusterId = clusterId;
+      if (!targetClusterId) {
+        const clusters = await http.get<Array<{ id?: string; _id?: string; local?: boolean }>>(
+          '/api/aslan/cluster/clusters',
+          { skipErrorHandler: true }
+        );
+        const localCluster = (Array.isArray(clusters) ? clusters : []).find((c) => c.local) || clusters?.[0];
+        targetClusterId = localCluster?.id || localCluster?._id;
+      }
+      if (!targetClusterId) return false;
+      const res = await http.get<boolean>(
+        `/api/aslan/cluster/istio/check/${encodeURIComponent(targetClusterId)}`,
+        { skipErrorHandler: true }
+      );
+      return Boolean(res);
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * List canary deployment service info in cluster/namespace.
+   * GET /api/aslan/environment/kube/canary_service/cluster/:clusterID/namespace/:namespace
+   * pkg/microservice/aslan/core/environment/handler/router.go:123
+   */
+  async getCanaryServices(
+    clusterId: string,
+    namespace: string
+  ): Promise<CanaryDeploymentServiceInfo[]> {
+    let targetClusterId = clusterId;
+    if (!targetClusterId) {
+      try {
+        const clusters = await http.get<Array<{ id?: string; _id?: string; local?: boolean }>>(
+          '/api/aslan/cluster/clusters',
+          { skipErrorHandler: true }
+        );
+        const localCluster = (Array.isArray(clusters) ? clusters : []).find((c) => c.local) || clusters?.[0];
+        targetClusterId = localCluster?.id || localCluster?._id || '';
+      } catch {
+        // ignore
+      }
+    }
+    const res = await http.get<CanaryDeploymentServiceInfo[]>(
+      `/api/aslan/environment/kube/canary_service/cluster/${encodeURIComponent(targetClusterId)}/namespace/${encodeURIComponent(namespace)}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
+  },
 };
 
 export interface AvailableNamespace {
@@ -553,4 +797,101 @@ export interface SvcDiffResult {
   error?: string;
 }
 
+export interface ShareEnvReadyChecks {
+  namespace_has_istio_label: boolean;
+  virtualservice_deployed: boolean;
+  pods_have_istio_proxy: boolean;
+  workloads_ready: boolean;
+  workloads_have_k8s_service: boolean;
+}
+
+export interface ShareEnvReadyResponse {
+  is_ready: boolean;
+  checks?: ShareEnvReadyChecks;
+}
+
+export interface IstioGrayscaleChecks {
+  namespace_has_istio_label: boolean;
+  pods_have_istio_proxy: boolean;
+  workloads_ready: boolean;
+  workloads_have_k8s_service: boolean;
+}
+
+export interface IstioGrayscaleReadyResponse {
+  is_ready: boolean;
+  checks?: IstioGrayscaleChecks;
+}
+
+export interface PortalServerConfig {
+  host: string;
+  port_number: number;
+  port_protocol: string; // 'HTTP' | 'HTTPS' | 'GRPC'
+}
+
+export interface PortalServiceResponse {
+  default_gateway_address: string;
+  servers: PortalServerConfig[];
+}
+
+export interface IstioWeightConfig {
+  env: string;
+  weight: number;
+}
+
+export interface IstioHeaderMatch {
+  key: string;
+  match: 'exact' | 'prefix' | 'regex';
+  value: string;
+}
+
+export interface IstioHeaderMatchConfig {
+  env: string;
+  header_match: IstioHeaderMatch[];
+}
+
+export interface IstioGrayscaleConfig {
+  enable: boolean;
+  is_base: boolean;
+  base_env: string;
+  grayscale_strategy: 'weight' | 'header_match';
+  weight_configs: IstioWeightConfig[];
+  header_match_configs: IstioHeaderMatchConfig[];
+}
+
+export interface SetIstioGrayscaleConfigPayload {
+  grayscale_strategy: 'weight' | 'header_match';
+  weight_configs?: IstioWeightConfig[];
+  header_match_configs?: IstioHeaderMatchConfig[];
+}
+
+export interface CanaryDeploymentServiceInfo {
+  service_name: string;
+  deployment?: {
+    deployment_name: string;
+    container_names: string[];
+  };
+}
+
+export interface EnvironmentItem {
+  name: string;
+  alias?: string;
+  cluster_id?: string;
+  cluster_name?: string;
+  namespace?: string;
+  status?: string;
+  production?: boolean;
+  update_time?: number;
+  source?: string;
+  // ShareEnv (自测模式 / 基准环境)
+  share_env_enable?: boolean;
+  share_env_is_base?: boolean;
+  share_env_base_env?: string;
+  // IstioGrayscale (灰度发布)
+  istio_grayscale_enable?: boolean;
+  istio_grayscale_is_base?: boolean;
+  istio_grayscale_base_env?: string;
+}
+
 export default environmentApi;
+
+

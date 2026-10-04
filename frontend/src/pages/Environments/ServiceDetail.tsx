@@ -15,6 +15,7 @@ import {
   HistoryOutlined,
   DiffOutlined,
   RocketOutlined,
+  GlobalOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import http from '../../api/client';
@@ -25,6 +26,7 @@ import YamlEditor from '../../components/Editor/YamlEditor';
 import EnvServiceHistoryDrawer from './EnvServiceHistoryDrawer';
 import ServiceDiffModal from './ServiceDiffModal';
 import UpdateImageModal from './UpdateImageModal';
+import PortalServiceModal from './PortalServiceModal';
 import { feedback } from '../../utils/feedback';
 
 const { Title, Text } = Typography;
@@ -115,6 +117,9 @@ export const ServiceDetailPage: React.FC = () => {
   const [svcCurrentRevision, setSvcCurrentRevision] = useState<number>(0);
   const [savingYaml, setSavingYaml] = useState(false);
   const [restarting, setRestarting] = useState(false);
+  const [isBaseEnv, setIsBaseEnv] = useState(false);
+  const [isGrayscaleBase, setIsGrayscaleBase] = useState(false);
+  const [portalModalOpen, setPortalModalOpen] = useState(false);
 
   // Log drawer
   const [logPod, setLogPod] = useState<{ pod: string; container: string } | null>(null);
@@ -220,10 +225,14 @@ export const ServiceDetailPage: React.FC = () => {
       // 可编辑的是环境内服务的模板 YAML（variable_yaml）；同时取 current_revision 供保存
       const detail = await http.get<{
         services?: Array<Array<{ service_name?: string; revision?: number; variable_yaml?: string }>>;
+        share_env_is_base?: boolean;
+        istio_grayscale_is_base?: boolean;
       }>(
         `/api/aslan/environment/environments/${envName}?projectName=${projectName}&production=${envProduction}`,
         { skipErrorHandler: true }
       );
+      setIsBaseEnv(Boolean(detail?.share_env_is_base));
+      setIsGrayscaleBase(Boolean(detail?.istio_grayscale_is_base));
       const svcEntry = (detail?.services || [])
         .flatMap((g) => g || [])
         .find((s) => s.service_name === serviceName);
@@ -232,6 +241,8 @@ export const ServiceDetailPage: React.FC = () => {
     } catch {
       setSvcCurrentRevision(0);
       setYamlContent('');
+      setIsBaseEnv(false);
+      setIsGrayscaleBase(false);
     } finally {
       setYamlLoading(false);
     }
@@ -470,6 +481,14 @@ export const ServiceDetailPage: React.FC = () => {
           <Button icon={<DiffOutlined />} onClick={() => setDiffModalOpen(true)}>
             服务差异
           </Button>
+          {(isBaseEnv || isGrayscaleBase) && (
+            <Button
+              icon={<GlobalOutlined />}
+              onClick={() => setPortalModalOpen(true)}
+            >
+              入口网关
+            </Button>
+          )}
           <Button icon={<ReloadOutlined />} onClick={() => { fetchPods(); fetchYaml(); fetchLiveYaml(); }}>
             刷新
           </Button>
@@ -750,6 +769,18 @@ export const ServiceDetailPage: React.FC = () => {
         }
         production={envProduction}
       />
+
+      {/* 入口服务网关配置弹窗 */}
+      {portalModalOpen && (
+        <PortalServiceModal
+          open={portalModalOpen}
+          onClose={() => setPortalModalOpen(false)}
+          projectName={projectName || ''}
+          envName={envName || ''}
+          serviceName={serviceName || ''}
+          isGrayscale={isGrayscaleBase}
+        />
+      )}
     </div>
   );
 };
