@@ -34,6 +34,7 @@ import {
   DeleteOutlined,
   MoreOutlined,
   DiffOutlined,
+  GlobalOutlined,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
@@ -49,6 +50,9 @@ import EnvNodesDrawer from './EnvNodesDrawer';
 import EnvEventsDrawer from './EnvEventsDrawer';
 import EnvServiceHistoryDrawer from './EnvServiceHistoryDrawer';
 import ServiceDiffModal from './ServiceDiffModal';
+import ShareEnvModal from './ShareEnvModal';
+import PortalServiceModal from './PortalServiceModal';
+// import IstioGrayscaleDrawer from './IstioGrayscaleDrawer';
 import LogViewer from '../../components/Terminal/LogViewer';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
@@ -65,6 +69,14 @@ interface EnvironmentItem {
   production?: boolean;
   update_time?: number;
   source?: string;
+  // ShareEnv (自测模式 / 基准环境)
+  share_env_enable?: boolean;
+  share_env_is_base?: boolean;
+  share_env_base_env?: string;
+  // IstioGrayscale (灰度发布)
+  istio_grayscale_enable?: boolean;
+  istio_grayscale_is_base?: boolean;
+  istio_grayscale_base_env?: string;
 }
 
 // GET /api/aslan/environment/kube/pods — kube.ListPodsInfoRespone
@@ -186,6 +198,18 @@ export const EnvironmentsPage: React.FC = () => {
   // 服务模板差异对比弹窗状态
   const [diffTargetService, setDiffTargetService] = useState<string>('');
   const [diffModalOpen, setDiffModalOpen] = useState(false);
+
+  // 自测模式 (ShareEnv) 弹窗状态
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareModalMode, setShareModalMode] = useState<'enable' | 'disable'>('enable');
+
+  // 入口服务网关配置弹窗 (PortalService)
+  const [portalModalOpen, setPortalModalOpen] = useState(false);
+  const [portalTargetService, setPortalTargetService] = useState('');
+  const [portalIsGrayscale, setPortalIsGrayscale] = useState(false);
+
+  // Istio 灰度发布管理抽屉状态
+  // const [grayscaleDrawerOpen, setGrayscaleDrawerOpen] = useState(false);
 
   const fetchChangeLogs = useCallback(
     async (page = 1) => {
@@ -587,6 +611,22 @@ export const EnvironmentsPage: React.FC = () => {
         >
           查看日志
         </Button>,
+        ...(currentEnvObj?.share_env_is_base || currentEnvObj?.istio_grayscale_is_base
+          ? [
+              <Button
+                key="portal"
+                type="link"
+                icon={<GlobalOutlined />}
+                onClick={() => {
+                  setPortalTargetService(record.name);
+                  setPortalIsGrayscale(Boolean(currentEnvObj?.istio_grayscale_is_base));
+                  setPortalModalOpen(true);
+                }}
+              >
+                网关配置
+              </Button>,
+            ]
+          : []),
       ],
     },
   ];
@@ -613,13 +653,38 @@ export const EnvironmentsPage: React.FC = () => {
                   <Select
                     value={currentEnv}
                     onChange={setCurrentEnv}
-                    style={{ width: 140 }}
+                    style={{ minWidth: 160 }}
                     size="small"
-                    options={environments.map((e) => ({
-                      label: e.alias ? `${e.alias} (${e.name})` : `${e.name} (${e.status || 'Running'})`,
-                      value: e.name,
-                    }))}
+                    options={environments.map((e) => {
+                      let extraTag = '';
+                      if (e.share_env_is_base) extraTag = ' [自测基准]';
+                      else if (e.share_env_base_env) extraTag = ` [自测: ${e.share_env_base_env}]`;
+                      else if (e.istio_grayscale_is_base) extraTag = ' [灰度基准]';
+                      else if (e.istio_grayscale_base_env) extraTag = ` [灰度: ${e.istio_grayscale_base_env}]`;
+
+                      return {
+                        label: (e.alias ? `${e.alias} (${e.name})` : `${e.name} (${e.status || 'Running'})`) + extraTag,
+                        value: e.name,
+                      };
+                    })}
                   />
+                  {currentEnvObj?.production ? (
+                    <Tag color="gold">生产</Tag>
+                  ) : (
+                    <Tag color="green">测试</Tag>
+                  )}
+                  {currentEnvObj?.share_env_is_base && (
+                    <Tag color="purple">自测·基准环境</Tag>
+                  )}
+                  {currentEnvObj?.share_env_base_env && (
+                    <Tag color="blue">自测·子环境 (基准: {currentEnvObj.share_env_base_env})</Tag>
+                  )}
+                  {currentEnvObj?.istio_grayscale_is_base && (
+                    <Tag color="magenta">灰度·基准环境</Tag>
+                  )}
+                  {currentEnvObj?.istio_grayscale_base_env && (
+                    <Tag color="cyan">灰度·子环境 (基准: {currentEnvObj.istio_grayscale_base_env})</Tag>
+                  )}
                 </Space>
               </div>
             </Space>
@@ -754,6 +819,47 @@ export const EnvironmentsPage: React.FC = () => {
                         }
                       },
                     },
+                    // ShareEnv (Non-production environments)
+                    ...(!currentEnvObj?.production
+                      ? currentEnvObj?.share_env_enable
+                        ? [
+                            {
+                              key: 'share-portal',
+                              icon: <GlobalOutlined />,
+                              label: '自测网关配置',
+                              onClick: () => {
+                                setPortalTargetService('');
+                                setPortalIsGrayscale(false);
+                                setPortalModalOpen(true);
+                              },
+                              disabled: !currentEnv,
+                            },
+                            {
+                              key: 'share-disable',
+                              icon: <ControlOutlined />,
+                              label: '关闭自测模式',
+                              danger: true,
+                              onClick: () => {
+                                setShareModalMode('disable');
+                                setShareModalOpen(true);
+                              },
+                              disabled: !currentEnv,
+                            },
+                          ]
+                        : [
+                            {
+                              key: 'share-enable',
+                              icon: <ControlOutlined />,
+                              label: '开启自测模式',
+                              onClick: () => {
+                                setShareModalMode('enable');
+                                setShareModalOpen(true);
+                              },
+                              disabled: !currentEnv,
+                            },
+                          ]
+                      : []),
+                    /* IstioGrayscale items will be enabled in commit 2 */
                     { type: 'divider' as const },
                     {
                       key: 'delete',
@@ -1180,6 +1286,37 @@ export const EnvironmentsPage: React.FC = () => {
           maxLength={32}
         />
       </Modal>
+
+      {/* Share Environment Modal (自测模式开启/关闭) */}
+      {shareModalOpen && (
+        <ShareEnvModal
+          open={shareModalOpen}
+          onClose={() => setShareModalOpen(false)}
+          projectName={activeProject || ''}
+          envName={currentEnv}
+          clusterId={currentEnvObj?.cluster_id}
+          mode={shareModalMode}
+          onSuccess={() => {
+            loadEnvironments();
+          }}
+        />
+      )}
+
+      {/* Portal Service Gateway Configuration Modal (入口服务网关配置) */}
+      {portalModalOpen && (
+        <PortalServiceModal
+          open={portalModalOpen}
+          onClose={() => setPortalModalOpen(false)}
+          projectName={activeProject || ''}
+          envName={currentEnv}
+          serviceName={portalTargetService}
+          availableServices={pods.map((p) => p.name)}
+          isGrayscale={portalIsGrayscale}
+          onSuccess={() => {
+            loadEnvironments();
+          }}
+        />
+      )}
     </div>
   );
 };
