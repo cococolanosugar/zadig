@@ -35,6 +35,7 @@ import {
   MoreOutlined,
   DiffOutlined,
   GlobalOutlined,
+  FieldTimeOutlined,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
@@ -53,6 +54,7 @@ import ServiceDiffModal from './ServiceDiffModal';
 import ShareEnvModal from './ShareEnvModal';
 import PortalServiceModal from './PortalServiceModal';
 import IstioGrayscaleDrawer from './IstioGrayscaleDrawer';
+import SleepCronModal from './SleepCronModal';
 import LogViewer from '../../components/Terminal/LogViewer';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
@@ -210,6 +212,9 @@ export const EnvironmentsPage: React.FC = () => {
 
   // Istio 灰度发布管理抽屉状态
   const [grayscaleDrawerOpen, setGrayscaleDrawerOpen] = useState(false);
+
+  // 定时睡眠与唤醒弹窗 (F8)
+  const [sleepCronModalOpen, setSleepCronModalOpen] = useState(false);
 
   const fetchChangeLogs = useCallback(
     async (page = 1) => {
@@ -819,6 +824,15 @@ export const EnvironmentsPage: React.FC = () => {
                         }
                       },
                     },
+                    {
+                      key: 'sleep-cron',
+                      icon: <FieldTimeOutlined />,
+                      label: '定时睡眠/唤醒',
+                      disabled: !currentEnv,
+                      onClick: () => {
+                        setSleepCronModalOpen(true);
+                      },
+                    },
                     // ShareEnv (Non-production environments)
                     ...(!currentEnvObj?.production
                       ? currentEnvObj?.share_env_enable
@@ -1372,6 +1386,18 @@ export const EnvironmentsPage: React.FC = () => {
           }}
         />
       )}
+
+      {/* Scheduled Sleep and Wake Cron Modal (F8) */}
+      <SleepCronModal
+        open={sleepCronModalOpen}
+        projectName={activeProject || ''}
+        envName={currentEnv || ''}
+        production={currentEnvObj?.production ?? false}
+        onClose={() => setSleepCronModalOpen(false)}
+        onSuccess={() => {
+          loadEnvironments();
+        }}
+      />
     </div>
   );
 };
