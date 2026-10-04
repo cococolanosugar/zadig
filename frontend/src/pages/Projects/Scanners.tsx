@@ -20,6 +20,11 @@ import {
   Empty,
   Spin,
   Timeline,
+  Collapse,
+  InputNumber,
+  Switch,
+  Radio,
+  Tooltip,
 } from 'antd';
 import {
   PlusOutlined,
@@ -33,10 +38,21 @@ import {
   CloseCircleOutlined,
   RobotOutlined,
   ThunderboltOutlined,
+  EditOutlined,
+  SettingOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import LogViewer from '../../components/Terminal/LogViewer';
+import type { ColumnsType } from 'antd/es/table';
+import http from '../../api/client';
+import { normalizeJobName } from '../../utils/jobname';
+import { feedback } from '../../utils/feedback';
+import { settingsApi, type ClusterItem } from '../../api/settings';
+
+const { Text, Title } = Typography;
+const { Option } = Select;
 
 interface ScanningTaskItem {
   id?: number | string;
@@ -58,21 +74,46 @@ const mapScanTask = (t: Record<string, unknown>): ScanningTaskItem => ({
   duration: t.run_time as number,
 });
 
-import type { ColumnsType } from 'antd/es/table';
-import http from '../../api/client';
-import { normalizeJobName } from '../../utils/jobname';
-import { feedback } from '../../utils/feedback';
+export interface ScanningCacheSetting {
+  cache_enable: boolean;
+  cache_dir_type: 'workspace' | 'user_defined' | string;
+  cache_user_dir?: string;
+}
 
-const { Text, Title } = Typography;
-const { Option } = Select;
+export interface ScanningAdvancedSetting {
+  artifact_paths?: string[];
+  cluster_id?: string;
+  cluster_source?: string;
+  strategy_id?: string;
+  timeout?: number;
+  res_req?: 'low' | 'medium' | 'high' | 'min' | 'define' | string;
+  res_req_spec?: {
+    cpu_limit?: number;
+    memory_limit?: number;
+    cpu_req?: number;
+    memory_req?: number;
+    gpu_limit?: string;
+  };
+  hook_ctl?: {
+    enabled: boolean;
+    items: unknown[];
+  };
+  notify_ctls?: unknown[];
+  cache?: ScanningCacheSetting;
+  concurrency_limit?: number;
+  custom_annotations?: Array<{ key: string; value: string }>;
+  custom_labels?: Array<{ key: string; value: string }>;
+}
 
 export interface ScannerItem {
   id?: string;
   name: string;
+  project_name?: string;
   description?: string;
-  scanner_type: 'sonar' | 'ai-review' | 'trivy' | 'standard';
+  scanner_type: 'sonar' | 'ai-review' | 'trivy' | 'standard' | 'sonarQube' | 'ai_review' | 'other' | string;
   enable_ai_review?: boolean;
   repos?: { repo_name: string; branch: string }[];
+  script?: string;
   update_time?: number;
   update_by?: string;
   last_status?: 'passed' | 'failed' | 'running' | 'untested';
@@ -83,6 +124,8 @@ export interface ScannerItem {
     coverage?: number;
     ai_suggestions?: string;
   };
+  advanced_settings?: ScanningAdvancedSetting;
+  outputs?: unknown[];
 }
 
 export const ScannersPage: React.FC = () => {
@@ -97,31 +140,82 @@ export const ScannersPage: React.FC = () => {
   const [scanners, setScanners] = useState<ScannerItem[]>([]);
   const [searchText, setSearchText] = useState<string>('');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [editingScanner, setEditingScanner] = useState<ScannerItem | null>(null);
   const [reportDrawerVisible, setReportDrawerVisible] = useState<boolean>(false);
   const [selectedScanner, setSelectedScanner] = useState<ScannerItem | null>(null);
+  const [clusters, setClusters] = useState<ClusterItem[]>([]);
   const [form] = Form.useForm();
+  const selectedResReq = Form.useWatch('res_req', form);
+  const selectedCacheEnable = Form.useWatch('cache_enable', form);
+  const selectedCacheDirType = Form.useWatch('cache_dir_type', form);
+  const selectedClusterId = Form.useWatch('cluster_id', form);
+
+  // 加载集群列表
+  useEffect(() => {
+    settingsApi.getClusters().then((res) => {
+      setClusters(Array.isArray(res) ? res : []);
+    }).catch(() => {});
+  }, []);
+
+  const handleOpenEdit = useCallback((target: ScannerItem) => {
+    setEditingScanner(target);
+    const adv = target.advanced_settings;
+    const scannerType =
+      target.scanner_type === 'ai_review'
+        ? 'ai-review'
+        : target.scanner_type === 'sonarQube'
+        ? 'sonar'
+        : target.scanner_type || 'standard';
+
+    form.setFieldsValue({
+      name: target.name,
+      description: target.description,
+      scanner_type: scannerType,
+      repo_name: target.repos?.[0]?.repo_name || '',
+      artifact_paths: adv?.artifact_paths || [],
+      timeout: adv?.timeout ?? 600,
+      concurrency_limit: adv?.concurrency_limit ?? 1,
+      cluster_id: adv?.cluster_id || '',
+      strategy_id: adv?.strategy_id || '',
+      res_req: adv?.res_req || 'low',
+      cpu_limit: adv?.res_req_spec?.cpu_limit ?? 1000,
+      memory_limit: adv?.res_req_spec?.memory_limit ?? 512,
+      cache_enable: adv?.cache?.cache_enable ?? false,
+      cache_dir_type: adv?.cache?.cache_dir_type || 'workspace',
+      cache_user_dir: adv?.cache?.cache_user_dir || '',
+      hook_enabled: adv?.hook_ctl?.enabled !== false,
+    });
+    setModalVisible(true);
+  }, [form]);
 
   // 路由 /scanner/create、/scanner/edit/:name 自动打开弹窗
   useEffect(() => {
     if (location.pathname.includes('/scanner/create') || location.pathname.includes('/scanner/ai-review/create')) {
       const isAi = location.pathname.includes('/ai-review/');
-      form.setFieldsValue({ scanner_type: isAi ? 'ai-review' : 'sonar' });
+      setEditingScanner(null);
+      form.resetFields();
+      form.setFieldsValue({
+        scanner_type: isAi ? 'ai-review' : 'sonar',
+        timeout: 600,
+        concurrency_limit: 1,
+        res_req: 'low',
+        cpu_limit: 1000,
+        memory_limit: 512,
+        cache_enable: false,
+        cache_dir_type: 'workspace',
+        hook_enabled: true,
+        artifact_paths: [],
+      });
       setModalVisible(true);
     } else if (location.pathname.includes('/scanner/edit/') || location.pathname.includes('/scanner/ai-review/edit/')) {
       if (routeScannerName && scanners.length > 0) {
         const target = scanners.find((s) => s.name === routeScannerName);
         if (target) {
-          form.setFieldsValue({
-            name: target.name,
-            description: target.description,
-            scanner_type: target.scanner_type,
-            repo_name: target.repos?.[0]?.repo_name,
-          });
-          setModalVisible(true);
+          handleOpenEdit(target);
         }
       }
     }
-  }, [location.pathname, routeScannerName, scanners, form]);
+  }, [location.pathname, routeScannerName, scanners, form, handleOpenEdit]);
 
   const handleCloseModal = () => {
     setModalVisible(false);
@@ -300,41 +394,85 @@ export const ScannersPage: React.FC = () => {
   const handleSaveScanner = async () => {
     try {
       const values = await form.validateFields();
-      // 对齐 service.Scanning 契约（handler/scanning.go:87-135）：
-      // - project_name 必填（操作日志+鉴权用）
-      // - advanced_settings 不能为 nil（service.CreateScanningModule 判空报错），且 hook_ctl.items 需可遍历
-      // - scanner_type 取后端枚举：sonarQube | ai_review | other
       const scannerType =
-        values.scanner_type === 'ai-review' ? 'ai_review' : values.scanner_type === 'sonar' ? 'sonarQube' : 'other';
+        values.scanner_type === 'ai-review'
+          ? 'ai_review'
+          : values.scanner_type === 'sonar'
+          ? 'sonarQube'
+          : 'other';
+
+      const resReq = values.res_req || 'low';
+      let cpuLimit = 1000;
+      let memoryLimit = 512;
+      if (resReq === 'define') {
+        cpuLimit = Number(values.cpu_limit || 1000);
+        memoryLimit = Number(values.memory_limit || 512);
+      } else if (resReq === 'high') {
+        cpuLimit = 4000;
+        memoryLimit = 2048;
+      } else if (resReq === 'medium') {
+        cpuLimit = 2000;
+        memoryLimit = 1024;
+      } else if (resReq === 'min') {
+        cpuLimit = 500;
+        memoryLimit = 256;
+      }
+
+      const adv: ScanningAdvancedSetting = {
+        artifact_paths: Array.isArray(values.artifact_paths) ? values.artifact_paths : [],
+        cluster_id: values.cluster_id || '',
+        cluster_source: '',
+        strategy_id: values.strategy_id || '',
+        timeout: Number(values.timeout ?? 600),
+        res_req: resReq,
+        res_req_spec: {
+          cpu_limit: cpuLimit,
+          memory_limit: memoryLimit,
+          cpu_req: 0,
+          memory_req: 0,
+          gpu_limit: '',
+        },
+        hook_ctl: {
+          enabled: values.hook_enabled !== false,
+          items: editingScanner?.advanced_settings?.hook_ctl?.items || [],
+        },
+        notify_ctls: editingScanner?.advanced_settings?.notify_ctls || [],
+        cache: {
+          cache_enable: !!values.cache_enable,
+          cache_dir_type: values.cache_dir_type || 'workspace',
+          cache_user_dir: values.cache_user_dir || '',
+        },
+        concurrency_limit: Number(values.concurrency_limit ?? 1),
+        custom_annotations: editingScanner?.advanced_settings?.custom_annotations || [],
+        custom_labels: editingScanner?.advanced_settings?.custom_labels || [],
+      };
+
       const payload = {
         name: values.name,
         project_name: projectName,
         description: values.description,
         scanner_type: scannerType,
         repos: [{ repo_name: values.repo_name || 'main-repo', branch: 'main' }],
-        script: '#!/bin/bash\nset -e',
-        // 资源要求默认 low + 默认集群，与旧版 create.vue 一致
-        advanced_settings: {
-          timeout: 600,
-          cluster_id: '',
-          cluster_source: '',
-          res_req: 'low',
-          res_req_spec: { cpu_limit: 1000, memory_limit: 512 },
-          hook_ctl: { enabled: true, items: [] },
-          notify_ctls: [],
-          concurrency_limit: 1,
-        },
+        script: editingScanner?.script || '#!/bin/bash\nset -e',
+        advanced_settings: adv,
         check_quality_gate: false,
-        outputs: [],
+        outputs: editingScanner?.outputs || [],
       };
 
-      await http.post(`/api/aslan/testing/scanning?projectName=${projectName}`, payload);
-      feedback.message.success('代码审查规则创建成功');
+      if (editingScanner && editingScanner.id) {
+        await http.put(`/api/aslan/testing/scanning/${editingScanner.id}?projectName=${projectName}`, payload);
+        feedback.message.success('代码审查规则更新成功');
+      } else {
+        await http.post(`/api/aslan/testing/scanning?projectName=${projectName}`, payload);
+        feedback.message.success('代码审查规则创建成功');
+      }
+
       setModalVisible(false);
+      setEditingScanner(null);
       form.resetFields();
       fetchScanners();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '创建代码审查规则失败，请检查配置参数';
+      const msg = err instanceof Error ? err.message : '保存代码审查规则失败，请检查配置参数';
       feedback.message.error(msg);
     }
   };
@@ -390,9 +528,13 @@ export const ScannersPage: React.FC = () => {
             ) : (
               <SafetyCertificateOutlined style={{ color: '#0066ff', fontSize: 16 }} />
             )}
-            <Text strong style={{ fontSize: 14 }}>
+            <Button
+              type="link"
+              style={{ padding: 0, height: 'auto', fontWeight: 600, fontSize: 14 }}
+              onClick={() => openScannerDetail(record)}
+            >
               {text}
-            </Text>
+            </Button>
             {record.scanner_type === 'ai-review' && (
               <Tag color="purple" icon={<ThunderboltOutlined />}>
                 AI 智能审查
@@ -413,7 +555,7 @@ export const ScannersPage: React.FC = () => {
       key: 'scanner_type',
       width: 150,
       render: (type) => {
-        if (type === 'ai-review') return <Tag color="purple">LLM AI 审查</Tag>;
+        if (type === 'ai-review' || type === 'ai_review') return <Tag color="purple">LLM AI 审查</Tag>;
         if (type === 'trivy') return <Tag color="orange">Trivy CVE 漏洞</Tag>;
         return <Tag color="blue">SonarQube 静态审查</Tag>;
       },
@@ -456,9 +598,9 @@ export const ScannersPage: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 220,
+      width: 270,
       render: (_, record) => (
-        <Space size="middle">
+        <Space size="small">
           <Button
             type="link"
             size="small"
@@ -478,6 +620,14 @@ export const ScannersPage: React.FC = () => {
             }}
           >
             质量报告
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => handleOpenEdit(record)}
+          >
+            编辑
           </Button>
           <Popconfirm
             title="确认删除该代码审查配置？"
@@ -614,43 +764,62 @@ export const ScannersPage: React.FC = () => {
         />
       </Card>
 
-      {/* Create Scanner Modal */}
+      {/* Create / Edit Scanner Modal with Advanced Settings */}
       <Modal
-        title="新建代码质量审查与扫描规则"
+        title={editingScanner ? `编辑代码审查规则: ${editingScanner.name}` : '新建代码质量审查与扫描规则'}
         open={modalVisible}
         onOk={handleSaveScanner}
         onCancel={handleCloseModal}
-        width={600}
+        destroyOnHidden
+        width={740}
+        okText={editingScanner ? '保存修改' : '确认创建'}
+        cancelText="取消"
       >
         <Form
           form={form}
           layout="vertical"
-          initialValues={{ scanner_type: 'sonar' }}
+          initialValues={{
+            scanner_type: 'sonar',
+            timeout: 600,
+            concurrency_limit: 1,
+            res_req: 'low',
+            cpu_limit: 1000,
+            memory_limit: 512,
+            cache_enable: false,
+            cache_dir_type: 'workspace',
+            hook_enabled: true,
+            artifact_paths: [],
+          }}
           style={{ marginTop: 16 }}
         >
-          <Form.Item
-            name="name"
-            label="扫描模块名称"
-            rules={[
-              { required: true, message: '请输入扫描模块名称' },
-              { pattern: /^[a-z0-9-]+$/, message: '仅支持小写字母、数字及连字符(-)' },
-            ]}
-          >
-            <Input placeholder="例如：sonar-security-scan" />
-          </Form.Item>
-
-          <Form.Item
-            name="scanner_type"
-            label="审查分析引擎"
-            rules={[{ required: true, message: '请选择审查引擎' }]}
-          >
-            <Select>
-              <Option value="sonar">SonarQube 静态代码扫描</Option>
-              <Option value="ai-review">Zadig AI 智能审查 (LLM PR Review)</Option>
-              <Option value="trivy">Trivy 安全漏洞与 CVE 审查</Option>
-              <Option value="standard">通用自定义脚本检测</Option>
-            </Select>
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={14}>
+              <Form.Item
+                name="name"
+                label="扫描模块名称"
+                rules={[
+                  { required: true, message: '请输入扫描模块名称' },
+                  { pattern: /^[a-z0-9-]+$/, message: '仅支持小写字母、数字及连字符(-)' },
+                ]}
+              >
+                <Input placeholder="例如：sonar-security-scan" disabled={!!editingScanner} />
+              </Form.Item>
+            </Col>
+            <Col span={10}>
+              <Form.Item
+                name="scanner_type"
+                label="审查分析引擎"
+                rules={[{ required: true, message: '请选择审查引擎' }]}
+              >
+                <Select>
+                  <Option value="sonar">SonarQube 静态扫描</Option>
+                  <Option value="ai-review">Zadig AI 智能审查</Option>
+                  <Option value="trivy">Trivy 安全漏洞扫描</Option>
+                  <Option value="standard">通用自定义脚本检测</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
 
           <Form.Item name="description" label="规则描述">
             <Input placeholder="说明该审查模块的检测规范与门禁目标" />
@@ -659,6 +828,208 @@ export const ScannersPage: React.FC = () => {
           <Form.Item name="repo_name" label="关联代码仓库">
             <Input placeholder="例如：koderover/backend-core" />
           </Form.Item>
+
+          <Collapse
+            defaultActiveKey={editingScanner ? ['advanced'] : []}
+            style={{ marginTop: 16 }}
+            items={[
+              {
+                key: 'advanced',
+                label: (
+                  <Space>
+                    <SettingOutlined style={{ color: '#0066ff' }} />
+                    <Text strong>高级设置 (扫描结果导出、集群调度、资源规格、缓存、并发与超时)</Text>
+                  </Space>
+                ),
+                children: (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <Form.Item
+                      name="artifact_paths"
+                      label={
+                        <Space>
+                          <span>扫描结果导出路径 (Artifact Paths)</span>
+                          <Tooltip title="设置一个或者多个文件目录，扫描完成后可在工作流任务详情页进行下载，通常用于扫描报告的导出">
+                            <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                          </Tooltip>
+                        </Space>
+                      }
+                      extra="输入文件或目录路径后按回车，例如：/workspace/reports 或 /tmp/scan-result.xml"
+                    >
+                      <Select
+                        mode="tags"
+                        placeholder="输入路径后按回车添加"
+                        tokenSeparators={[',', ' ']}
+                        style={{ width: '100%' }}
+                      />
+                    </Form.Item>
+
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item name="cluster_id" label="调度集群">
+                          <Select placeholder="默认集群 (Local)" allowClear>
+                            <Option value="">默认集群</Option>
+                            {clusters.map((c) => (
+                              <Option key={c.id} value={c.id}>
+                                {c.name} {c.local ? '(本地)' : ''}
+                              </Option>
+                            ))}
+                          </Select>
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item name="strategy_id" label="调度策略">
+                          <Select placeholder="默认策略" allowClear>
+                            <Option value="">默认调度策略</Option>
+                            {clusters
+                              .find((c) => c.id === selectedClusterId)
+                              ?.advanced_config?.schedule_strategy?.map((s) => (
+                                <Option key={s.strategy_id} value={s.strategy_id}>
+                                  {s.strategy_name} {s.default ? '(默认)' : ''}
+                                </Option>
+                              ))}
+                          </Select>
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Form.Item name="res_req" label="资源规格要求">
+                      <Radio.Group>
+                        <Radio.Button value="min">极低 (0.5C/256M)</Radio.Button>
+                        <Radio.Button value="low">低 (1C/512M)</Radio.Button>
+                        <Radio.Button value="medium">中 (2C/1024M)</Radio.Button>
+                        <Radio.Button value="high">高 (4C/2048M)</Radio.Button>
+                        <Radio.Button value="define">自定义规格</Radio.Button>
+                      </Radio.Group>
+                    </Form.Item>
+
+                    {selectedResReq === 'define' && (
+                      <Row
+                        gutter={16}
+                        style={{
+                          background: '#fafafa',
+                          padding: '12px 16px',
+                          borderRadius: 6,
+                          marginBottom: 12,
+                        }}
+                      >
+                        <Col span={12}>
+                          <Form.Item
+                            name="cpu_limit"
+                            label="CPU 上限 (mCPU)"
+                            rules={[{ required: true, message: '请输入 CPU 上限' }]}
+                          >
+                            <InputNumber min={100} step={100} style={{ width: '100%' }} placeholder="例如：1000" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                          <Form.Item
+                            name="memory_limit"
+                            label="内存上限 (MiB)"
+                            rules={[{ required: true, message: '请输入内存上限' }]}
+                          >
+                            <InputNumber min={128} step={128} style={{ width: '100%' }} placeholder="例如：512" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    )}
+
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item
+                          name="timeout"
+                          label={
+                            <Space>
+                              <span>任务超时时间 (秒)</span>
+                              <Tooltip title="扫描任务在后台执行的最大允许超时时间，超时后任务将被自动终止">
+                                <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                              </Tooltip>
+                            </Space>
+                          }
+                          rules={[{ required: true, message: '请输入超时时间' }]}
+                        >
+                          <InputNumber min={10} max={86400} style={{ width: '100%' }} />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item
+                          name="concurrency_limit"
+                          label={
+                            <Space>
+                              <span>任务并发数</span>
+                              <Tooltip title="同时执行该扫描任务的最大并发数，1 为严格串行，-1 为不限制并发">
+                                <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                              </Tooltip>
+                            </Space>
+                          }
+                        >
+                          <InputNumber min={-1} max={100} style={{ width: '100%' }} />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Card size="small" variant="borderless" style={{ background: '#f9f9f9', borderRadius: 6 }}>
+                      <Space orientation="vertical" style={{ width: '100%' }} size={12}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Space>
+                            <Text strong>工作空间缓存</Text>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              启用后可加速代码依赖包与历史缓存加载
+                            </Text>
+                          </Space>
+                          <Form.Item name="cache_enable" valuePropName="checked" noStyle>
+                            <Switch />
+                          </Form.Item>
+                        </div>
+
+                        {selectedCacheEnable && (
+                          <Row gutter={16} style={{ marginTop: 8 }}>
+                            <Col span={12}>
+                              <Form.Item name="cache_dir_type" label="缓存目录类型" noStyle>
+                                <Radio.Group>
+                                  <Radio value="workspace">工作空间目录</Radio>
+                                  <Radio value="user_defined">自定义目录</Radio>
+                                </Radio.Group>
+                              </Form.Item>
+                            </Col>
+                            {selectedCacheDirType === 'user_defined' && (
+                              <Col span={12}>
+                                <Form.Item
+                                  name="cache_user_dir"
+                                  label="自定义缓存绝对路径"
+                                  rules={[{ required: true, message: '请输入自定义缓存目录' }]}
+                                >
+                                  <Input placeholder="例如：/root/.sonar/cache" />
+                                </Form.Item>
+                              </Col>
+                            )}
+                          </Row>
+                        )}
+                      </Space>
+                    </Card>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '8px 0',
+                      }}
+                    >
+                      <Space>
+                        <Text strong>Git Webhook 自动触发器</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          允许代码 Push / PR 事件自动触发该扫描流程
+                        </Text>
+                      </Space>
+                      <Form.Item name="hook_enabled" valuePropName="checked" noStyle>
+                        <Switch />
+                      </Form.Item>
+                    </div>
+                  </div>
+                ),
+              },
+            ]}
+          />
         </Form>
       </Modal>
 
@@ -666,7 +1037,7 @@ export const ScannersPage: React.FC = () => {
       <Drawer
         title={`质量门禁检测报告: ${selectedScanner?.name || ''}`}
         placement="right"
-        size={560}
+        size="large"
         open={reportDrawerVisible}
         onClose={() => setReportDrawerVisible(false)}
       >
@@ -781,6 +1152,67 @@ export const ScannersPage: React.FC = () => {
                 {detailScanner.update_time
                   ? `${dayjs(detailScanner.update_time * 1000).format('YYYY-MM-DD HH:mm')} · ${detailScanner.update_by || '-'}`
                   : '-'}
+              </Descriptions.Item>
+            </Descriptions>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '20px 0 8px' }}>
+              <Title level={5} style={{ margin: 0 }}>
+                高级设置
+              </Title>
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => {
+                  setDetailOpen(false);
+                  handleOpenEdit(detailScanner);
+                }}
+              >
+                编辑规则
+              </Button>
+            </div>
+            <Descriptions bordered column={2} size="small">
+              <Descriptions.Item label="扫描结果导出" span={2}>
+                {detailScanner.advanced_settings?.artifact_paths && detailScanner.advanced_settings.artifact_paths.length > 0 ? (
+                  <Space size={4} wrap>
+                    {detailScanner.advanced_settings.artifact_paths.map((p) => (
+                      <Tag key={p} color="blue">
+                        {p}
+                      </Tag>
+                    ))}
+                  </Space>
+                ) : (
+                  <Text type="secondary">未设置</Text>
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="超时时间">
+                {detailScanner.advanced_settings?.timeout ? `${detailScanner.advanced_settings.timeout} 秒` : '600 秒'}
+              </Descriptions.Item>
+              <Descriptions.Item label="并发上限">
+                {detailScanner.advanced_settings?.concurrency_limit === -1
+                  ? '无限制'
+                  : (detailScanner.advanced_settings?.concurrency_limit ?? 1)}
+              </Descriptions.Item>
+              <Descriptions.Item label="资源规格">
+                <Tag color="cyan">{detailScanner.advanced_settings?.res_req || 'low'}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="缓存机制">
+                {detailScanner.advanced_settings?.cache?.cache_enable ? (
+                  <Tag color="success">
+                    已启用 ({detailScanner.advanced_settings.cache.cache_dir_type || 'workspace'})
+                  </Tag>
+                ) : (
+                  <Tag color="default">未启用</Tag>
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="触发器 Hook">
+                {detailScanner.advanced_settings?.hook_ctl?.enabled !== false ? (
+                  <Tag color="success">已启用</Tag>
+                ) : (
+                  <Tag color="default">未启用</Tag>
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="调度集群">
+                {detailScanner.advanced_settings?.cluster_id || '默认集群'}
               </Descriptions.Item>
             </Descriptions>
 
