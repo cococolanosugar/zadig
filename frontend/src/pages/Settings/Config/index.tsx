@@ -163,6 +163,12 @@ export const SystemConfigPage: React.FC = () => {
   const [cleaningOneClick, setCleaningOneClick] = useState(false);
   const [cleaningShared, setCleaningShared] = useState(false);
 
+  // 容量管理 (Capacity Strategy & GC)
+  const [capacityForm] = Form.useForm();
+  const [savingCapacity, setSavingCapacity] = useState(false);
+  const [runningGC, setRunningGC] = useState(false);
+  const [cleaningWorkflows, setCleaningWorkflows] = useState(false);
+
   // 安全与隐私 (Security)
   const [securityForm] = Form.useForm();
   const [savingSecurity, setSavingSecurity] = useState(false);
@@ -311,12 +317,21 @@ export const SystemConfigPage: React.FC = () => {
       } else if (tab === 'cache') {
         setCleanLoading(true);
         try {
-          const res = await systemConfigApi.getCleanCacheState();
+          const [res, cap] = await Promise.all([
+            systemConfigApi.getCleanCacheState().catch(() => null),
+            settingsApi.getCapacityStrategy('WorkflowTaskRetention').catch(() => null),
+          ]);
           setCleanStatus(res);
           cronForm.setFieldsValue({
             cron_enabled: res?.cron_enabled ?? false,
             cron: res?.cron ?? '',
           });
+          if (cap?.retention) {
+            capacityForm.setFieldsValue({
+              max_days: cap.retention.max_days ?? 365,
+              max_items: cap.retention.max_items ?? 0,
+            });
+          }
         } catch {
           // ignore
         } finally {
@@ -478,6 +493,70 @@ export const SystemConfigPage: React.FC = () => {
           feedback.message.error(msg);
         } finally {
           setCleaningShared(false);
+        }
+      },
+    });
+  };
+
+  const handleSaveCapacityStrategy = async () => {
+    try {
+      const values = await capacityForm.validateFields();
+      setSavingCapacity(true);
+      await settingsApi.updateCapacityStrategy({
+        target: 'WorkflowTaskRetention',
+        retention: {
+          max_days: Number(values.max_days) ?? 365,
+          max_items: Number(values.max_items) ?? 0,
+        },
+      });
+      feedback.message.success('工作流任务容量留存策略已保存');
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || '保存容量策略失败';
+      feedback.message.error(msg);
+    } finally {
+      setSavingCapacity(false);
+    }
+  };
+
+  const handleRunGC = () => {
+    feedback.modal?.confirm({
+      title: '确认执行垃圾回收 (GC)？',
+      content: '系统将根据容量配额策略回收超出留存期限或数量的历史工作流任务。',
+      okText: '确认执行',
+      okType: 'primary',
+      cancelText: '取消',
+      onOk: async () => {
+        setRunningGC(true);
+        try {
+          await settingsApi.runSystemGC(false);
+          feedback.message.success('已触发系统垃圾回收 (GC)');
+        } catch (err: unknown) {
+          const msg = (err as { message?: string })?.message || '触发垃圾回收失败';
+          feedback.message.error(msg);
+        } finally {
+          setRunningGC(false);
+        }
+      },
+    });
+  };
+
+  const handleCleanWorkflowCache = () => {
+    feedback.modal?.confirm({
+      title: '确认清理已删除工作流缓存？',
+      content: '系统将彻底清理已被删除工作流的所有遗留缓存与临时文件，释放存储空间。',
+      okText: '确认清理',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        setCleaningWorkflows(true);
+        try {
+          await settingsApi.cleanSystemCache();
+          feedback.message.success('已完成已删除工作流的缓存清理');
+        } catch (err: unknown) {
+          const msg = (err as { message?: string })?.message || '清理工作流缓存失败';
+          feedback.message.error(msg);
+        } finally {
+          setCleaningWorkflows(false);
         }
       },
     });
@@ -1706,6 +1785,81 @@ export const SystemConfigPage: React.FC = () => {
                 >
                   清理共享存储
                 </Button>
+              </div>
+            </Card>
+
+            <Card
+              title="工作流容量配额与垃圾回收 (Capacity Management)"
+              variant="borderless"
+              style={{ background: '#fafbfc', border: '1px solid #f0f0f0', borderRadius: 8, marginTop: 20 }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <Text style={{ display: 'block', color: '#1f2d3d', marginBottom: 4 }}>
+                    配置工作流任务历史记录的全局留存策略，防止 MongoDB 与历史任务记录无限膨胀。
+                  </Text>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    支持最长保留天数与保留条数上限限制，并提供一键垃圾回收 (GC) 与已删除工作流缓存清理能力。
+                  </Text>
+                </div>
+
+                <Form
+                  form={capacityForm}
+                  layout="inline"
+                  onFinish={handleSaveCapacityStrategy}
+                  initialValues={{ max_days: 365, max_items: 0 }}
+                >
+                  <Form.Item
+                    name="max_days"
+                    label="任务保留天数"
+                    rules={[{ required: true, message: '请输入保留天数' }]}
+                    tooltip="工作流任务自创建起保留的最大天数，超期由 GC 清理"
+                  >
+                    <InputNumber min={1} max={3650} suffix="天" style={{ width: 140 }} />
+                  </Form.Item>
+                  <Form.Item
+                    name="max_items"
+                    label="保留条数上限"
+                    tooltip="每个工作流保留的历史任务最大数量，0 表示不限制条数"
+                  >
+                    <InputNumber min={0} max={10000} suffix="条" style={{ width: 140 }} />
+                  </Form.Item>
+                  <Form.Item>
+                    <Button type="primary" htmlType="submit" loading={savingCapacity} icon={<SaveOutlined />}>
+                      保存策略
+                    </Button>
+                  </Form.Item>
+                </Form>
+
+                <Divider style={{ margin: '8px 0' }} />
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                  <div>
+                    <Text strong style={{ display: 'block', color: '#1f2d3d' }}>
+                      容量维护与手动清理操作
+                    </Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      立即触发系统垃圾回收释放过期任务，或清理已删除工作流的残留缓存。
+                    </Text>
+                  </div>
+                  <Space orientation="horizontal">
+                    <Button
+                      icon={<ReloadOutlined />}
+                      loading={runningGC}
+                      onClick={handleRunGC}
+                    >
+                      执行垃圾回收 (GC)
+                    </Button>
+                    <Button
+                      danger
+                      icon={<DeleteOutlined />}
+                      loading={cleaningWorkflows}
+                      onClick={handleCleanWorkflowCache}
+                    >
+                      清理已删除工作流缓存
+                    </Button>
+                  </Space>
+                </div>
               </div>
             </Card>
           </div>

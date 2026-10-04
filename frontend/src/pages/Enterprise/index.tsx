@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import enterpriseApi, { type EnterpriseLicenseInfo, type EnterpriseThemeInfo } from '../../api/enterprise';
+import { settingsApi } from '../../api/settings';
 import { feedback } from '../../utils/feedback';
 
 const { Title, Text } = Typography;
@@ -45,9 +46,10 @@ export const EnterprisePage: React.FC = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [lic, thm] = await Promise.all([
+        const [lic, thm, sysLang] = await Promise.all([
           enterpriseApi.getLicense(),
           enterpriseApi.getTheme(),
+          settingsApi.getSystemLanguage().catch(() => 'zh-cn'),
         ]);
         setLicense(lic);
         setTheme(thm);
@@ -61,6 +63,11 @@ export const EnterprisePage: React.FC = () => {
           font_gray: thm.custom_theme?.font_gray || '#1f2d3d',
           font_light_gray: thm.custom_theme?.font_light_gray || '#8c8c8c',
         });
+        const langVal = sysLang?.toLowerCase().includes('en') ? 'en' : 'zh-cn';
+        langForm.setFieldsValue({
+          defaultLang: langVal,
+        });
+        localStorage.setItem('zadig_lang', langVal);
       } catch {
         // Handled
       } finally {
@@ -68,7 +75,7 @@ export const EnterprisePage: React.FC = () => {
       }
     };
     fetchData();
-  }, [themeForm]);
+  }, [themeForm, langForm]);
 
   const handleSaveTheme = async () => {
     setSavingTheme(true);
@@ -100,10 +107,14 @@ export const EnterprisePage: React.FC = () => {
     setSavingLang(true);
     try {
       const values = await langForm.validateFields();
+      const langVal = values.defaultLang?.toLowerCase().includes('en') ? 'en' : 'zh-cn';
+      await settingsApi.setSystemLanguage(langVal);
       localStorage.setItem('zadig_system_language', JSON.stringify(values));
-      feedback.message.success('系统语言与多语言策略配置已保存！');
-    } catch {
-      // Handled
+      localStorage.setItem('zadig_lang', langVal);
+      feedback.message.success('系统语言与多语言策略配置已保存并同步至服务器！');
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      feedback.message.error(err?.response?.data?.message || err?.message || '保存语言设置失败');
     } finally {
       setSavingLang(false);
     }
@@ -315,16 +326,16 @@ export const EnterprisePage: React.FC = () => {
               form={langForm}
               layout="vertical"
               initialValues={{
-                defaultLang: 'zh-CN',
+                defaultLang: 'zh-cn',
                 allowUserSwitch: true,
-                fallbackLang: 'zh-CN',
+                fallbackLang: 'zh-cn',
               }}
             >
               <Form.Item name="defaultLang" label="平台默认语言">
                 <Select
                   options={[
-                    { label: '简体中文 (zh-CN)', value: 'zh-CN' },
-                    { label: 'English (en-US)', value: 'en-US' },
+                    { label: '简体中文 (zh-cn)', value: 'zh-cn' },
+                    { label: 'English (en)', value: 'en' },
                   ]}
                 />
               </Form.Item>
@@ -339,8 +350,8 @@ export const EnterprisePage: React.FC = () => {
               <Form.Item name="fallbackLang" label="回退缺失语言 (Fallback)">
                 <Select
                   options={[
-                    { label: '简体中文 (zh-CN)', value: 'zh-CN' },
-                    { label: 'English (en-US)', value: 'en-US' },
+                    { label: '简体中文 (zh-cn)', value: 'zh-cn' },
+                    { label: 'English (en)', value: 'en' },
                   ]}
                 />
               </Form.Item>
