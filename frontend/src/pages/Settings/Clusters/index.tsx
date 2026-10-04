@@ -1,15 +1,48 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { ProTable, ModalForm, ProFormText, ProFormTextArea, ProFormRadio, ProFormSwitch } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Button, Tag, Space, Popconfirm, Typography } from 'antd';
-import { PlusOutlined, DeleteOutlined, HddOutlined, CheckCircleOutlined, SyncOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined,
+  DeleteOutlined,
+  HddOutlined,
+  CheckCircleOutlined,
+  SyncOutlined,
+  ScheduleOutlined,
+  CloudServerOutlined,
+  FolderOpenOutlined,
+} from '@ant-design/icons';
 import { settingsApi, type ClusterItem } from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
+import { ClusterStrategyDrawer } from './ClusterStrategyDrawer';
+import { ClusterCacheModal } from './ClusterCacheModal';
+import { ClusterShareStorageModal } from './ClusterShareStorageModal';
 
 const { Text } = Typography;
 
 export const ClustersPage: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
+
+  // Modals / Drawers state
+  const [activeCluster, setActiveCluster] = useState<ClusterItem | null>(null);
+  const [strategyDrawerVisible, setStrategyDrawerVisible] = useState<boolean>(false);
+  const [cacheModalVisible, setCacheModalVisible] = useState<boolean>(false);
+  const [shareStorageModalVisible, setShareStorageModalVisible] = useState<boolean>(false);
+
+  const openStrategyDrawer = (cluster: ClusterItem) => {
+    setActiveCluster(cluster);
+    setStrategyDrawerVisible(true);
+  };
+
+  const openCacheModal = (cluster: ClusterItem) => {
+    setActiveCluster(cluster);
+    setCacheModalVisible(true);
+  };
+
+  const openShareStorageModal = (cluster: ClusterItem) => {
+    setActiveCluster(cluster);
+    setShareStorageModalVisible(true);
+  };
 
   const handleDelete = async (id: string) => {
     try {
@@ -90,7 +123,35 @@ export const ClustersPage: React.FC = () => {
       title: '操作',
       valueType: 'option',
       key: 'option',
+      width: 280,
       render: (_, record) => [
+        <Button
+          key="strategy"
+          type="link"
+          size="small"
+          icon={<ScheduleOutlined />}
+          onClick={() => openStrategyDrawer(record)}
+        >
+          策略配置
+        </Button>,
+        <Button
+          key="cache"
+          type="link"
+          size="small"
+          icon={<CloudServerOutlined />}
+          onClick={() => openCacheModal(record)}
+        >
+          缓存配置
+        </Button>,
+        <Button
+          key="share-storage"
+          type="link"
+          size="small"
+          icon={<FolderOpenOutlined />}
+          onClick={() => openShareStorageModal(record)}
+        >
+          共享存储
+        </Button>,
         !record.local ? (
           <Popconfirm
             key="delete"
@@ -100,12 +161,12 @@ export const ClustersPage: React.FC = () => {
             okText="删除"
             cancelText="取消"
           >
-            <Button type="link" danger icon={<DeleteOutlined />}>
+            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
               断开连接
             </Button>
           </Popconfirm>
         ) : (
-          <Text key="builtin" type="secondary">
+          <Text key="builtin" type="secondary" style={{ fontSize: 12, paddingLeft: 4 }}>
             内置保护
           </Text>
         ),
@@ -181,6 +242,27 @@ export const ClustersPage: React.FC = () => {
             />
           </ModalForm>,
         ]}
+      />
+
+      <ClusterStrategyDrawer
+        open={strategyDrawerVisible}
+        onClose={() => setStrategyDrawerVisible(false)}
+        cluster={activeCluster}
+        onSuccess={() => actionRef.current?.reload()}
+      />
+
+      <ClusterCacheModal
+        open={cacheModalVisible}
+        onClose={() => setCacheModalVisible(false)}
+        cluster={activeCluster}
+        onSuccess={() => actionRef.current?.reload()}
+      />
+
+      <ClusterShareStorageModal
+        open={shareStorageModalVisible}
+        onClose={() => setShareStorageModalVisible(false)}
+        cluster={activeCluster}
+        onSuccess={() => actionRef.current?.reload()}
       />
     </div>
   );
