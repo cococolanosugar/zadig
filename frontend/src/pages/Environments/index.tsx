@@ -52,7 +52,7 @@ import EnvServiceHistoryDrawer from './EnvServiceHistoryDrawer';
 import ServiceDiffModal from './ServiceDiffModal';
 import ShareEnvModal from './ShareEnvModal';
 import PortalServiceModal from './PortalServiceModal';
-// import IstioGrayscaleDrawer from './IstioGrayscaleDrawer';
+import IstioGrayscaleDrawer from './IstioGrayscaleDrawer';
 import LogViewer from '../../components/Terminal/LogViewer';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
@@ -209,7 +209,7 @@ export const EnvironmentsPage: React.FC = () => {
   const [portalIsGrayscale, setPortalIsGrayscale] = useState(false);
 
   // Istio 灰度发布管理抽屉状态
-  // const [grayscaleDrawerOpen, setGrayscaleDrawerOpen] = useState(false);
+  const [grayscaleDrawerOpen, setGrayscaleDrawerOpen] = useState(false);
 
   const fetchChangeLogs = useCallback(
     async (page = 1) => {
@@ -859,7 +859,43 @@ export const EnvironmentsPage: React.FC = () => {
                             },
                           ]
                       : []),
-                    /* IstioGrayscale items will be enabled in commit 2 */
+                    // IstioGrayscale (Production environments)
+                    ...(currentEnvObj?.production
+                      ? currentEnvObj?.istio_grayscale_enable
+                        ? [
+                            {
+                              key: 'grayscale-config',
+                              icon: <RocketOutlined />,
+                              label: '灰度发布配置',
+                              onClick: () => {
+                                setGrayscaleDrawerOpen(true);
+                              },
+                              disabled: !currentEnv,
+                            },
+                            {
+                              key: 'grayscale-portal',
+                              icon: <GlobalOutlined />,
+                              label: '灰度网关配置',
+                              onClick: () => {
+                                setPortalTargetService('');
+                                setPortalIsGrayscale(true);
+                                setPortalModalOpen(true);
+                              },
+                              disabled: !currentEnv,
+                            },
+                          ]
+                        : [
+                            {
+                              key: 'grayscale-enable',
+                              icon: <RocketOutlined />,
+                              label: '开启灰度发布',
+                              onClick: () => {
+                                setGrayscaleDrawerOpen(true);
+                              },
+                              disabled: !currentEnv,
+                            },
+                          ]
+                      : []),
                     { type: 'divider' as const },
                     {
                       key: 'delete',
@@ -1312,6 +1348,25 @@ export const EnvironmentsPage: React.FC = () => {
           serviceName={portalTargetService}
           availableServices={pods.map((p) => p.name)}
           isGrayscale={portalIsGrayscale}
+          onSuccess={() => {
+            loadEnvironments();
+          }}
+        />
+      )}
+
+      {/* Istio Grayscale Drawer (灰度发布管理) */}
+      {grayscaleDrawerOpen && (
+        <IstioGrayscaleDrawer
+          open={grayscaleDrawerOpen}
+          onClose={() => setGrayscaleDrawerOpen(false)}
+          projectName={activeProject || ''}
+          envName={currentEnv}
+          clusterId={currentEnvObj?.cluster_id}
+          namespace={currentEnvObj?.namespace}
+          isBase={currentEnvObj?.istio_grayscale_is_base}
+          isGrayscaleEnabled={currentEnvObj?.istio_grayscale_enable}
+          environments={environments}
+          availableServices={pods.map((p) => p.name)}
           onSuccess={() => {
             loadEnvironments();
           }}
