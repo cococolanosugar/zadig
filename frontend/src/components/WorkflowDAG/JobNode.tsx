@@ -32,7 +32,8 @@ export const JobNode = memo(({ data }: { data: JobNodeData }) => {
       case 'zadig-build':
         return <BuildOutlined style={{ color: '#0066ff' }} />;
       case 'zadig-deploy':
-      case 'helm-deploy':
+      case 'zadig-helm-chart-deploy':
+      case 'zadig-vm-deploy':
         return <CloudUploadOutlined style={{ color: '#52c41a' }} />;
       case 'freestyle':
         return <CodeOutlined style={{ color: '#722ed1' }} />;

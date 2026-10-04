@@ -7,11 +7,14 @@ import {
   Button,
   Space,
   Typography,
-  InputNumber,
   Radio,
   Switch,
+  Card,
+  Row,
+  Col,
+  InputNumber,
 } from 'antd';
-import { SaveOutlined } from '@ant-design/icons';
+import { SaveOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { workflowApi, type WorkflowJob } from '../../api/workflow';
 import { feedback } from '../../utils/feedback';
 import YamlEditor from '../Editor/YamlEditor';
@@ -37,13 +40,16 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
   const [testOptions, setTestOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [scanOptions, setScanOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [deployType, setDeployType] = useState<'k8s' | 'helm'>('k8s');
+  const [vmDeploySource, setVmDeploySource] = useState<'runtime' | 'fromjob'>('runtime');
   const [mergingImage, setMergingImage] = useState(false);
   const [validatingSQL, setValidatingSQL] = useState(false);
 
   useEffect(() => {
     if (job) {
-      const isHelm = job.type === 'helm-deploy' || job.spec?.deploy_type === 'helm';
+      const isHelm = job.type === 'zadig-deploy' && job.spec?.deploy_type === 'helm';
       setDeployType(isHelm ? 'helm' : 'k8s');
+      const vmSrc = (job.spec?.source as 'runtime' | 'fromjob') || 'runtime';
+      setVmDeploySource(vmSrc);
       form.setFieldsValue({
         name: job.name,
         type: job.type,
@@ -62,6 +68,17 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         sql_type: (job.spec?.type as string) || 'mysql',
         sql: (job.spec?.sql as string) || 'CREATE TABLE example (\n  id INT PRIMARY KEY AUTO_INCREMENT,\n  name VARCHAR(64) NOT NULL\n);',
         db_instance_id: (job.spec?.id as string) || '',
+        // zadig-helm-chart-deploy
+        skip_check_run_status: !!job.spec?.skip_check_run_status,
+        deploy_helm_charts: Array.isArray(job.spec?.deploy_helm_charts) && job.spec.deploy_helm_charts.length > 0
+          ? job.spec.deploy_helm_charts
+          : [{ release_name: '', chart_repo: '', chart_name: '', chart_version: '', values_yaml: '' }],
+        // zadig-vm-deploy
+        source: vmSrc,
+        job_name: job.spec?.job_name || '',
+        service_and_vm_deploys: Array.isArray(job.spec?.service_and_vm_deploys) && job.spec.service_and_vm_deploys.length > 0
+          ? job.spec.service_and_vm_deploys
+          : [{ service_name: '', service_module: '', deploy_name: '', deploy_artifact_type: 'file', file_name: '', artifact_url: '', image: '' }],
       });
     }
   }, [job, form]);
@@ -71,14 +88,19 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
     if (!visible || !job) return;
     const projectName = job.spec?.project_name as string | undefined;
     // 环境列表
-    if (job.type === 'zadig-deploy' || job.type === 'helm-deploy' || job.type === 'zadig-restart') {
+    if (
+      job.type === 'zadig-deploy' ||
+      job.type === 'zadig-helm-chart-deploy' ||
+      job.type === 'zadig-vm-deploy' ||
+      job.type === 'zadig-restart'
+    ) {
       http
-        .get<Array<{ name: string }>>(`/api/aslan/environment/environments?projectName=${projectName || ''}`, {
+        .get<Array<{ name: string; alias?: string }>>(`/api/aslan/environment/environments?projectName=${projectName || ''}`, {
           skipErrorHandler: true,
         })
         .then((res) => {
           const list = Array.isArray(res) ? res : [];
-          setEnvOptions(list.map((e) => ({ label: e.name, value: e.name })));
+          setEnvOptions(list.map((e) => ({ label: e.alias ? `${e.name} (${e.alias})` : e.name, value: e.name })));
         })
         .catch(() => setEnvOptions([]));
     }
@@ -173,7 +195,7 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
 
   const handleFinish = (values: Record<string, unknown>) => {
     if (!job) return;
-    const isHelm = job.type === 'helm-deploy' || values.deploy_type === 'helm';
+    const isHelm = job.type === 'zadig-deploy' && values.deploy_type === 'helm';
     const updated: WorkflowJob = {
       ...job,
       name: values.name as string,
@@ -181,7 +203,7 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         ...job.spec,
         service_name: values.service_name as string,
         env: values.env as string,
-        deploy_type: isHelm ? 'helm' : 'k8s',
+        deploy_type: isHelm ? 'helm' : (values.deploy_type as string) || 'k8s',
         image: values.image as string,
         values_yaml: values.values_yaml as string,
         variable_yaml: values.values_yaml as string,
@@ -195,6 +217,13 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         sql: values.sql as string,
         type: (values.sql_type as string) || (job.spec?.type as string) || 'mysql',
         id: values.db_instance_id as string,
+        // zadig-helm-chart-deploy
+        skip_check_run_status: values.skip_check_run_status as boolean,
+        deploy_helm_charts: values.deploy_helm_charts as any[],
+        // zadig-vm-deploy
+        source: values.source as string,
+        job_name: values.source === 'fromjob' ? (values.job_name as string) : undefined,
+        service_and_vm_deploys: values.service_and_vm_deploys as any[],
       },
     };
     onSave(updated);
@@ -253,19 +282,17 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
           </>
         )}
 
-        {(job?.type === 'zadig-deploy' || job?.type === 'helm-deploy') && (
+        {job?.type === 'zadig-deploy' && (
           <>
-            {job.type === 'zadig-deploy' && (
-              <Form.Item name="deploy_type" label="部署形态" initialValue="k8s">
-                <Radio.Group
-                  onChange={(e) => setDeployType(e.target.value)}
-                  options={[
-                    { label: 'Kubernetes 原生', value: 'k8s' },
-                    { label: 'Helm Chart 部署', value: 'helm' },
-                  ]}
-                />
-              </Form.Item>
-            )}
+            <Form.Item name="deploy_type" label="部署形态" initialValue="k8s">
+              <Radio.Group
+                onChange={(e) => setDeployType(e.target.value)}
+                options={[
+                  { label: 'Kubernetes 原生', value: 'k8s' },
+                  { label: 'Helm Chart 部署', value: 'helm' },
+                ]}
+              />
+            </Form.Item>
 
             <Form.Item
               name="env"
@@ -292,7 +319,7 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
               <Input placeholder="例如: backend-api" />
             </Form.Item>
 
-            {(job.type === 'helm-deploy' || deployType === 'helm') && (
+            {deployType === 'helm' && (
               <>
                 <Form.Item
                   name="image"
@@ -338,6 +365,293 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
                 </Form.Item>
               </>
             )}
+          </>
+        )}
+
+        {job?.type === 'zadig-helm-chart-deploy' && (
+          <>
+            <Form.Item
+              name="env"
+              label="发布目标环境"
+              rules={[{ required: true, message: '请选择目标环境' }]}
+            >
+              <Select
+                showSearch
+                options={envOptions.length > 0 ? envOptions : [
+                  { label: '开发环境 (dev)', value: 'dev' },
+                  { label: '集成测试 (qa)', value: 'qa' },
+                ]}
+                placeholder="请选择目标环境"
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="skip_check_run_status"
+              label="跳过运行状态检查"
+              valuePropName="checked"
+              tooltip="部署后是否跳过 Workload 运行就绪状态探测"
+            >
+              <Switch />
+            </Form.Item>
+
+            <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+              Helm Chart 部署清单:
+            </Typography.Text>
+            <Form.List name="deploy_helm_charts">
+              {(fields, { add, remove }) => (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {fields.map(({ key, name, ...restField }) => (
+                    <Card
+                      key={key}
+                      variant="borderless"
+                      style={{ background: '#fbfbfb', border: '1px solid #f0f0f0', borderRadius: 6 }}
+                      styles={{ body: { padding: 16 } }}
+                      title={<Typography.Text style={{ fontSize: 13 }}>Helm Release #{name + 1}</Typography.Text>}
+                      extra={
+                        fields.length > 1 ? (
+                          <Button
+                            type="text"
+                            danger
+                            size="small"
+                            icon={<DeleteOutlined />}
+                            onClick={() => remove(name)}
+                          >
+                            删除
+                          </Button>
+                        ) : null
+                      }
+                    >
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'release_name']}
+                            label="Release 名称"
+                            rules={[{ required: true, message: '请输入 Release 名称' }]}
+                          >
+                            <Input placeholder="例如: my-chart-release" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'chart_repo']}
+                            label="Chart 仓库名"
+                          >
+                            <Input placeholder="例如: official-charts" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'chart_name']}
+                            label="Chart 名称"
+                            rules={[{ required: true, message: '请输入 Chart 名称' }]}
+                          >
+                            <Input placeholder="例如: nginx-ingress" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'chart_version']}
+                            label="Chart 版本"
+                          >
+                            <Input placeholder="例如: 1.2.0" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'values_yaml']}
+                        label="Values YAML 覆盖 (可选)"
+                      >
+                        <Input.TextArea
+                          rows={3}
+                          placeholder="key: value\nreplicaCount: 2"
+                        />
+                      </Form.Item>
+                    </Card>
+                  ))}
+                  <Button
+                    type="dashed"
+                    onClick={() => add({ release_name: '', chart_repo: '', chart_name: '', chart_version: '', values_yaml: '' })}
+                    block
+                    icon={<PlusOutlined />}
+                  >
+                    添加 Helm Chart
+                  </Button>
+                </div>
+              )}
+            </Form.List>
+          </>
+        )}
+
+        {job?.type === 'zadig-vm-deploy' && (
+          <>
+            <Form.Item
+              name="env"
+              label="主机部署目标环境"
+              rules={[{ required: true, message: '请选择目标主机环境' }]}
+            >
+              <Select
+                showSearch
+                options={envOptions.length > 0 ? envOptions : [
+                  { label: '主机测试环境 (vm-dev)', value: 'vm-dev' },
+                  { label: '预发主机环境 (vm-staging)', value: 'vm-staging' },
+                ]}
+                placeholder="请选择目标环境"
+              />
+            </Form.Item>
+
+            <Form.Item name="source" label="部署来源" initialValue="runtime">
+              <Radio.Group
+                onChange={(e) => setVmDeploySource(e.target.value)}
+                options={[
+                  { label: '运行时指定 (runtime)', value: 'runtime' },
+                  { label: '上游构建产物 (fromjob)', value: 'fromjob' },
+                ]}
+              />
+            </Form.Item>
+
+            {vmDeploySource === 'fromjob' && (
+              <Form.Item
+                name="job_name"
+                label="来源构建任务名称"
+                rules={[{ required: true, message: '请输入上游构建任务名称' }]}
+              >
+                <Input placeholder="例如: zadig-build-1" />
+              </Form.Item>
+            )}
+
+            <Typography.Text strong style={{ display: 'block', marginBottom: 8, marginTop: 16 }}>
+              主机部署配置清单:
+            </Typography.Text>
+            <Form.List name="service_and_vm_deploys">
+              {(fields, { add, remove }) => (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {fields.map(({ key, name, ...restField }) => (
+                    <Card
+                      key={key}
+                      variant="borderless"
+                      style={{ background: '#fbfbfb', border: '1px solid #f0f0f0', borderRadius: 6 }}
+                      styles={{ body: { padding: 16 } }}
+                      title={<Typography.Text style={{ fontSize: 13 }}>主机部署项 #{name + 1}</Typography.Text>}
+                      extra={
+                        fields.length > 1 ? (
+                          <Button
+                            type="text"
+                            danger
+                            size="small"
+                            icon={<DeleteOutlined />}
+                            onClick={() => remove(name)}
+                          >
+                            删除
+                          </Button>
+                        ) : null
+                      }
+                    >
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'service_name']}
+                            label="服务名称"
+                            rules={[{ required: true, message: '请输入服务名称' }]}
+                          >
+                            <Input placeholder="例如: order-service" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'service_module']}
+                            label="服务组件"
+                            rules={[{ required: true, message: '请输入服务组件' }]}
+                          >
+                            <Input placeholder="例如: order-api" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'deploy_name']}
+                            label="主机部署目标"
+                            rules={[{ required: true, message: '请输入部署目标/主机组标识' }]}
+                          >
+                            <Input placeholder="例如: host-group-1 或 vm-node-01" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'deploy_artifact_type']}
+                            label="产物类型"
+                            initialValue="file"
+                          >
+                            <Select
+                              options={[
+                                { label: '软件包/文件 (file)', value: 'file' },
+                                { label: '容器镜像 (image)', value: 'image' },
+                              ]}
+                            />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'file_name']}
+                            label="文件/软件包名称"
+                          >
+                            <Input placeholder="例如: app.tar.gz" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'artifact_url']}
+                            label="产物下载/对象存储 URL"
+                          >
+                            <Input placeholder="https://... 或 s3://..." />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'image']}
+                        label="镜像地址 (仅容器产物需填写)"
+                      >
+                        <Input placeholder="例如: ccr.ccs.tencentyun.com/ns/order-api:v1.0" />
+                      </Form.Item>
+                    </Card>
+                  ))}
+                  <Button
+                    type="dashed"
+                    onClick={() =>
+                      add({
+                        service_name: '',
+                        service_module: '',
+                        deploy_name: '',
+                        deploy_artifact_type: 'file',
+                        file_name: '',
+                        artifact_url: '',
+                        image: '',
+                      })
+                    }
+                    block
+                    icon={<PlusOutlined />}
+                  >
+                    添加主机部署项
+                  </Button>
+                </div>
+              )}
+            </Form.List>
           </>
         )}
 
