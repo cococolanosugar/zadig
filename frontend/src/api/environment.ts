@@ -664,7 +664,46 @@ export const environmentApi = {
     );
     return Array.isArray(res) ? res : [];
   },
+
+  /**
+   * Get environment sleep and wake cron settings.
+   * GET /api/aslan/environment/environments/:name/sleep/cron?projectName=&production=
+   */
+  async getEnvSleepCron(
+    projectName: string,
+    envName: string,
+    production = false
+  ): Promise<EnvSleepCronArg> {
+    const prodParam = production ? '&production=true' : '';
+    return http.get<EnvSleepCronArg>(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/sleep/cron?projectName=${encodeURIComponent(projectName)}${prodParam}`
+    );
+  },
+
+  /**
+   * Update or insert environment sleep and wake cron settings.
+   * PUT /api/aslan/environment/environments/:name/sleep/cron?projectName=&production=
+   */
+  async upsertEnvSleepCron(
+    projectName: string,
+    envName: string,
+    payload: EnvSleepCronArg,
+    production = false
+  ): Promise<unknown> {
+    const prodParam = production ? '&production=true' : '';
+    return http.put(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/sleep/cron?projectName=${encodeURIComponent(projectName)}${prodParam}`,
+      payload
+    );
+  },
 };
+
+export interface EnvSleepCronArg {
+  sleep_cron_enable: boolean;
+  sleep_cron: string;
+  awake_cron_enable: boolean;
+  awake_cron: string;
+}
 
 export interface AvailableNamespace {
   name: string;
