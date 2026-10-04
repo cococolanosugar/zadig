@@ -32,6 +32,7 @@ import {
   SafetyOutlined,
   BugOutlined,
   PauseCircleOutlined,
+  PlayCircleOutlined,
 } from '@ant-design/icons';
 import { workflowApi, type WorkflowTaskExecution } from '../../api/workflow';
 import { useProjectStore } from '../../stores/project';
@@ -39,6 +40,7 @@ import { useAuthStore } from '../../stores/auth';
 import { feedback } from '../../utils/feedback';
 import LogViewer from '../../components/Terminal/LogViewer';
 import { PodTerminal } from '../../components/Terminal/PodTerminal';
+import { ManualExecModal } from './ManualExecModal';
 
 const { Title, Text } = Typography;
 
@@ -50,6 +52,17 @@ const findPendingApproval = (task: WorkflowTaskExecution | null) => {
       if (job.type === 'approval' && (job.status === 'wait_for_approval' || job.status === 'waiting')) {
         return { jobName: job.name, stageName: stage.name };
       }
+    }
+  }
+  return null;
+};
+
+// 从任务中找到等待手动执行的阶段（status === 'pause'）
+const findPendingManualExecStage = (task: WorkflowTaskExecution | null) => {
+  if (!task?.stages) return null;
+  for (const stage of task.stages) {
+    if (stage.status === 'pause') {
+      return stage;
     }
   }
   return null;
@@ -78,8 +91,10 @@ export const PipelineExecutionPage: React.FC = () => {
   const [cancelling, setCancelling] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [cloning, setCloning] = useState(false);
+  const [manualExecStageName, setManualExecStageName] = useState<string | null>(null);
 
   const pendingApproval = findPendingApproval(task);
+  const pendingManualExec = useMemo(() => findPendingManualExecStage(task), [task]);
 
   const handleApprove = async (approve: boolean) => {
     if (!pendingApproval || !task) return;
@@ -328,6 +343,8 @@ export const PipelineExecutionPage: React.FC = () => {
         return <Tag icon={<BugOutlined />} color="warning">准备前调试</Tag>;
       case 'debug_after':
         return <Tag icon={<BugOutlined />} color="warning">执行后调试</Tag>;
+      case 'pause':
+        return <Tag icon={<PauseCircleOutlined />} color="warning">等待手动执行</Tag>;
       default:
         return <Tag color="default">排队中</Tag>;
     }
@@ -337,11 +354,29 @@ export const PipelineExecutionPage: React.FC = () => {
     task?.stages?.map((stage) => {
       let stepStatus: 'finish' | 'process' | 'error' | 'wait' = 'finish';
       if (stage.status === 'running') stepStatus = 'process';
+      else if (stage.status === 'pause') stepStatus = 'process';
       else if (stage.status === 'failed') stepStatus = 'error';
       else if (stage.status === 'waiting') stepStatus = 'wait';
 
       return {
-        title: stage.name,
+        title: (
+          <Space size={8}>
+            <span>{stage.name}</span>
+            {stage.status === 'pause' && (
+              <Button
+                size="small"
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setManualExecStageName(stage.name);
+                }}
+              >
+                手动执行
+              </Button>
+            )}
+          </Space>
+        ),
         description: (
           <div style={{ marginTop: 4 }}>
             {stage.jobs.map((j) => {
@@ -553,6 +588,29 @@ export const PipelineExecutionPage: React.FC = () => {
               驳回，终止任务
             </Button>
           </Space>
+        </Card>
+      )}
+
+      {/* Manual Execution Required Action */}
+      {pendingManualExec && (
+        <Card variant="borderless" style={{ borderRadius: 8, border: '1px solid #faad14' }}>
+          <Alert
+            title="该任务包含等待手动执行的阶段"
+            description={`阶段 [${pendingManualExec.name}] 已到达人工暂停点，正在等待手动确认恢复执行。`}
+            type="warning"
+            showIcon
+            icon={<PauseCircleOutlined style={{ color: '#fa8c16' }} />}
+            style={{ borderRadius: 6 }}
+            action={
+              <Button
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                onClick={() => setManualExecStageName(pendingManualExec.name)}
+              >
+                手动执行
+              </Button>
+            }
+          />
         </Card>
       )}
 
@@ -774,6 +832,18 @@ export const PipelineExecutionPage: React.FC = () => {
           <Empty description="无法获取调试连接信息" style={{ padding: '60px 0' }} />
         )}
       </Modal>
+
+      {manualExecStageName && (
+        <ManualExecModal
+          open={Boolean(manualExecStageName)}
+          stageName={manualExecStageName}
+          workflowName={effWorkflowName || ''}
+          taskId={effTaskId || ''}
+          projectName={activeProject}
+          onClose={() => setManualExecStageName(null)}
+          onSuccess={loadTask}
+        />
+      )}
     </div>
   );
 };
