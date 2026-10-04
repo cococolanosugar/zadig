@@ -175,7 +175,7 @@ export const EnvironmentWizardPage: React.FC = () => {
       const values = await form.validateFields();
       setSubmitting(true);
 
-      // 主机 (PM) 环境采用 /init/type/pm 端点；容器环境 (K8s/Helm) 采用 /environments?type= 端点
+      // 主机 (PM/VM) 环境采用 /init/type/vm 端点；容器环境 (K8s/Helm) 采用 /environments?type= 端点
       if (envType === 'pm') {
         const payload = [
           {
@@ -190,7 +190,7 @@ export const EnvironmentWizardPage: React.FC = () => {
           },
         ];
         await http.post(
-          `/api/aslan/environment/init/type/pm?projectName=${encodeURIComponent(projectName)}`,
+          `/api/aslan/environment/init/type/vm?projectName=${encodeURIComponent(projectName)}&appType=host`,
           payload
         );
       } else {
