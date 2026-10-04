@@ -137,7 +137,64 @@ export const projectApi = {
     const res = await http.get<ProjectTemplateHierarchyInfo[]>('/api/aslan/project/templates/info');
     return Array.isArray(res) ? res : [];
   },
+
+  /**
+   * Get project template / product detail
+   * GET /api/aslan/project/products/:name
+   */
+  async getProjectDetail(projectName: string): Promise<ProjectProductDetail> {
+    return http.get(`/api/aslan/project/products/${projectName}`);
+  },
+
+  /**
+   * Update project settings (strategy, artifact naming rules, release max history, auto deploy)
+   * PUT /api/aslan/project/products?projectName=:name
+   */
+  async updateProjectProduct(projectName: string, payload: Partial<ProjectProductDetail>): Promise<unknown> {
+    return http.put('/api/aslan/project/products', payload, {
+      params: { projectName },
+    });
+  },
 };
+
+export interface CustomRule {
+  pr_rule?: string;
+  branch_rule?: string;
+  pr_and_branch_rule?: string;
+  tag_rule?: string;
+  jenkins_rule?: string;
+  commit_rule?: string;
+}
+
+export interface AutoDeployPolicy {
+  enable: boolean;
+}
+
+export interface ImageSearchingRule {
+  repo?: string;
+  namespace?: string;
+  image?: string;
+  tag?: string;
+  in_use?: boolean;
+  preset_id?: number;
+}
+
+export interface ProjectProductDetail {
+  product_name: string;
+  project_name?: string;
+  desc?: string;
+  revision?: number;
+  enabled?: boolean;
+  release_max_history?: number;
+  auto_deploy?: AutoDeployPolicy | null;
+  custom_image_rule?: CustomRule;
+  custom_tar_rule?: CustomRule;
+  image_searching_rules?: ImageSearchingRule[];
+  services?: string[][];
+  production_services?: string[][];
+  public?: boolean;
+  [key: string]: unknown;
+}
 
 export interface ProjectTemplateContainerInfo {
   value: string;
@@ -157,3 +214,4 @@ export interface ProjectTemplateHierarchyInfo {
 }
 
 export default projectApi;
+

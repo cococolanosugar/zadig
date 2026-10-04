@@ -20,9 +20,11 @@ import {
   EditOutlined,
   DownOutlined,
   HddOutlined,
+  SlidersOutlined,
 } from '@ant-design/icons';
 import { useProjectStore } from '../stores/project';
 import { CollaborationDrawer } from '../pages/Projects/CollaborationDrawer';
+import { ProjectStrategyDrawer } from '../pages/Projects/ProjectStrategyDrawer';
 
 export const ProjectDetailLayout: React.FC = () => {
   const { projectName } = useParams<{ projectName: string }>();
@@ -30,6 +32,7 @@ export const ProjectDetailLayout: React.FC = () => {
   const navigate = useNavigate();
   const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
   const [collaborationDrawerOpen, setCollaborationDrawerOpen] = React.useState<boolean>(false);
+  const [strategyDrawerOpen, setStrategyDrawerOpen] = React.useState<boolean>(false);
 
   React.useEffect(() => {
     if (projectName) {
@@ -191,6 +194,12 @@ export const ProjectDetailLayout: React.FC = () => {
       onClick: () => setCollaborationDrawerOpen(true),
     },
     {
+      key: 'strategy',
+      icon: <SlidersOutlined />,
+      label: '策略与交付物配置',
+      onClick: () => setStrategyDrawerOpen(true),
+    },
+    {
       key: 'rbac',
       icon: <TeamOutlined />,
       label: '项目权限',
@@ -248,6 +257,12 @@ export const ProjectDetailLayout: React.FC = () => {
         open={collaborationDrawerOpen}
         projectName={projectName || ''}
         onClose={() => setCollaborationDrawerOpen(false)}
+      />
+
+      <ProjectStrategyDrawer
+        open={strategyDrawerOpen}
+        projectName={projectName || ''}
+        onClose={() => setStrategyDrawerOpen(false)}
       />
     </div>
   );
