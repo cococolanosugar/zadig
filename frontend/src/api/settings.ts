@@ -2,6 +2,52 @@ import http from './client';
 import { generateAesKey, rsaEncrypt, aesDecrypt } from '../utils/crypto';
 import authApi from './auth';
 
+export interface ClusterScheduleStrategy {
+  strategy_id?: string;
+  strategy_name: string;
+  strategy: 'normal' | 'required' | 'preferred' | string;
+  node_labels?: string[];
+  tolerations?: string;
+  default?: boolean;
+}
+
+export interface ClusterStrategyReference {
+  has_references: boolean;
+  strategy_id: string;
+  strategy_name: string;
+}
+
+export interface ClusterCacheConfig {
+  medium_type: 'object' | 'nfs' | string;
+  object_properties?: {
+    id: string;
+  };
+  nfs_properties?: {
+    provision_type?: 'dynamic' | 'static' | string;
+    storage_class?: string;
+    storage_size_in_gib?: number;
+    pvc?: string;
+    access_mode?: string;
+    subpath?: string;
+    mount_path?: string;
+    is_temporary?: boolean;
+  };
+}
+
+export interface ClusterShareStorageConfig {
+  medium_type: 'nfs' | 'object' | '' | string;
+  nfs_properties?: {
+    provision_type?: 'dynamic' | 'static' | string;
+    storage_class?: string;
+    storage_size_in_gib?: number;
+    pvc?: string;
+    access_mode?: string;
+    subpath?: string;
+    mount_path?: string;
+    is_temporary?: boolean;
+  };
+}
+
 export interface ClusterItem {
   id: string;
   name: string;
@@ -16,7 +62,12 @@ export interface ClusterItem {
     strategy?: string;
     project_names?: string[];
     cluster_access_type?: string;
+    schedule_workflow?: boolean;
+    schedule_strategy?: ClusterScheduleStrategy[];
+    tolerations?: string;
   };
+  cache?: ClusterCacheConfig;
+  share_storage?: ClusterShareStorageConfig;
 }
 
 export interface CodeHostItem {
@@ -145,6 +196,32 @@ export const settingsApi = {
 
   async deleteCluster(id: string): Promise<unknown> {
     return http.delete(`/api/aslan/cluster/clusters/${id}`);
+  },
+
+  async addOrUpdateClusterStrategy(clusterId: string, strategy: ClusterScheduleStrategy): Promise<ClusterItem> {
+    return http.put(`/api/aslan/cluster/clusters/${clusterId}/strategy`, strategy);
+  },
+
+  async deleteClusterStrategy(clusterId: string, strategyId: string): Promise<ClusterItem> {
+    return http.delete(`/api/aslan/cluster/clusters/${clusterId}/strategy?strategyID=${strategyId}`);
+  },
+
+  async getClusterStrategyReferences(clusterId: string): Promise<ClusterStrategyReference[]> {
+    const res = await http.get<ClusterStrategyReference[]>(`/api/aslan/cluster/clusters/${clusterId}/strategy/references`);
+    return Array.isArray(res) ? res : [];
+  },
+
+  async updateClusterCache(clusterId: string, cache: ClusterCacheConfig): Promise<ClusterItem> {
+    return http.put(`/api/aslan/cluster/clusters/${clusterId}/cache`, cache);
+  },
+
+  async updateClusterShareStorage(clusterId: string, shareStorage: ClusterShareStorageConfig): Promise<ClusterItem> {
+    return http.put(`/api/aslan/cluster/clusters/${clusterId}/storage`, shareStorage);
+  },
+
+  async checkClusterShareStorageEnabled(clusterId: string): Promise<boolean> {
+    const res = await http.get<boolean>(`/api/aslan/workflow/v4/sharestorage?id=${clusterId}`);
+    return Boolean(res);
   },
 
   // --- Code Hosts ---
