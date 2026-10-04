@@ -403,6 +403,23 @@ export const environmentApi = {
       { skipErrorHandler: true }
     );
   },
+
+  /**
+   * Check if target cluster supports ephemeral debug containers (pods/ephemeralcontainers).
+   * GET /api/aslan/cluster/check/ephemeralcontainers?projectName=&envName=
+   * 后端: pkg/microservice/aslan/core/multicluster/handler/router.go:67
+   */
+  async checkEphemeralContainers(projectName: string, envName: string): Promise<boolean> {
+    try {
+      const res = await http.get<boolean>(
+        `/api/aslan/cluster/check/ephemeralcontainers?projectName=${encodeURIComponent(projectName)}&envName=${encodeURIComponent(envName)}`,
+        { skipErrorHandler: true }
+      );
+      return Boolean(res);
+    } catch {
+      return false;
+    }
+  },
 };
 
 export interface AvailableNamespace {
