@@ -5,6 +5,8 @@ import { subscribeSSE } from '../utils/sse';
 export type JobType =
   | 'zadig-build'
   | 'zadig-deploy'
+  | 'zadig-helm-chart-deploy'
+  | 'zadig-vm-deploy'
   | 'zadig-test'
   | 'zadig-scanning'
   | 'zadig-distribute-image'
@@ -15,6 +17,33 @@ export type JobType =
   | 'sql'
   | 'plugin'
   | (string & {});
+
+export interface DeployHelmChartItem {
+  release_name: string;
+  chart_repo?: string;
+  chart_name?: string;
+  chart_version?: string;
+  values_yaml?: string;
+  override_kvs?: string;
+}
+
+export interface ServiceAndVMDeployItem {
+  service_name: string;
+  service_module: string;
+  deploy_name: string;
+  deploy_artifact_type?: 'file' | 'image' | string;
+  artifact_url?: string;
+  file_name?: string;
+  image?: string;
+  key_vals?: Array<{ key: string; value: string }>;
+  repos?: Array<{
+    codehost_id?: number;
+    repo_name?: string;
+    repo_owner?: string;
+    branch?: string;
+    commit_id?: string;
+  }>;
+}
 
 export interface WorkflowJobSpec {
   service_name?: string;
@@ -28,6 +57,14 @@ export interface WorkflowJobSpec {
   type?: string;
   id?: string;
   dockerfile?: string;
+  deploy_helm_charts?: DeployHelmChartItem[];
+  skip_check_run_status?: boolean;
+  service_and_vm_deploys?: ServiceAndVMDeployItem[];
+  env_source?: string;
+  ref_repos?: boolean;
+  s3_storage_id?: string;
+  docker_registry_id?: string;
+  origin_job_name?: string;
   [key: string]: unknown;
 }
 
@@ -104,6 +141,14 @@ export interface WorkflowTaskExecution {
     status: string;
     start_time?: number;
     end_time?: number;
+    manual_exec?: {
+      enabled: boolean;
+      modify_params?: boolean;
+      excuted?: boolean;
+      manual_exec_users?: Array<{ user_id?: string; user_name?: string; type?: string }>;
+      manual_exector_id?: string;
+      manual_exector_name?: string;
+    };
     jobs: {
       name: string;
       type: string;
@@ -671,6 +716,40 @@ export const workflowApi = {
         'SQL 校验失败';
       return [{ message: msg }];
     }
+  },
+
+  /**
+   * 获取工作流任务阶段手动执行信息（返回 WorkflowV4 结构）
+   * GET /api/aslan/workflow/v4/workflowtask/manualexec/workflow/:workflowName/task/:taskID?projectName=&stageName=
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:142, workflow_task_v4.go:394-432)
+   */
+  getManualExecTaskInfo(
+    workflowName: string,
+    taskId: number | string,
+    projectName: string,
+    stageName?: string
+  ) {
+    return http.get<Record<string, unknown>>(
+      `/api/aslan/workflow/v4/workflowtask/manualexec/workflow/${encodeURIComponent(workflowName)}/task/${taskId}?projectName=${encodeURIComponent(projectName)}${stageName ? `&stageName=${encodeURIComponent(stageName)}` : ''}`
+    );
+  },
+
+  /**
+   * 触发阶段手动执行，可修改阶段内任务参数
+   * POST /api/aslan/workflow/v4/workflowtask/manualexec/workflow/:workflowName/task/:taskID?projectName=&stageName=
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:141, workflow_task_v4.go:488-510)
+   */
+  manualExecWorkflowTask(
+    workflowName: string,
+    taskId: number | string,
+    stageName: string,
+    payload: { jobs: unknown[] },
+    projectName: string
+  ) {
+    return http.post<void>(
+      `/api/aslan/workflow/v4/workflowtask/manualexec/workflow/${encodeURIComponent(workflowName)}/task/${taskId}?projectName=${encodeURIComponent(projectName)}&stageName=${encodeURIComponent(stageName)}`,
+      payload
+    );
   },
 };
 
