@@ -20,6 +20,7 @@ import {
   Divider,
   Checkbox,
   Drawer,
+  Popconfirm,
 } from 'antd';
 import {
   MailOutlined,
@@ -68,6 +69,7 @@ import systemConfigApi, {
   type CustomNavigationConfig,
 } from '../../../api/systemConfig';
 import emailApi from '../../../api/email';
+import settingsApi, { type ProxyConfig } from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
 
 const { Title, Text } = Typography;
@@ -146,6 +148,10 @@ export const SystemConfigPage: React.FC = () => {
   const [emailForm] = Form.useForm();
   const [concurrencyForm] = Form.useForm();
   const [proxyForm] = Form.useForm();
+  const [proxyId, setProxyId] = useState<string>('');
+  const [testingProxy, setTestingProxy] = useState<boolean>(false);
+  const [savingProxy, setSavingProxy] = useState<boolean>(false);
+  const [needPassword, setNeedPassword] = useState<boolean>(false);
   const [aiReviewForm] = Form.useForm();
   const [llmOptions, setLlmOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [savingAiReview, setSavingAiReview] = useState(false);
@@ -252,9 +258,30 @@ export const SystemConfigPage: React.FC = () => {
         );
         setAnnouncements(Array.isArray(annRes) ? annRes : (annRes as { announcements?: AnnouncementItem[] })?.announcements || []);
       } else if (tab === 'proxy') {
-        const res = await http.get<unknown[]>('/api/aslan/system/proxyManage', { skipErrorHandler: true });
+        const res = await settingsApi.getProxies();
         if (Array.isArray(res) && res.length > 0) {
-          proxyForm.setFieldsValue(res[0] as Record<string, unknown>);
+          const p = res[0];
+          setProxyId(p.id || '');
+          setNeedPassword(Boolean(p.need_password));
+          proxyForm.setFieldsValue({
+            type: p.type || 'http',
+            address: p.address || '',
+            port: p.port || 8080,
+            need_password: Boolean(p.need_password),
+            username: p.username || '',
+            password: p.password || '',
+          });
+        } else {
+          setProxyId('');
+          setNeedPassword(false);
+          proxyForm.setFieldsValue({
+            type: 'http',
+            address: '',
+            port: 8080,
+            need_password: false,
+            username: '',
+            password: '',
+          });
         }
       } else if (tab === 'auditlog') {
         const res = await http.get<{ operation_logs?: OperationLogItem[] }>(
@@ -1367,33 +1394,137 @@ export const SystemConfigPage: React.FC = () => {
           </div>
         ) : activeTab === 'proxy' ? (
           <div style={{ maxWidth: 640 }}>
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              title="网络代理配置"
+              description="配置平台访问外部网络（如代码托管平台、镜像仓库、外网依赖包等）时使用的网络代理。支持配置代理认证并在线执行连通性测试。"
+            />
             <Form form={proxyForm} layout="vertical">
-              <Form.Item label="HTTP 代理地址" name="http_proxy">
-                <Input placeholder="http://proxy.internal.corp:8080" />
-              </Form.Item>
-              <Form.Item label="HTTPS 代理地址" name="https_proxy">
-                <Input placeholder="http://proxy.internal.corp:8080" />
-              </Form.Item>
-              <Form.Item label="无需代理地址 (No Proxy)" name="no_proxy">
-                <Input placeholder="localhost, 127.0.0.1, .cluster.local" />
-              </Form.Item>
-              <Button
-                type="primary"
-                icon={<SaveOutlined />}
-                onClick={async () => {
-                  try {
-                    const values = await proxyForm.validateFields();
-                    await http.post('/api/aslan/system/proxyManage', values);
-                    feedback.message.success('代理配置已保存');
-                  } catch (err: any) {
-                    if (!err?.errorFields) {
-                      feedback.message.error(err?.response?.data?.message || err?.message || '代理配置保存失败');
-                    }
-                  }
-                }}
+              <Form.Item
+                label="代理类型"
+                name="type"
+                initialValue="http"
+                rules={[{ required: true, message: '请选择代理类型' }]}
               >
-                保存代理设置
-              </Button>
+                <Select
+                  options={[
+                    { label: 'HTTP 代理 (http)', value: 'http' },
+                    { label: 'SOCKS5 代理 (socks5)', value: 'socks5' },
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item
+                label="代理服务器地址"
+                name="address"
+                rules={[{ required: true, message: '请输入代理主机名或 IP' }]}
+              >
+                <Input placeholder="例如: 10.0.0.1 或 proxy.corp.internal" />
+              </Form.Item>
+              <Form.Item
+                label="代理端口"
+                name="port"
+                rules={[{ required: true, message: '请输入代理端口' }]}
+              >
+                <InputNumber style={{ width: '100%' }} min={1} max={65535} placeholder="8080" />
+              </Form.Item>
+              <Form.Item label="启用用户认证" name="need_password" valuePropName="checked">
+                <Switch onChange={(checked) => setNeedPassword(checked)} />
+              </Form.Item>
+              {needPassword && (
+                <>
+                  <Form.Item
+                    label="用户名"
+                    name="username"
+                    rules={[{ required: needPassword, message: '请输入代理用户名' }]}
+                  >
+                    <Input placeholder="代理认证用户名" />
+                  </Form.Item>
+                  <Form.Item
+                    label="密码"
+                    name="password"
+                    rules={[{ required: needPassword, message: '请输入代理密码' }]}
+                  >
+                    <Input.Password placeholder="代理认证密码" />
+                  </Form.Item>
+                </>
+              )}
+              <Space style={{ marginTop: 8 }}>
+                <Button
+                  type="primary"
+                  icon={<SaveOutlined />}
+                  loading={savingProxy}
+                  onClick={async () => {
+                    try {
+                      setSavingProxy(true);
+                      const values = await proxyForm.validateFields();
+                      const payload: ProxyConfig = {
+                        ...values,
+                        port: Number(values.port),
+                      };
+                      if (proxyId) {
+                        await settingsApi.updateProxy(proxyId, payload);
+                      } else {
+                        await settingsApi.createProxy(payload);
+                      }
+                      feedback.message.success('代理配置已保存');
+                      loadTabData('proxy');
+                    } catch (err: any) {
+                      if (!err?.errorFields) {
+                        feedback.message.error(err?.response?.data?.message || err?.message || '代理配置保存失败');
+                      }
+                    } finally {
+                      setSavingProxy(false);
+                    }
+                  }}
+                >
+                  保存代理设置
+                </Button>
+                <Button
+                  icon={<ApiOutlined />}
+                  loading={testingProxy}
+                  onClick={async () => {
+                    try {
+                      setTestingProxy(true);
+                      const values = await proxyForm.validateFields();
+                      const payload: ProxyConfig = {
+                        ...values,
+                        id: proxyId || undefined,
+                        port: Number(values.port),
+                      };
+                      await settingsApi.testProxyConnection(payload);
+                      feedback.message.success('代理连接测试成功 (已成功探测外网)');
+                    } catch (err: any) {
+                      if (!err?.errorFields) {
+                        feedback.message.error(err?.response?.data?.message || err?.message || '代理连接测试失败，请检查主机、端口与鉴权信息');
+                      }
+                    } finally {
+                      setTestingProxy(false);
+                    }
+                  }}
+                >
+                  测试连接
+                </Button>
+                {proxyId && (
+                  <Popconfirm
+                    title="确定要清除当前网络代理设置吗？"
+                    onConfirm={async () => {
+                      try {
+                        await settingsApi.deleteProxy(proxyId);
+                        feedback.message.success('代理配置已清除');
+                        loadTabData('proxy');
+                      } catch (err: any) {
+                        feedback.message.error(err?.response?.data?.message || err?.message || '清除代理失败');
+                      }
+                    }}
+                  >
+                    <Button danger icon={<DeleteOutlined />}>
+                      清除代理
+                    </Button>
+                  </Popconfirm>
+                )}
+              </Space>
             </Form>
           </div>
         ) : activeTab === 'cache' ? (

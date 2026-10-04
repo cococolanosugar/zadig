@@ -107,6 +107,17 @@ export interface HelmRepoItem {
   updated_at?: number;
 }
 
+// GET/POST/PUT/DELETE /api/aslan/system/proxyManage — models.Proxy
+export interface ProxyConfig {
+  id?: string;
+  type: string; // 'http'
+  address: string;
+  port: number;
+  need_password?: boolean;
+  username?: string;
+  password?: string;
+}
+
 // GET/POST /api/aslan/system/dbinstance — models.DBInstance
 export interface DBInstanceItem {
   id: string;
@@ -372,6 +383,32 @@ export const settingsApi = {
 
   async deleteDBInstance(id: string): Promise<unknown> {
     return http.delete(`/api/aslan/system/dbinstance/${id}`);
+  },
+
+  // --- System Proxy ---
+  async getProxies(): Promise<ProxyConfig[]> {
+    try {
+      const res = await http.get<ProxyConfig[]>('/api/aslan/system/proxyManage', { skipErrorHandler: true });
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  async createProxy(payload: ProxyConfig): Promise<unknown> {
+    return http.post('/api/aslan/system/proxyManage', payload);
+  },
+
+  async updateProxy(id: string, payload: ProxyConfig): Promise<unknown> {
+    return http.put(`/api/aslan/system/proxyManage/${id}`, payload);
+  },
+
+  async deleteProxy(id: string): Promise<unknown> {
+    return http.delete(`/api/aslan/system/proxyManage/${id}`);
+  },
+
+  async testProxyConnection(payload: ProxyConfig): Promise<unknown> {
+    return http.post('/api/aslan/system/proxyManage/connectionTest', payload);
   },
 };
 
