@@ -172,3 +172,32 @@ export async function upgradeAgent(projectName: string, id: string): Promise<voi
     {}
   );
 }
+
+export interface BatchCreatePMHostItem {
+  name: string;
+  ip: string;
+  port: number;
+  user_name: string;
+  private_key?: string;
+  label?: string;
+  is_prod?: boolean;
+  schedule_workflow?: boolean;
+  description?: string;
+  provider?: number;
+}
+
+export interface BatchCreatePMHostPayload {
+  option: 'increment' | 'patch';
+  data: BatchCreatePMHostItem[];
+}
+
+// POST /api/aslan/project/pms/batch?projectName=
+export async function batchCreatePMHosts(
+  projectName: string,
+  payload: BatchCreatePMHostPayload
+): Promise<void> {
+  return http.post<void>(
+    `/api/aslan/project/pms/batch?projectName=${encodeURIComponent(projectName)}`,
+    payload
+  );
+}
