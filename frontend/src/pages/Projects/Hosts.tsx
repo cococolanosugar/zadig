@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Card,
   Table,
@@ -19,6 +19,8 @@ import {
   Tabs,
   Badge,
   Tooltip,
+  Radio,
+  Alert,
 } from 'antd';
 import {
   PlusOutlined,
@@ -34,6 +36,8 @@ import {
   PoweroffOutlined,
   CodeOutlined,
   CopyOutlined,
+  CloudUploadOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import { useParams } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
@@ -47,12 +51,23 @@ import {
   offlineVM,
   recoveryVM,
   upgradeAgent,
+  batchCreatePMHosts,
   type PMHost,
   type AgentAccessCmds,
+  type BatchCreatePMHostItem,
+  type BatchCreatePMHostPayload,
 } from '../../api/pmHost';
 import { feedback } from '../../utils/feedback';
 
 const { Text, Paragraph } = Typography;
+
+const CVM_NAME_REGEX = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+interface ParsedBatchHost extends BatchCreatePMHostItem {
+  key: string;
+  isValid: boolean;
+  errorMsg?: string;
+}
 
 export const ProjectHostsPage: React.FC = () => {
   const { projectName } = useParams<{ projectName: string }>();
@@ -76,6 +91,286 @@ export const ProjectHostsPage: React.FC = () => {
   const [accessCmds, setAccessCmds] = useState<AgentAccessCmds | null>(null);
   const [activeOsTab, setActiveOsTab] = useState<string>('linux');
   const [activeArch, setActiveArch] = useState<string>('amd64');
+
+  // 批量导入 Modal
+  const [batchModalVisible, setBatchModalVisible] = useState<boolean>(false);
+  const [batchSubmitting, setBatchSubmitting] = useState<boolean>(false);
+  const [batchOption, setBatchOption] = useState<'increment' | 'patch'>('increment');
+  const [batchInputType, setBatchInputType] = useState<'text' | 'json'>('text');
+  const [batchText, setBatchText] = useState<string>('');
+  const [batchJson, setBatchJson] = useState<string>('');
+  const [batchDefaultPort, setBatchDefaultPort] = useState<number>(22);
+  const [batchDefaultUser, setBatchDefaultUser] = useState<string>('root');
+  const [batchDefaultLabel, setBatchDefaultLabel] = useState<string>('');
+  const [batchDefaultAgentMode, setBatchDefaultAgentMode] = useState<boolean>(true);
+  const [batchDefaultIsProd, setBatchDefaultIsProd] = useState<boolean>(false);
+
+  const sampleText = 'node_vm_01 192.168.1.101 22 root dev\nnode_vm_02 192.168.1.102 22 root test';
+  const sampleJson = JSON.stringify(
+    [
+      {
+        name: 'node_vm_01',
+        ip: '192.168.1.101',
+        port: 22,
+        user_name: 'root',
+        label: 'dev',
+        is_prod: false,
+        schedule_workflow: true,
+      },
+      {
+        name: 'node_vm_02',
+        ip: '192.168.1.102',
+        port: 22,
+        user_name: 'root',
+        label: 'test',
+        is_prod: false,
+        schedule_workflow: true,
+      },
+    ],
+    null,
+    2
+  );
+
+  const handleOpenBatchModal = () => {
+    setBatchModalVisible(true);
+    if (!batchText && !batchJson) {
+      setBatchText(sampleText);
+    }
+  };
+
+  const parsedHosts = useMemo<ParsedBatchHost[]>(() => {
+    if (batchInputType === 'text') {
+      if (!batchText.trim()) return [];
+      const lines = batchText.split('\n');
+      const result: ParsedBatchHost[] = [];
+      const seenNames = new Set<string>();
+
+      lines.forEach((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) return;
+        const tokens = trimmed.split(/[\s,]+/);
+        const name = tokens[0] || '';
+        const ip = tokens[1] || '';
+        const portStr = tokens[2];
+        const port = portStr ? parseInt(portStr, 10) : batchDefaultPort;
+        const userName = tokens[3] || batchDefaultUser;
+        const label = tokens[4] || batchDefaultLabel || undefined;
+
+        let isValid = true;
+        let errorMsg = '';
+
+        if (!name) {
+          isValid = false;
+          errorMsg = '主机名称不能为空';
+        } else if (!CVM_NAME_REGEX.test(name)) {
+          isValid = false;
+          errorMsg = '名称仅支持字母/数字/下划线且首位非数字';
+        } else if (seenNames.has(name)) {
+          isValid = false;
+          errorMsg = '批量列表中存在重复主机名';
+        } else if (!ip) {
+          isValid = false;
+          errorMsg = 'IP 地址不能为空';
+        } else if (isNaN(port) || port < 1 || port > 65535) {
+          isValid = false;
+          errorMsg = '端口范围须在 1~65535 之间';
+        }
+
+        if (name) {
+          seenNames.add(name);
+        }
+
+        result.push({
+          key: `row-${idx}`,
+          name,
+          ip,
+          port: isNaN(port) ? 22 : port,
+          user_name: userName,
+          label,
+          is_prod: batchDefaultIsProd,
+          schedule_workflow: batchDefaultAgentMode,
+          isValid,
+          errorMsg,
+        });
+      });
+      return result;
+    } else {
+      if (!batchJson.trim()) return [];
+      try {
+        const parsed = JSON.parse(batchJson);
+        if (!Array.isArray(parsed)) {
+          return [
+            {
+              key: 'json-err',
+              name: '',
+              ip: '',
+              port: 22,
+              user_name: '',
+              isValid: false,
+              errorMsg: 'JSON 根结构必须为数组 (Array)',
+            },
+          ];
+        }
+        const seenNames = new Set<string>();
+        return parsed.map((item: Record<string, unknown>, idx: number) => {
+          const name = String(item.name || '').trim();
+          const ip = String(item.ip || '').trim();
+          const port = typeof item.port === 'number' ? item.port : parseInt(String(item.port || 22), 10);
+          const userName = String(item.user_name || batchDefaultUser).trim();
+          const label = item.label ? String(item.label).trim() : batchDefaultLabel || undefined;
+          const isProd = typeof item.is_prod === 'boolean' ? item.is_prod : batchDefaultIsProd;
+          const scheduleWorkflow = typeof item.schedule_workflow === 'boolean' ? item.schedule_workflow : batchDefaultAgentMode;
+          const desc = item.description ? String(item.description).trim() : undefined;
+
+          let isValid = true;
+          let errorMsg = '';
+          if (!name) {
+            isValid = false;
+            errorMsg = '主机名称不能为空';
+          } else if (!CVM_NAME_REGEX.test(name)) {
+            isValid = false;
+            errorMsg = '名称仅支持字母/数字/下划线且首位非数字';
+          } else if (seenNames.has(name)) {
+            isValid = false;
+            errorMsg = '列表中存在重复的主机名';
+          } else if (!ip) {
+            isValid = false;
+            errorMsg = 'IP 地址不能为空';
+          } else if (isNaN(port) || port < 1 || port > 65535) {
+            isValid = false;
+            errorMsg = '端口须在 1~65535 之间';
+          }
+
+          if (name) seenNames.add(name);
+
+          return {
+            key: `json-row-${idx}`,
+            name,
+            ip,
+            port: isNaN(port) ? 22 : port,
+            user_name: userName,
+            label,
+            is_prod: isProd,
+            schedule_workflow: scheduleWorkflow,
+            description: desc,
+            isValid,
+            errorMsg,
+          };
+        });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'JSON 格式解析错误';
+        return [
+          {
+            key: 'json-err',
+            name: '',
+            ip: '',
+            port: 22,
+            user_name: '',
+            isValid: false,
+            errorMsg: `JSON 语法错误: ${msg}`,
+          },
+        ];
+      }
+    }
+  }, [
+    batchInputType,
+    batchText,
+    batchJson,
+    batchDefaultPort,
+    batchDefaultUser,
+    batchDefaultLabel,
+    batchDefaultAgentMode,
+    batchDefaultIsProd,
+  ]);
+
+  const handleBatchSubmit = async () => {
+    if (!projectName) return;
+    if (parsedHosts.length === 0) {
+      feedback.message.warning('请先输入至少一台有效的主机配置');
+      return;
+    }
+    const invalidItems = parsedHosts.filter((h) => !h.isValid);
+    if (invalidItems.length > 0) {
+      feedback.message.error(`存在 ${invalidItems.length} 项格式错误的主机配置，请修正后再导入`);
+      return;
+    }
+    setBatchSubmitting(true);
+    try {
+      const payload: BatchCreatePMHostPayload = {
+        option: batchOption,
+        data: parsedHosts.map(({ key: _k, isValid: _v, errorMsg: _e, ...rest }) => ({
+          ...rest,
+          provider: 0,
+        })),
+      };
+      await batchCreatePMHosts(projectName, payload);
+      feedback.message.success(`成功批量导入 ${parsedHosts.length} 台主机配置`);
+      setBatchModalVisible(false);
+      fetchHosts();
+      fetchLabels();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '批量导入主机失败';
+      feedback.message.error(msg);
+    } finally {
+      setBatchSubmitting(false);
+    }
+  };
+
+  const previewColumns: ColumnsType<ParsedBatchHost> = [
+    {
+      title: '主机名称',
+      dataIndex: 'name',
+      key: 'name',
+      render: (name, record) => (
+        <Space size={4}>
+          <Text strong>{name || '-'}</Text>
+          {record.is_prod && <Tag color="volcano">生产</Tag>}
+        </Space>
+      ),
+    },
+    {
+      title: 'IP : 端口',
+      key: 'ip',
+      render: (_, record) => (
+        <Text code>{record.ip ? `${record.ip}:${record.port}` : '-'}</Text>
+      ),
+    },
+    {
+      title: '用户',
+      dataIndex: 'user_name',
+      key: 'user_name',
+      render: (u) => u || '-',
+    },
+    {
+      title: '模式',
+      dataIndex: 'schedule_workflow',
+      key: 'schedule_workflow',
+      render: (agent) => (agent ? <Tag color="cyan">Agent</Tag> : <Tag color="blue">SSH</Tag>),
+    },
+    {
+      title: '标签',
+      dataIndex: 'label',
+      key: 'label',
+      render: (l) => (l ? <Tag color="geekblue">{l}</Tag> : <Text type="secondary">-</Text>),
+    },
+    {
+      title: '状态',
+      key: 'status',
+      width: 130,
+      render: (_, record) =>
+        record.isValid ? (
+          <Tag color="success" icon={<CheckCircleOutlined />}>
+            有效
+          </Tag>
+        ) : (
+          <Tooltip title={record.errorMsg}>
+            <Tag color="error" icon={<CloseCircleOutlined />}>
+              {record.errorMsg || '格式错误'}
+            </Tag>
+          </Tooltip>
+        ),
+    },
+  ];
 
   const fetchHosts = useCallback(async () => {
     if (!projectName) return;
@@ -510,6 +805,9 @@ export const ProjectHostsPage: React.FC = () => {
             <Button icon={<ReloadOutlined />} onClick={fetchHosts} loading={loading}>
               刷新
             </Button>
+            <Button icon={<CloudUploadOutlined />} onClick={handleOpenBatchModal}>
+              批量导入
+            </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>
               新建主机
             </Button>
@@ -526,7 +824,7 @@ export const ProjectHostsPage: React.FC = () => {
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="暂无主机资源，请点击右上角「新建主机」添加"
+                description="暂无主机资源，可点击右上角「新建主机」或「批量导入」添加"
               />
             ),
           }}
@@ -699,6 +997,236 @@ export const ProjectHostsPage: React.FC = () => {
             }}
           >
             {cmdLoading ? '正在生成接入脚本...' : getCmdSnippet() || '暂无该架构下的安装脚本'}
+          </div>
+        </div>
+      </Modal>
+
+      {/* 批量导入主机 Modal */}
+      <Modal
+        title={
+          <Space>
+            <CloudUploadOutlined style={{ color: '#0066ff' }} />
+            <span>批量导入主机资源</span>
+          </Space>
+        }
+        open={batchModalVisible}
+        onOk={handleBatchSubmit}
+        confirmLoading={batchSubmitting}
+        onCancel={() => setBatchModalVisible(false)}
+        destroyOnHidden
+        width={780}
+        okText={`确认导入 (${parsedHosts.filter((h) => h.isValid).length})`}
+        okButtonProps={{
+          disabled: parsedHosts.length === 0 || parsedHosts.some((h) => !h.isValid),
+        }}
+      >
+        <div style={{ marginTop: 12 }}>
+          {/* 策略选择 */}
+          <div style={{ marginBottom: 16 }}>
+            <Text strong style={{ marginRight: 12 }}>
+              导入策略：
+            </Text>
+            <Radio.Group
+              value={batchOption}
+              onChange={(e) => setBatchOption(e.target.value)}
+              options={[
+                { label: '增量导入（跳过已存在主机）', value: 'increment' },
+                { label: '覆盖更新（更新已存在同名主机配置）', value: 'patch' },
+              ]}
+            />
+          </div>
+
+          {/* 公共默认属性卡片 */}
+          <Card
+            variant="borderless"
+            style={{ marginBottom: 16, background: '#f8fafc', border: '1px solid #e2e8f0' }}
+            styles={{ body: { padding: '12px 16px' } }}
+          >
+            <Row gutter={16} align="middle">
+              <Col span={6}>
+                <Space vertical size={2} style={{ width: '100%' }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    默认端口
+                  </Text>
+                  <Input
+                    type="number"
+                    size="small"
+                    value={batchDefaultPort}
+                    onChange={(e) => setBatchDefaultPort(Number(e.target.value) || 22)}
+                  />
+                </Space>
+              </Col>
+              <Col span={6}>
+                <Space vertical size={2} style={{ width: '100%' }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    默认登录用户
+                  </Text>
+                  <Input
+                    size="small"
+                    value={batchDefaultUser}
+                    onChange={(e) => setBatchDefaultUser(e.target.value)}
+                    placeholder="root"
+                  />
+                </Space>
+              </Col>
+              <Col span={6}>
+                <Space vertical size={2} style={{ width: '100%' }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    默认标签
+                  </Text>
+                  <Input
+                    size="small"
+                    value={batchDefaultLabel}
+                    onChange={(e) => setBatchDefaultLabel(e.target.value)}
+                    placeholder="可选标签"
+                  />
+                </Space>
+              </Col>
+              <Col span={6}>
+                <Space vertical size={2} style={{ width: '100%' }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    模式 / 属性
+                  </Text>
+                  <Space size="middle">
+                    <Tooltip title="开启后注册为 Agent 守护进程模式">
+                      <Switch
+                        size="small"
+                        checked={batchDefaultAgentMode}
+                        onChange={setBatchDefaultAgentMode}
+                        checkedChildren="Agent"
+                        unCheckedChildren="SSH"
+                      />
+                    </Tooltip>
+                    <Tooltip title="标记为生产环境主机">
+                      <Switch
+                        size="small"
+                        checked={batchDefaultIsProd}
+                        onChange={setBatchDefaultIsProd}
+                        checkedChildren="生产"
+                        unCheckedChildren="测试"
+                      />
+                    </Tooltip>
+                  </Space>
+                </Space>
+              </Col>
+            </Row>
+          </Card>
+
+          {/* 录入方式切换 Tabs */}
+          <Tabs
+            activeKey={batchInputType}
+            onChange={(k) => setBatchInputType(k as 'text' | 'json')}
+            tabBarExtraContent={
+              batchInputType === 'text' ? (
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<FileTextOutlined />}
+                  onClick={() => setBatchText(sampleText)}
+                >
+                  填入示例文本
+                </Button>
+              ) : (
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<FileTextOutlined />}
+                  onClick={() => setBatchJson(sampleJson)}
+                >
+                  填入示例 JSON
+                </Button>
+              )
+            }
+            items={[
+              {
+                key: 'text',
+                label: '多行文本快捷录入',
+                children: (
+                  <div>
+                    <Alert
+                      type="info"
+                      showIcon
+                      style={{ marginBottom: 12 }}
+                      title="多行文本录入规范"
+                      description="每行格式：主机名称 IP [端口] [登录用户] [主机标签]（空格、逗号或制表符分隔，以 # 开头的行被视为注释）。主机名称仅支持字母、数字与下划线且首字符不能为数字。"
+                    />
+                    <Input.TextArea
+                      rows={6}
+                      placeholder={`node_vm_01 192.168.1.101 22 root dev\nnode_vm_02 192.168.1.102 22 root test`}
+                      value={batchText}
+                      onChange={(e) => setBatchText(e.target.value)}
+                      style={{ fontFamily: 'Consolas, monospace', fontSize: 13 }}
+                    />
+                  </div>
+                ),
+              },
+              {
+                key: 'json',
+                label: 'JSON 数组录入',
+                children: (
+                  <div>
+                    <Alert
+                      type="info"
+                      showIcon
+                      style={{ marginBottom: 12 }}
+                      title="JSON 规范"
+                      description="支持粘贴完整的 JSON 数组，每个元素包含 name, ip, port, user_name, label, is_prod, schedule_workflow, description 等字段。"
+                    />
+                    <Input.TextArea
+                      rows={6}
+                      placeholder={sampleJson}
+                      value={batchJson}
+                      onChange={(e) => setBatchJson(e.target.value)}
+                      style={{ fontFamily: 'Consolas, monospace', fontSize: 13 }}
+                    />
+                  </div>
+                ),
+              },
+            ]}
+          />
+
+          {/* 实时解析预览 */}
+          <div style={{ marginTop: 16 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 8,
+              }}
+            >
+              <Text strong>
+                配置解析预览
+                <Text type="secondary" style={{ fontWeight: 'normal', fontSize: 12, marginLeft: 8 }}>
+                  (已解析出 {parsedHosts.length} 项配置，其中{' '}
+                  <span style={{ color: '#52c41a' }}>
+                    {parsedHosts.filter((h) => h.isValid).length}
+                  </span>{' '}
+                  项有效
+                  {parsedHosts.some((h) => !h.isValid) && (
+                    <span style={{ color: '#ff4d4f', marginLeft: 4 }}>
+                      ，{parsedHosts.filter((h) => !h.isValid).length} 项存在格式错误
+                    </span>
+                  )}
+                  )
+                </Text>
+              </Text>
+            </div>
+            <Table
+              rowKey="key"
+              size="small"
+              dataSource={parsedHosts}
+              columns={previewColumns}
+              pagination={{ pageSize: 5 }}
+              locale={{
+                emptyText: (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description="暂无解析结果，请在上方输入主机配置"
+                  />
+                ),
+              }}
+            />
           </div>
         </div>
       </Modal>
