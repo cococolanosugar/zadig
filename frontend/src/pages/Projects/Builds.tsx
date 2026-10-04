@@ -19,6 +19,10 @@ import {
   Drawer,
   Descriptions,
   Spin,
+  InputNumber,
+  Radio,
+  Switch,
+  Tabs,
 } from 'antd';
 import {
   PlusOutlined,
@@ -55,12 +59,22 @@ export interface BuildRepo {
   repo_owner?: string;
   repo_name?: string;
   branch?: string;
+  checkout_path?: string;
+}
+
+export interface BuildOutput {
+  name: string;
+  description?: string;
 }
 
 export interface BuildItem {
+  id?: string;
   name: string;
   desc?: string;
   product_name?: string;
+  timeout?: number;
+  infrastructure?: string;
+  vm_labels?: string[];
   targets?: BuildTarget[];
   repos?: BuildRepo[];
   update_time?: number;
@@ -68,8 +82,15 @@ export interface BuildItem {
   pre_build?: {
     image_id?: string;
     image_from?: string;
+    res_req?: string;
+    build_os?: string;
   };
   scripts?: string;
+  cache_enable?: boolean;
+  cache_dir_type?: string;
+  cache_user_dir?: string;
+  enable_privileged_mode?: boolean;
+  outputs?: BuildOutput[];
 }
 
 export const BuildsPage: React.FC = () => {
@@ -86,6 +107,10 @@ export const BuildsPage: React.FC = () => {
   const [form] = Form.useForm();
   const [execForm] = Form.useForm();
 
+  const cacheEnable = Form.useWatch('cache_enable', form);
+  const cacheDirType = Form.useWatch('cache_dir_type', form);
+  const infrastructure = Form.useWatch('infrastructure', form);
+
   // 工作区浏览器抽屉状态
   const [workspaceDrawerOpen, setWorkspaceDrawerOpen] = useState<boolean>(false);
   const [activeWorkspaceParams, setActiveWorkspaceParams] = useState<{
@@ -95,14 +120,30 @@ export const BuildsPage: React.FC = () => {
     branch?: string;
   }>({});
 
+  const handleOpenCreateModal = useCallback(() => {
+    setEditingBuild(null);
+    form.resetFields();
+    form.setFieldsValue({
+      timeout: 60,
+      infrastructure: 'kubernetes',
+      image_id: 'golang:1.20-alpine',
+      scripts: '# 在此输入构建Shell脚本\nmake build',
+      repos: [{ repo_name: '', branch: 'main', checkout_path: '' }],
+      cache_enable: false,
+      cache_dir_type: 'workspace',
+      cache_user_dir: '',
+      enable_privileged_mode: false,
+      outputs: [],
+    });
+    setModalVisible(true);
+  }, [form]);
+
   // 路由 /builds/create → 自动打开新建弹窗
   useEffect(() => {
     if (location.pathname.endsWith('/create')) {
-      setEditingBuild(null);
-      form.resetFields();
-      setModalVisible(true);
+      handleOpenCreateModal();
     }
-  }, [location.pathname, form]);
+  }, [location.pathname, handleOpenCreateModal]);
 
   const handleCloseModal = () => {
     setModalVisible(false);
@@ -178,28 +219,55 @@ export const BuildsPage: React.FC = () => {
   const handleSaveBuild = async () => {
     try {
       const values = await form.validateFields();
-      const payload: BuildItem = {
+      const payload: Record<string, unknown> = {
         name: values.name,
-        desc: values.desc,
+        desc: values.desc || '',
         product_name: projectName,
+        timeout: Number(values.timeout) || 60,
+        infrastructure: values.infrastructure || 'kubernetes',
+        vm_labels: values.infrastructure === 'vm' ? (values.vm_labels || []) : [],
         targets: (values.services || []).map((s: string) => ({
           service_name: s,
           service_module: s,
         })),
-        repos: [
-          {
-            repo_name: values.repo_name || 'main-repo',
-            branch: values.branch || 'main',
-          },
-        ],
+        repos: Array.isArray(values.repos)
+          ? values.repos
+              .filter((r: any) => r && r.repo_name)
+              .map((r: any) => ({
+                repo_name: String(r.repo_name).trim(),
+                branch: String(r.branch || 'main').trim(),
+                checkout_path: String(r.checkout_path || '').trim(),
+                codehost_id: Number(r.codehost_id) || 1,
+              }))
+          : [],
         pre_build: {
-          image_id: values.image_id,
+          res_req: 'low',
+          build_os: 'focal',
+          image_id: values.image_id || 'golang:1.20-alpine',
         },
-        scripts: values.scripts,
+        scripts: values.scripts || '',
+        cache_enable: !!values.cache_enable,
+        cache_dir_type: values.cache_dir_type || 'workspace',
+        cache_user_dir: values.cache_user_dir || '',
+        enable_privileged_mode: !!values.enable_privileged_mode,
+        outputs: Array.isArray(values.outputs)
+          ? values.outputs
+              .filter((o: any) => o && o.name)
+              .map((o: any) => ({
+                name: String(o.name).trim(),
+                description: String(o.description || '').trim(),
+              }))
+          : [],
       };
 
-      await http.post(`/api/aslan/build/build?projectName=${projectName}`, payload);
-      feedback.message.success('构建配置保存成功');
+      if (editingBuild) {
+        await http.put('/api/aslan/build/build', payload);
+        feedback.message.success(`构建配置 [${values.name}] 更新成功`);
+      } else {
+        await http.post(`/api/aslan/build/build?projectName=${projectName}`, payload);
+        feedback.message.success(`构建配置 [${values.name}] 创建成功`);
+      }
+
       setModalVisible(false);
       form.resetFields();
       fetchBuilds();
@@ -407,14 +475,39 @@ export const BuildsPage: React.FC = () => {
             type="link"
             size="small"
             icon={<EditOutlined />}
-            onClick={() => {
+            onClick={async () => {
               setEditingBuild(record);
+              let fullRecord: BuildItem = record;
+              try {
+                const res = await http.get<BuildItem>(
+                  `/api/aslan/build/build/${encodeURIComponent(record.name)}?projectName=${projectName}`,
+                  { skipErrorHandler: true }
+                );
+                if (res) fullRecord = res;
+              } catch {
+                // fallback to record
+              }
               form.setFieldsValue({
-                name: record.name,
-                desc: record.desc,
-                image_id: record.pre_build?.image_id,
-                scripts: record.scripts,
-                services: record.targets?.map((t) => t.service_name),
+                name: fullRecord.name,
+                desc: fullRecord.desc || '',
+                timeout: fullRecord.timeout || 60,
+                infrastructure: fullRecord.infrastructure || 'kubernetes',
+                vm_labels: fullRecord.vm_labels || [],
+                image_id: fullRecord.pre_build?.image_id || 'golang:1.20-alpine',
+                scripts: fullRecord.scripts || '',
+                services: fullRecord.targets?.map((t) => t.service_name) || [],
+                repos:
+                  Array.isArray(fullRecord.repos) && fullRecord.repos.length > 0
+                    ? fullRecord.repos
+                    : [{ repo_name: '', branch: 'main', checkout_path: '' }],
+                cache_enable: !!fullRecord.cache_enable,
+                cache_dir_type: fullRecord.cache_dir_type || 'workspace',
+                cache_user_dir: fullRecord.cache_user_dir || '',
+                enable_privileged_mode: !!fullRecord.enable_privileged_mode,
+                outputs:
+                  Array.isArray(fullRecord.outputs) && fullRecord.outputs.length > 0
+                    ? fullRecord.outputs
+                    : [{ name: '', description: '' }],
               });
               setModalVisible(true);
             }}
@@ -515,11 +608,7 @@ export const BuildsPage: React.FC = () => {
             <Button
               type="primary"
               icon={<PlusOutlined />}
-              onClick={() => {
-                setEditingBuild(null);
-                form.resetFields();
-                setModalVisible(true);
-              }}
+              onClick={handleOpenCreateModal}
             >
               新建构建
             </Button>
@@ -541,11 +630,7 @@ export const BuildsPage: React.FC = () => {
                 <Button
                   type="primary"
                   icon={<PlusOutlined />}
-                  onClick={() => {
-                    setEditingBuild(null);
-                    form.resetFields();
-                    setModalVisible(true);
-                  }}
+                  onClick={handleOpenCreateModal}
                 >
                   新建构建
                 </Button>
@@ -557,80 +642,334 @@ export const BuildsPage: React.FC = () => {
 
       {/* Create / Edit Build Modal */}
       <Modal
-        title={editingBuild ? '编辑构建模块配置' : '新建构建模块'}
+        title={editingBuild ? `配置构建模块: ${editingBuild.name}` : '新建构建模块'}
         open={modalVisible}
+        destroyOnHidden
         onOk={handleSaveBuild}
         onCancel={handleCloseModal}
-        width={680}
+        width={780}
+        okText="保存"
+        cancelText="取消"
       >
         <Form
           form={form}
           layout="vertical"
           initialValues={{
+            timeout: 60,
+            infrastructure: 'kubernetes',
             image_id: 'golang:1.20-alpine',
             scripts: '# 在此输入构建Shell脚本\nmake build',
+            repos: [{ repo_name: '', branch: 'main', checkout_path: '' }],
+            cache_enable: false,
+            cache_dir_type: 'workspace',
+            enable_privileged_mode: false,
           }}
-          style={{ marginTop: 16 }}
+          style={{ marginTop: 12 }}
         >
-          <Form.Item
-            name="name"
-            label="构建名称"
-            rules={[
-              { required: true, message: '请输入构建名称' },
-              { pattern: /^[a-z0-9-]+$/, message: '仅支持小写字母、数字及连字符(-)' },
+          <Tabs
+            defaultActiveKey="basic"
+            items={[
+              {
+                key: 'basic',
+                label: '基本配置',
+                children: (
+                  <>
+                    <Row gutter={16}>
+                      <Col span={16}>
+                        <Form.Item
+                          name="name"
+                          label="构建名称"
+                          rules={[
+                            { required: true, message: '请输入构建名称' },
+                            { pattern: /^[a-z0-9-]+$/, message: '仅支持小写字母、数字及连字符(-)' },
+                          ]}
+                        >
+                          <Input placeholder="例如：user-service-build" disabled={!!editingBuild} />
+                        </Form.Item>
+                      </Col>
+                      <Col span={8}>
+                        <Form.Item
+                          name="timeout"
+                          label="超时时间 (分钟)"
+                          rules={[{ required: true, message: '请输入超时时间' }]}
+                        >
+                          <InputNumber min={1} max={1440} style={{ width: '100%' }} />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Form.Item name="desc" label="构建描述">
+                      <Input placeholder="说明该构建模块的职责与镜像规范" />
+                    </Form.Item>
+
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item
+                          name="services"
+                          label="关联服务组件"
+                          rules={[{ required: true, message: '请选择关联服务' }]}
+                        >
+                          <Select mode="multiple" placeholder="选择服务组件" allowClear>
+                            {services.map((s) => (
+                              <Option key={s} value={s}>
+                                {s}
+                              </Option>
+                            ))}
+                          </Select>
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item
+                          name="image_id"
+                          label="基础构建镜像"
+                          rules={[{ required: true, message: '请选择构建基础镜像' }]}
+                        >
+                          <Select placeholder="选择构建环境">
+                            <Option value="golang:1.20-alpine">Golang 1.20 (Alpine)</Option>
+                            <Option value="node:18.19-alpine">Node.js 18.x (Alpine)</Option>
+                            <Option value="openjdk:17-alpine">Java OpenJDK 17</Option>
+                            <Option value="python:3.10-slim">Python 3.10</Option>
+                            <Option value="docker:24.0-dind">Docker in Docker</Option>
+                            <Option value="ubuntu:22.04">Ubuntu 22.04 LTS</Option>
+                          </Select>
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item name="infrastructure" label="执行基础设施" initialValue="kubernetes">
+                          <Radio.Group
+                            options={[
+                              { label: 'Kubernetes 集群', value: 'kubernetes' },
+                              { label: '物理机 / 虚拟机 (VM)', value: 'vm' },
+                            ]}
+                          />
+                        </Form.Item>
+                      </Col>
+                      {infrastructure === 'vm' && (
+                        <Col span={12}>
+                          <Form.Item name="vm_labels" label="物理机标签匹配">
+                            <Select mode="tags" placeholder="输入标签按回车确认 (例如: x86, gpu)" />
+                          </Form.Item>
+                        </Col>
+                      )}
+                    </Row>
+                  </>
+                ),
+              },
+              {
+                key: 'repos',
+                label: '代码库配置',
+                children: (
+                  <div>
+                    <Typography.Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 12 }}>
+                      支持配置主代码库及多个依赖子库，构建时将自动按指定路径检出代码。
+                    </Typography.Paragraph>
+                    <Form.List name="repos">
+                      {(fields, { add, remove }) => (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          {fields.map(({ key, name, ...restField }) => (
+                            <Card key={key} size="small" variant="borderless" style={{ background: '#fafafa' }}>
+                              <Row gutter={12} align="middle">
+                                <Col span={8}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'repo_name']}
+                                    label="代码库名称"
+                                    rules={[{ required: true, message: '请输入代码库名称' }]}
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    <Input placeholder="例如: backend-api" />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={7}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'branch']}
+                                    label="默认分支"
+                                    rules={[{ required: true, message: '请输入分支' }]}
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    <Input placeholder="例如: main / master" />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={7}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'checkout_path']}
+                                    label="检出目录 (可选)"
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    <Input placeholder="相对工作区路径" />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={2} style={{ textAlign: 'center', paddingTop: 28 }}>
+                                  <Button
+                                    type="text"
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    onClick={() => remove(name)}
+                                  />
+                                </Col>
+                              </Row>
+                            </Card>
+                          ))}
+                          <Button
+                            type="dashed"
+                            onClick={() => add({ repo_name: '', branch: 'main', checkout_path: '' })}
+                            icon={<PlusOutlined />}
+                            block
+                          >
+                            添加代码库
+                          </Button>
+                        </div>
+                      )}
+                    </Form.List>
+                  </div>
+                ),
+              },
+              {
+                key: 'script',
+                label: '构建脚本',
+                children: (
+                  <Form.Item
+                    name="scripts"
+                    label="构建脚本 (Shell)"
+                    rules={[{ required: true, message: '请输入构建脚本' }]}
+                    extra="支持使用系统内置环境变量，如 $WORKSPACE、$PKG_PATH 等"
+                  >
+                    <TextArea
+                      rows={10}
+                      style={{ fontFamily: 'Consolas, Monaco, monospace', fontSize: 13 }}
+                      placeholder="#!/bin/bash&#10;go build -v -o $WORKSPACE/dist/app main.go"
+                    />
+                  </Form.Item>
+                ),
+              },
+              {
+                key: 'cache_output',
+                label: '缓存与产物',
+                children: (
+                  <>
+                    <Card size="small" title="缓存配置" variant="borderless" style={{ background: '#fafafa', marginBottom: 16 }}>
+                      <Row gutter={16} align="middle">
+                        <Col span={8}>
+                          <Form.Item
+                            name="cache_enable"
+                            label="开启工作空间缓存"
+                            valuePropName="checked"
+                            style={{ marginBottom: 0 }}
+                          >
+                            <Switch checkedChildren="已开启" unCheckedChildren="已关闭" />
+                          </Form.Item>
+                        </Col>
+                        {cacheEnable && (
+                          <>
+                            <Col span={8}>
+                              <Form.Item
+                                name="cache_dir_type"
+                                label="缓存目录类型"
+                                style={{ marginBottom: 0 }}
+                              >
+                                <Radio.Group
+                                  options={[
+                                    { label: '工作区目录', value: 'workspace' },
+                                    { label: '自定义目录', value: 'user_defined' },
+                                  ]}
+                                />
+                              </Form.Item>
+                            </Col>
+                            {cacheDirType === 'user_defined' && (
+                              <Col span={8}>
+                                <Form.Item
+                                  name="cache_user_dir"
+                                  label="自定义缓存目录"
+                                  rules={[{ required: true, message: '请输入自定义缓存目录' }]}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <Input placeholder="例如: /root/.cache" />
+                                </Form.Item>
+                              </Col>
+                            )}
+                          </>
+                        )}
+                      </Row>
+                    </Card>
+
+                    <Card size="small" title="文件导出 (Outputs)" variant="borderless" style={{ background: '#fafafa' }}>
+                      <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
+                        声明构建产出文件或变量，供工作流下游任务（如部署步骤）直接消费。
+                      </Typography.Paragraph>
+                      <Form.List name="outputs">
+                        {(fields, { add, remove }) => (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {fields.map(({ key, name, ...restField }) => (
+                              <Row key={key} gutter={12} align="middle">
+                                <Col span={10}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'name']}
+                                    label="变量 / 文件名"
+                                    rules={[{ required: true, message: '请输入变量名' }]}
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    <Input placeholder="例如: PKG_FILE" />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={12}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'description']}
+                                    label="描述说明"
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    <Input placeholder="产物说明" />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={2} style={{ textAlign: 'center', paddingTop: 28 }}>
+                                  <Button
+                                    type="text"
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    onClick={() => remove(name)}
+                                  />
+                                </Col>
+                              </Row>
+                            ))}
+                            <Button
+                              type="dashed"
+                              onClick={() => add({ name: '', description: '' })}
+                              icon={<PlusOutlined />}
+                              block
+                            >
+                              添加文件导出项
+                            </Button>
+                          </div>
+                        )}
+                      </Form.List>
+                    </Card>
+                  </>
+                ),
+              },
+              {
+                key: 'advanced',
+                label: '高级设置',
+                children: (
+                  <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
+                    <Form.Item
+                      name="enable_privileged_mode"
+                      label="特权模式 (Privileged Mode)"
+                      valuePropName="checked"
+                      extra="开启特权模式后容器将拥有 Host 全部特权，适用于容器内运行 Docker (DinD) 等高特权构建场景"
+                    >
+                      <Switch checkedChildren="已开启" unCheckedChildren="已关闭" />
+                    </Form.Item>
+                  </Card>
+                ),
+              },
             ]}
-          >
-            <Input placeholder="例如：user-service-build" disabled={!!editingBuild} />
-          </Form.Item>
-
-          <Form.Item name="desc" label="构建描述">
-            <Input placeholder="说明该构建模块的职责与镜像规范" />
-          </Form.Item>
-
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                name="services"
-                label="关联服务组件"
-                rules={[{ required: true, message: '请选择关联服务' }]}
-              >
-                <Select mode="multiple" placeholder="选择服务组件" allowClear>
-                  {services.map((s) => (
-                    <Option key={s} value={s}>
-                      {s}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="image_id"
-                label="基础构建镜像"
-                rules={[{ required: true, message: '请选择构建基础镜像' }]}
-              >
-                <Select placeholder="选择构建环境">
-                  <Option value="golang:1.20-alpine">Golang 1.20 (Alpine)</Option>
-                  <Option value="node:18.19-alpine">Node.js 18.x (Alpine)</Option>
-                  <Option value="openjdk:17-alpine">Java OpenJDK 17</Option>
-                  <Option value="python:3.10-slim">Python 3.10</Option>
-                  <Option value="docker:24.0-dind">Docker in Docker</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Form.Item
-            name="scripts"
-            label="构建脚本 (Shell)"
-            rules={[{ required: true, message: '请输入构建脚本' }]}
-          >
-            <TextArea
-              rows={6}
-              style={{ fontFamily: 'Consolas, Monaco, monospace', fontSize: 13 }}
-              placeholder="go build -v -o $WORKSPACE/dist/app main.go"
-            />
-          </Form.Item>
+          />
         </Form>
       </Modal>
 
