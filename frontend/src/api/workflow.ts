@@ -1,7 +1,6 @@
 import http from './client';
 import { subscribeSSE } from '../utils/sse';
 
-// 与后端 pkg/microservice/aslan/config/consts.go JobType 常量对齐（常用子集）
 export type JobType =
   | 'zadig-build'
   | 'zadig-deploy'
@@ -12,6 +11,15 @@ export type JobType =
   | 'offline-service'
   | 'notification'
   | 'workflow-trigger'
+  | 'k8s-blue-green-deploy'
+  | 'k8s-blue-green-release'
+  | 'k8s-canary-deploy'
+  | 'k8s-canary-release'
+  | 'k8s-gray-release'
+  | 'k8s-gray-rollback'
+  | 'istio-release'
+  | 'istio-rollback'
+  | 'update-env-istio-config'
   | 'zadig-test'
   | 'zadig-scanning'
   | 'zadig-distribute-image'
@@ -72,6 +80,62 @@ export interface ServiceTriggerWorkflowInfoItem {
   params?: Array<{ name: string; value: string }>;
 }
 
+export interface BlueGreenDeployV2ServiceItem {
+  service_name: string;
+  blue_service_yaml?: string;
+  blue_service_name?: string;
+  blue_deployment_yaml?: string;
+  blue_deployment_name?: string;
+  green_deployment_name?: string;
+  green_service_name?: string;
+  service_and_image?: Array<{
+    service_module: string;
+    image: string;
+    image_name?: string;
+  }>;
+}
+
+export interface CanaryTargetItem {
+  k8s_service_name: string;
+  container_name: string;
+  image: string;
+  canary_percentage: number;
+  deploy_timeout?: number;
+  workload_name?: string;
+  workload_type?: string;
+}
+
+export interface GrayReleaseTargetItem {
+  workload_type: string;
+  workload_name: string;
+  replica?: number;
+  container_name: string;
+  image?: string;
+}
+
+export interface GrayRollbackTargetItem {
+  workload_type: string;
+  workload_name: string;
+  origin_image?: string;
+  origin_replica?: number;
+}
+
+export interface IstioJobTargetItem {
+  workload_name: string;
+  container_name: string;
+  image?: string;
+}
+
+export interface IstioWeightConfigItem {
+  env_name: string;
+  weight: number;
+}
+
+export interface IstioHeaderMatchConfigItem {
+  key: string;
+  value: string;
+}
+
 export interface WorkflowJobSpec {
   service_name?: string;
   service_module?: string;
@@ -112,6 +176,25 @@ export interface WorkflowJobSpec {
   trigger_type?: string;
   is_enable_check?: boolean;
   fixed_workflow_list?: ServiceTriggerWorkflowInfoItem[];
+  // 批次 19b-2 (蓝绿/金丝雀/灰度/Istio)
+  version?: string;
+  production?: boolean;
+  from_job?: string;
+  deploy_timeout?: number;
+  release_timeout?: number;
+  rollback_timeout?: number;
+  gray_scale?: number;
+  weight?: number;
+  replica_percentage?: number;
+  base_env?: string;
+  grayscale_strategy?: string;
+  bg_services?: BlueGreenDeployV2ServiceItem[];
+  canary_targets?: CanaryTargetItem[];
+  gray_targets?: GrayReleaseTargetItem[];
+  gray_rollback_targets?: GrayRollbackTargetItem[];
+  istio_targets?: IstioJobTargetItem[];
+  weight_configs?: IstioWeightConfigItem[];
+  header_match_configs?: IstioHeaderMatchConfigItem[];
   [key: string]: unknown;
 }
 
@@ -796,6 +879,17 @@ export const workflowApi = {
     return http.post<void>(
       `/api/aslan/workflow/v4/workflowtask/manualexec/workflow/${encodeURIComponent(workflowName)}/task/${taskId}?projectName=${encodeURIComponent(projectName)}&stageName=${encodeURIComponent(stageName)}`,
       payload
+    );
+  },
+
+  /**
+   * 拉取蓝绿部署服务当前的 K8s Service YAML
+   * GET /api/aslan/workflow/v4/bluegreen/:envName/:serviceName?projectName=
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:121)
+   */
+  getBlueGreenServiceYaml(projectName: string, envName: string, serviceName: string) {
+    return http.get<string>(
+      `/api/aslan/workflow/v4/bluegreen/${encodeURIComponent(envName)}/${encodeURIComponent(serviceName)}?projectName=${encodeURIComponent(projectName)}`
     );
   },
 };
