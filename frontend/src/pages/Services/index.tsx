@@ -23,6 +23,7 @@ import {
   SaveOutlined,
   DiffOutlined,
   CloudServerOutlined,
+  ClusterOutlined,
   CodeOutlined,
   ReloadOutlined,
   HistoryOutlined,
@@ -48,6 +49,7 @@ import ServiceModulesDrawer from './ServiceModulesDrawer';
 import ServiceVariablesDrawer from './ServiceVariablesDrawer';
 import HelmServiceDrawer from './HelmServiceDrawer';
 import PmServiceModal from './PmServiceModal';
+import ImportFromKubeWorkloadsModal from './ImportFromKubeWorkloadsModal';
 
 const { Title, Text } = Typography;
 
@@ -104,6 +106,9 @@ export const ServicesPage: React.FC = () => {
   // PM 主机服务弹窗
   const [pmModalOpen, setPmModalOpen] = useState(false);
   const [editingPmService, setEditingPmService] = useState<string | null>(null);
+
+  // K8s 集群工作负载载入弹窗
+  const [kubeWorkloadModalOpen, setKubeWorkloadModalOpen] = useState(false);
 
   const loadServices = useCallback(async () => {
     if (!activeProject) {
@@ -191,6 +196,25 @@ export const ServicesPage: React.FC = () => {
       } catch {
         // 详情获取失败时按默认 visibility 保存
       }
+
+      // 保存前进行 YAML 合法性与占位符校验（对齐后端 /api/aslan/service/services/yaml/validator）
+      try {
+        const validationErrors = await serviceApi.validateServiceYaml({
+          service_name: selectedService,
+          variable_yaml: variableYaml,
+          yaml: yamlContent,
+        });
+        if (Array.isArray(validationErrors) && validationErrors.length > 0) {
+          const errList = validationErrors.map((e) =>
+            typeof e === 'string' ? e : (e as { message?: string })?.message || JSON.stringify(e)
+          );
+          feedback.message.error(`YAML 校验未通过: ${errList.join('; ')}`);
+          return;
+        }
+      } catch {
+        // 校验端点异常不阻断保存流程
+      }
+
       await http.post(
         `/api/aslan/service/services?projectName=${activeProject}&force=true&production=${isProduction}`,
         {
@@ -518,6 +542,12 @@ spec:
                       icon: <FileAddOutlined />,
                       label: '新建空白服务',
                       onClick: () => setCreateModalVisible(true),
+                    },
+                    {
+                      key: 'workload',
+                      icon: <ClusterOutlined />,
+                      label: '从集群工作负载导入',
+                      onClick: () => setKubeWorkloadModalOpen(true),
                     },
                     {
                       key: 'pm',
@@ -882,6 +912,20 @@ spec:
         isProduction={isProduction}
         serviceName={editingPmService}
         serviceDetail={editingPmService ? serviceDetail : null}
+        onSuccess={(name) => {
+          loadServices();
+          if (name) {
+            setSelectedService(name);
+          }
+        }}
+      />
+
+      {/* K8s Workload Import Modal */}
+      <ImportFromKubeWorkloadsModal
+        open={kubeWorkloadModalOpen}
+        onClose={() => setKubeWorkloadModalOpen(false)}
+        projectName={activeProject || ''}
+        isProduction={isProduction}
         onSuccess={(name) => {
           loadServices();
           if (name) {

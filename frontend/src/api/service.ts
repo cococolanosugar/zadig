@@ -668,6 +668,54 @@ export const serviceApi = {
       payload
     );
   },
+
+  // --- 7. Kube Workloads Import (从 K8s 集群工作负载载入服务) ---
+  // 后端: pkg/microservice/aslan/core/service/handler/environment.go:60
+  async getKubeWorkloads(
+    projectName: string,
+    clusterId: string,
+    namespace: string
+  ): Promise<{ workloads_map?: Record<string, string[]> }> {
+    return http.get<{ workloads_map?: Record<string, string[]> }>(
+      `/api/aslan/service/services/kube/workloads?projectName=${encodeURIComponent(projectName)}&cluster_id=${encodeURIComponent(clusterId)}&namespace=${encodeURIComponent(namespace)}`
+    );
+  },
+
+  // 后端: pkg/microservice/aslan/core/service/handler/environment.go:67
+  async loadKubeWorkloadsYaml(
+    projectName: string,
+    payload: {
+      product_name: string;
+      visibility?: string;
+      type?: string;
+      namespace: string;
+      cluster_id: string;
+      services: Array<{
+        name: string;
+        workloads_map: Record<string, string[]>;
+      }>;
+    },
+    production = false
+  ): Promise<unknown> {
+    return http.post(
+      `/api/aslan/service/services/yaml?projectName=${encodeURIComponent(projectName)}&production=${production}`,
+      payload
+    );
+  },
+
+  // 后端: pkg/microservice/aslan/core/service/handler/service.go:551 (k8s.PUT("/yaml/validator", YamlValidator))
+  async validateServiceYaml(payload: {
+    service_name: string;
+    variable_yaml?: string;
+    yaml: string;
+  }): Promise<Array<string | { message?: string }>> {
+    const res = await http.put<Array<string | { message?: string }>>(
+      '/api/aslan/service/services/yaml/validator',
+      payload,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
+  },
 };
 
 export default serviceApi;
