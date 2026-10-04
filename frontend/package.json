@@ -14,6 +14,7 @@
     "@ant-design/pro-components": "3.1.14-7",
     "@monaco-editor/react": "^4.7.0",
     "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-search": "^0.16.0",
     "@xterm/xterm": "^6.0.0",
     "@xyflow/react": "^12.11.6",
     "aes-js": "^3.1.2",
