@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { subscribeSSE } from '../../utils/sse';
 
 export interface LogViewerProps {
   logs?: string[];
@@ -43,19 +44,25 @@ export const LogViewer: React.FC<LogViewerProps> = ({
       logs.forEach((line) => term.writeln(line));
     }
 
-    let eventSource: EventSource | null = null;
+    let unsubscribe: (() => void) | null = null;
     if (streamUrl) {
       try {
-        eventSource = new EventSource(streamUrl);
-        eventSource.onmessage = (event) => {
-          term.writeln(event.data);
-        };
-        eventSource.onerror = () => {
-          term.writeln('\r\n\x1b[33m[Stream Ended]\x1b[0m');
-          eventSource?.close();
-        };
+        unsubscribe = subscribeSSE<string | { message?: string }>(streamUrl, {
+          onMessage: (data) => {
+            if (typeof data === 'string') {
+              term.writeln(data);
+            } else if (data && typeof data === 'object' && 'message' in data) {
+              term.writeln(String((data as any).message));
+            } else {
+              term.writeln(JSON.stringify(data));
+            }
+          },
+          onError: () => {
+            term.writeln('\r\n\x1b[33m[日志流已结束]\x1b[0m');
+          },
+        });
       } catch {
-        term.writeln('\x1b[31m[Error] 无法启动日志流监听\x1b[0m');
+        term.writeln('\x1b[31m[Error] 无法建立 SSE 实时日志流连接\x1b[0m');
       }
     }
 
@@ -64,8 +71,8 @@ export const LogViewer: React.FC<LogViewerProps> = ({
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      if (eventSource) {
-        eventSource.close();
+      if (unsubscribe) {
+        unsubscribe();
       }
       term.dispose();
     };

@@ -31,6 +31,7 @@ import {
   ReloadOutlined,
   DownOutlined,
   CloudDownloadOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
@@ -39,6 +40,7 @@ import { feedback } from '../../utils/feedback';
 import { useProjectStore } from '../../stores/project';
 import { deliveryApi, DeliveryVersionItem } from '../../api/delivery';
 import CreateHelmReleaseModal from './CreateHelmReleaseModal';
+import { LogViewer } from '../../components/Terminal/LogViewer';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -135,7 +137,24 @@ export const DeliveryPage: React.FC = () => {
   const [versionDetailOpen, setVersionDetailOpen] = useState(false);
   const [versionDetailLoading, setVersionDetailLoading] = useState(false);
   const [versionDetail, setVersionDetail] = useState<DeliveryVersionItem | null>(null);
-  const [versionDetailImages, setVersionDetailImages] = useState<Array<{ service: string; image: string }>>([]);
+  const [versionDetailImages, setVersionDetailImages] = useState<
+    Array<{ key: string; service: string; serviceModule: string; image: string }>
+  >([]);
+
+  // Delivery distribution log SSE drawer state (/api/aslan/logs/sse/delivery/:lines)
+  const [distLogDrawer, setDistLogDrawer] = useState<{
+    open: boolean;
+    projectName: string;
+    version: string;
+    serviceName: string;
+    serviceModule: string;
+  }>({
+    open: false,
+    projectName: '',
+    version: '',
+    serviceName: '',
+    serviceModule: '',
+  });
 
   const openVersionDetail = async (record: ReleaseVersionItem) => {
     setVersionDetailOpen(true);
@@ -146,11 +165,25 @@ export const DeliveryPage: React.FC = () => {
       const proj = record.product_name;
       const res = await deliveryApi.getDeliveryVersion(record.id || '', proj);
       setVersionDetail(res || null);
-      const list: Array<{ service: string; image: string }> = [];
+      const list: Array<{ key: string; service: string; serviceModule: string; image: string }> = [];
       (res?.services || []).forEach((svc) => {
-        (svc.images || []).forEach((img) => {
-          list.push({ service: svc.service_name, image: img.target_image || img.source_image || img.image_name || '' });
-        });
+        if (svc.images && svc.images.length > 0) {
+          svc.images.forEach((img, idx) => {
+            list.push({
+              key: `${svc.service_name}-${img.container_name || idx}`,
+              service: svc.service_name,
+              serviceModule: img.container_name || svc.service_name,
+              image: img.target_image || img.source_image || img.image_name || '',
+            });
+          });
+        } else {
+          list.push({
+            key: svc.service_name,
+            service: svc.service_name,
+            serviceModule: svc.service_name,
+            image: '-',
+          });
+        }
       });
       setVersionDetailImages(list);
     } catch {
@@ -810,16 +843,46 @@ export const DeliveryPage: React.FC = () => {
             </Title>
             <Table
               dataSource={versionDetailImages}
-              rowKey="service"
+              rowKey="key"
               pagination={{ pageSize: 8, hideOnSinglePage: true }}
               size="small"
               columns={[
                 { title: '服务名称', dataIndex: 'service', key: 'service', render: (s) => <Text strong>{s}</Text> },
                 {
+                  title: '组件名称',
+                  dataIndex: 'serviceModule',
+                  key: 'serviceModule',
+                  render: (m) => <Tag color="blue">{m}</Tag>,
+                },
+                {
                   title: '镜像地址',
                   dataIndex: 'image',
                   key: 'image',
                   render: (img) => <Text code style={{ fontSize: 12 }}>{img || '-'}</Text>,
+                },
+                {
+                  title: '分发日志',
+                  key: 'action',
+                  width: 110,
+                  render: (_, row) => (
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<FileTextOutlined />}
+                      onClick={() => {
+                        if (!versionDetail) return;
+                        setDistLogDrawer({
+                          open: true,
+                          projectName: versionDetail.project_name,
+                          version: versionDetail.version,
+                          serviceName: row.service,
+                          serviceModule: row.serviceModule,
+                        });
+                      }}
+                    >
+                      分发日志
+                    </Button>
+                  ),
                 },
               ]}
               locale={{
@@ -829,6 +892,34 @@ export const DeliveryPage: React.FC = () => {
           </div>
         ) : (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未获取到版本详情" />
+        )}
+      </Drawer>
+
+      {/* Delivery Distribution Log Drawer */}
+      <Drawer
+        title={
+          <Space>
+            <FileTextOutlined style={{ color: '#0066ff' }} />
+            <span>分发日志: {distLogDrawer.serviceName} ({distLogDrawer.serviceModule})</span>
+            <Tag color="processing">实时日志流</Tag>
+          </Space>
+        }
+        open={distLogDrawer.open}
+        onClose={() => setDistLogDrawer((prev) => ({ ...prev, open: false }))}
+        size="large"
+      >
+        {distLogDrawer.open && (
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ marginBottom: 12 }}>
+              <Text type="secondary">
+                项目: <Text strong>{distLogDrawer.projectName}</Text> · 版本: <Text strong>{distLogDrawer.version}</Text> · 组件: <Text strong>{distLogDrawer.serviceModule}</Text>
+              </Text>
+            </div>
+            <LogViewer
+              streamUrl={`/api/aslan/logs/sse/delivery/500?projectName=${encodeURIComponent(distLogDrawer.projectName)}&version=${encodeURIComponent(distLogDrawer.version)}&serviceName=${encodeURIComponent(distLogDrawer.serviceName)}&serviceModule=${encodeURIComponent(distLogDrawer.serviceModule)}`}
+              height="calc(100vh - 180px)"
+            />
+          </div>
         )}
       </Drawer>
 
