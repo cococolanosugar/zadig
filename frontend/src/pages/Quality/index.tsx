@@ -22,6 +22,10 @@ import {
   Segmented,
   Tooltip,
   Badge,
+  InputNumber,
+  Switch,
+  Tabs,
+  Popconfirm,
 } from 'antd';
 import { Line } from '@ant-design/plots';
 import {
@@ -39,6 +43,8 @@ import {
   RiseOutlined,
   TrophyOutlined,
   CodeOutlined,
+  EditOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import http from '../../api/client';
 import statApi, {
@@ -57,13 +63,46 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 const { Title, Text } = Typography;
 
+export interface TestRepo {
+  codehost_id?: number;
+  repo_owner?: string;
+  repo_name?: string;
+  branch?: string;
+  checkout_path?: string;
+}
+
+export interface TestEnv {
+  key: string;
+  value: string;
+  is_credential?: boolean;
+}
+
 export interface TestItem {
+  id?: string;
   name: string;
   desc?: string;
   product_name?: string;
   test_type?: string;
+  timeout?: number;
   updated_by?: string;
   update_time?: number;
+  pre_test?: {
+    envs?: TestEnv[];
+    build_os?: string;
+    image_id?: string;
+    res_req?: string;
+  };
+  script_type?: string;
+  scripts?: string;
+  test_result_path?: string;
+  junit_test_result_pass_rate?: number;
+  test_report_path?: string;
+  artifact_paths?: string[];
+  repos?: TestRepo[];
+  hook_ctl?: {
+    enabled?: boolean;
+    items?: unknown[];
+  };
 }
 
 export const QualityCenterPage: React.FC = () => {
@@ -96,6 +135,7 @@ export const QualityCenterPage: React.FC = () => {
 
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [editingTest, setEditingTest] = useState<TestItem | null>(null);
   const [form] = Form.useForm();
 
   // 构建质量效能（对齐旧版质量监控 /api/aslan/stat/quality/*）
@@ -459,12 +499,31 @@ export const QualityCenterPage: React.FC = () => {
     }
   }, [routeTestName, tests, openTestDetail, projectName]);
 
+  const handleOpenCreateTest = useCallback(() => {
+    setEditingTest(null);
+    form.resetFields();
+    form.setFieldsValue({
+      product_name: activeProject || '',
+      test_type: 'function',
+      timeout: 30,
+      script_type: 'shell',
+      scripts: '#!/bin/bash\necho "Running tests..."\npytest tests/',
+      envs: [],
+      repos: [{ repo_name: '', branch: 'main', checkout_path: '' }],
+      test_result_path: 'report.xml',
+      junit_test_result_pass_rate: 100,
+      test_report_path: 'report.html',
+      artifact_paths: [{ path: 'test-results/' }],
+    });
+    setCreateModalVisible(true);
+  }, [form, activeProject]);
+
   // 深链：/test/add/function → 自动打开新建测试弹窗
   useEffect(() => {
     if (isAddDeepLink) {
-      setCreateModalVisible(true);
+      handleOpenCreateTest();
     }
-  }, [isAddDeepLink]);
+  }, [isAddDeepLink, handleOpenCreateTest]);
 
   // 深链：/test/testcase/function/:workflow_name/:task_id/:test_name → 工作流任务执行视图
   useEffect(() => {
@@ -492,22 +551,121 @@ export const QualityCenterPage: React.FC = () => {
     }
   };
 
-  const handleCreateTest = async () => {
+  const handleEditTest = async (record: TestItem) => {
+    setEditingTest(record);
+    let fullRecord: TestItem = record;
+    try {
+      const q = record.product_name ? `?projectName=${encodeURIComponent(record.product_name)}` : '';
+      const res = await http.get<TestItem>(`/api/aslan/testing/test/${encodeURIComponent(record.name)}${q}`, {
+        skipErrorHandler: true,
+      });
+      if (res) fullRecord = res;
+    } catch {
+      // fallback
+    }
+    form.setFieldsValue({
+      name: fullRecord.name,
+      product_name: fullRecord.product_name || activeProject || '',
+      test_type: fullRecord.test_type || 'function',
+      desc: fullRecord.desc || '',
+      timeout: fullRecord.timeout || 30,
+      scripts: fullRecord.scripts || '',
+      script_type: fullRecord.script_type || 'shell',
+      envs: fullRecord.pre_test?.envs || [],
+      repos:
+        Array.isArray(fullRecord.repos) && fullRecord.repos.length > 0
+          ? fullRecord.repos
+          : [{ repo_name: '', branch: 'main', checkout_path: '' }],
+      test_result_path: fullRecord.test_result_path || '',
+      junit_test_result_pass_rate: fullRecord.junit_test_result_pass_rate ?? 100,
+      test_report_path: fullRecord.test_report_path || '',
+      artifact_paths:
+        Array.isArray(fullRecord.artifact_paths) && fullRecord.artifact_paths.length > 0
+          ? fullRecord.artifact_paths.map((p) => ({ path: p }))
+          : [],
+    });
+    setCreateModalVisible(true);
+  };
+
+  const handleDeleteTest = async (record: TestItem) => {
+    try {
+      const q = record.product_name ? `?projectName=${encodeURIComponent(record.product_name)}` : '';
+      await http.delete(`/api/aslan/testing/test/${encodeURIComponent(record.name)}${q}`);
+      feedback.message.success(`测试套件 [${record.name}] 已成功删除`);
+      fetchData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '删除测试套件失败';
+      feedback.message.error(msg);
+    }
+  };
+
+  const handleSaveTest = async () => {
     try {
       const values = await form.validateFields();
       setCreating(true);
-      await http.post('/api/aslan/testing/test', {
+
+      const envList = Array.isArray(values.envs)
+        ? values.envs
+            .filter((e: any) => e && e.key)
+            .map((e: any) => ({
+              key: String(e.key).trim(),
+              value: String(e.value ?? ''),
+              is_credential: !!e.is_credential,
+            }))
+        : [];
+
+      const repoList = Array.isArray(values.repos)
+        ? values.repos
+            .filter((r: any) => r && r.repo_name)
+            .map((r: any) => ({
+              repo_name: String(r.repo_name).trim(),
+              branch: String(r.branch || 'main').trim(),
+              checkout_path: String(r.checkout_path || '').trim(),
+              codehost_id: Number(r.codehost_id) || 1,
+            }))
+        : [];
+
+      const artifactList = Array.isArray(values.artifact_paths)
+        ? values.artifact_paths
+            .filter((a: any) => a && (a.path || typeof a === 'string'))
+            .map((a: any) => String(a.path || a).trim())
+            .filter(Boolean)
+        : [];
+
+      const payload: Record<string, unknown> = {
         name: values.name,
-        desc: values.desc,
+        desc: values.desc || '',
         product_name: values.product_name,
         test_type: values.test_type || 'function',
-      });
-      feedback.message.success(`测试模块 [${values.name}] 创建成功！`);
+        timeout: Number(values.timeout) || 30,
+        hook_ctl: { enabled: false, items: [] },
+        pre_test: {
+          res_req: 'low',
+          build_os: 'focal',
+          envs: envList,
+        },
+        script_type: values.script_type || 'shell',
+        scripts: values.scripts || '',
+        test_result_path: values.test_result_path || '',
+        junit_test_result_pass_rate: Number(values.junit_test_result_pass_rate) || 100,
+        test_report_path: values.test_report_path || '',
+        artifact_paths: artifactList,
+        repos: repoList,
+      };
+
+      if (editingTest) {
+        await http.put('/api/aslan/testing/test', payload);
+        feedback.message.success(`测试套件 [${values.name}] 更新成功！`);
+      } else {
+        await http.post('/api/aslan/testing/test', payload);
+        feedback.message.success(`测试套件 [${values.name}] 创建成功！`);
+      }
+
       setCreateModalVisible(false);
       form.resetFields();
       fetchData();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '创建测试模块失败';
+      const msg = err instanceof Error ? err.message : '保存测试套件失败，请检查配置参数';
       feedback.message.error(msg);
     } finally {
       setCreating(false);
@@ -557,10 +715,7 @@ export const QualityCenterPage: React.FC = () => {
             type="primary"
             icon={<PlusOutlined />}
             style={{ borderRadius: 4 }}
-            onClick={() => {
-              form.resetFields();
-              setCreateModalVisible(true);
-            }}
+            onClick={handleOpenCreateTest}
           >
             新建测试
           </Button>
@@ -1159,6 +1314,25 @@ export const QualityCenterPage: React.FC = () => {
                     >
                       执行测试
                     </Button>
+                    <Button
+                      type="link"
+                      icon={<EditOutlined />}
+                      onClick={() => handleEditTest(record)}
+                    >
+                      配置
+                    </Button>
+                    <Popconfirm
+                      title="确认删除该测试套件？"
+                      description="删除后依赖此测试套件的工作流任务可能无法正常执行。"
+                      onConfirm={() => handleDeleteTest(record)}
+                      okText="删除"
+                      cancelText="取消"
+                      okButtonProps={{ danger: true }}
+                    >
+                      <Button type="link" danger icon={<DeleteOutlined />}>
+                        删除
+                      </Button>
+                    </Popconfirm>
                   </Space>
                 ),
               },
@@ -1169,10 +1343,7 @@ export const QualityCenterPage: React.FC = () => {
                   <Button
                     type="primary"
                     icon={<PlusOutlined />}
-                    onClick={() => {
-                      form.resetFields();
-                      setCreateModalVisible(true);
-                    }}
+                    onClick={handleOpenCreateTest}
                   >
                     新建测试
                   </Button>
@@ -1183,43 +1354,341 @@ export const QualityCenterPage: React.FC = () => {
         )}
       </Card>
 
-      {/* Create Test Modal */}
+      {/* Create / Edit Test Modal */}
       <Modal
-        title="新建自动化测试套件"
+        title={editingTest ? `配置自动化测试套件: ${editingTest.name}` : '新建自动化测试套件'}
         open={createModalVisible}
+        destroyOnHidden
         confirmLoading={creating}
-        onOk={handleCreateTest}
-        onCancel={() => setCreateModalVisible(false)}
-        okText="创建"
+        onOk={handleSaveTest}
+        onCancel={() => {
+          setCreateModalVisible(false);
+          setEditingTest(null);
+        }}
+        width={780}
+        okText="保存"
         cancelText="取消"
       >
-        <Form form={form} layout="vertical" initialValues={{ test_type: 'function' }} style={{ marginTop: 16 }}>
-          <Form.Item
-            name="name"
-            label="测试用例名称"
-            rules={[{ required: true, message: '请输入测试名称' }]}
-          >
-            <Input placeholder="例如: api-regression-test" />
-          </Form.Item>
-          <Form.Item
-            name="product_name"
-            label="归属项目名称"
-            rules={[{ required: true, message: '请输入归属项目' }]}
-          >
-            <Input placeholder="例如: default 或项目英文标识" />
-          </Form.Item>
-          <Form.Item name="test_type" label="测试类型">
-            <Select
-              options={[
-                { label: '功能自动化测试 (function)', value: 'function' },
-                { label: '集成接口测试 (integration)', value: 'integration' },
-                { label: '性能基准测试 (performance)', value: 'performance' },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item name="desc" label="用例描述">
-            <Input.TextArea rows={3} placeholder="测试范围、用例套件说明" />
-          </Form.Item>
+        <Form
+          form={form}
+          layout="vertical"
+          initialValues={{
+            test_type: 'function',
+            timeout: 30,
+            script_type: 'shell',
+            repos: [{ repo_name: '', branch: 'main', checkout_path: '' }],
+            test_result_path: 'report.xml',
+            junit_test_result_pass_rate: 100,
+            test_report_path: 'report.html',
+            artifact_paths: [{ path: 'test-results/' }],
+          }}
+          style={{ marginTop: 12 }}
+        >
+          <Tabs
+            defaultActiveKey="basic"
+            items={[
+              {
+                key: 'basic',
+                label: '基本信息',
+                children: (
+                  <>
+                    <Row gutter={16}>
+                      <Col span={14}>
+                        <Form.Item
+                          name="name"
+                          label="测试用例名称"
+                          rules={[
+                            { required: true, message: '请输入测试名称' },
+                            { pattern: /^[a-z0-9-]+$/, message: '仅支持小写字母、数字及连字符(-)' },
+                          ]}
+                        >
+                          <Input placeholder="例如: api-regression-test" disabled={!!editingTest} />
+                        </Form.Item>
+                      </Col>
+                      <Col span={10}>
+                        <Form.Item
+                          name="timeout"
+                          label="超时时间 (分钟)"
+                          rules={[{ required: true, message: '请输入超时时间' }]}
+                        >
+                          <InputNumber min={1} max={1440} style={{ width: '100%' }} />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item
+                          name="product_name"
+                          label="归属项目名称"
+                          rules={[{ required: true, message: '请输入归属项目' }]}
+                        >
+                          <Input placeholder="例如: default 或项目英文标识" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item name="test_type" label="测试类型">
+                          <Select
+                            options={[
+                              { label: '功能自动化测试 (function)', value: 'function' },
+                              { label: '集成接口测试 (integration)', value: 'integration' },
+                              { label: '性能基准测试 (performance)', value: 'performance' },
+                            ]}
+                          />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                    <Form.Item name="desc" label="用例描述">
+                      <Input.TextArea rows={3} placeholder="测试范围、用例套件说明" />
+                    </Form.Item>
+                  </>
+                ),
+              },
+              {
+                key: 'repos',
+                label: '代码库配置',
+                children: (
+                  <div>
+                    <Typography.Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 12 }}>
+                      支持配置运行自动化测试所需的一个或多个代码仓库及分支。
+                    </Typography.Paragraph>
+                    <Form.List name="repos">
+                      {(fields, { add, remove }) => (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          {fields.map(({ key, name, ...restField }) => (
+                            <Card key={key} size="small" variant="borderless" style={{ background: '#fafafa' }}>
+                              <Row gutter={12} align="middle">
+                                <Col span={8}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'repo_name']}
+                                    label="代码库名称"
+                                    rules={[{ required: true, message: '请输入代码库名称' }]}
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    <Input placeholder="例如: test-automation-suite" />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={7}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'branch']}
+                                    label="默认分支"
+                                    rules={[{ required: true, message: '请输入分支' }]}
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    <Input placeholder="例如: main / master" />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={7}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'checkout_path']}
+                                    label="检出目录 (可选)"
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    <Input placeholder="相对工作区路径" />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={2} style={{ textAlign: 'center', paddingTop: 28 }}>
+                                  <Button
+                                    type="text"
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    onClick={() => remove(name)}
+                                  />
+                                </Col>
+                              </Row>
+                            </Card>
+                          ))}
+                          <Button
+                            type="dashed"
+                            onClick={() => add({ repo_name: '', branch: 'main', checkout_path: '' })}
+                            icon={<PlusOutlined />}
+                            block
+                          >
+                            添加代码库
+                          </Button>
+                        </div>
+                      )}
+                    </Form.List>
+                  </div>
+                ),
+              },
+              {
+                key: 'envs',
+                label: '测试变量',
+                children: (
+                  <div>
+                    <Typography.Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 12 }}>
+                      注入自定义环境变量供测试脚本使用，支持标记敏感变量。
+                    </Typography.Paragraph>
+                    <Form.List name="envs">
+                      {(fields, { add, remove }) => (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {fields.map(({ key, name, ...restField }) => (
+                            <Row key={key} gutter={12} align="middle">
+                              <Col span={9}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'key']}
+                                  label="变量键名"
+                                  rules={[{ required: true, message: '请输入变量名' }]}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <Input placeholder="例如: API_BASE_URL" />
+                                </Form.Item>
+                              </Col>
+                              <Col span={9}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'value']}
+                                  label="变量取值"
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <Input placeholder="变量值" />
+                                </Form.Item>
+                              </Col>
+                              <Col span={4}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'is_credential']}
+                                  label="敏感变量"
+                                  valuePropName="checked"
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <Switch checkedChildren="是" unCheckedChildren="否" />
+                                </Form.Item>
+                              </Col>
+                              <Col span={2} style={{ textAlign: 'center', paddingTop: 28 }}>
+                                <Button
+                                  type="text"
+                                  danger
+                                  icon={<DeleteOutlined />}
+                                  onClick={() => remove(name)}
+                                />
+                              </Col>
+                            </Row>
+                          ))}
+                          <Button
+                            type="dashed"
+                            onClick={() => add({ key: '', value: '', is_credential: false })}
+                            icon={<PlusOutlined />}
+                            block
+                          >
+                            添加测试环境变量
+                          </Button>
+                        </div>
+                      )}
+                    </Form.List>
+                  </div>
+                ),
+              },
+              {
+                key: 'script',
+                label: '测试脚本',
+                children: (
+                  <Form.Item
+                    name="scripts"
+                    label="测试执行脚本 (Shell)"
+                    rules={[{ required: true, message: '请输入测试脚本' }]}
+                    extra="支持运行测试命令并导出报告文件，例如 pytest、go test、mvn test 等"
+                  >
+                    <Input.TextArea
+                      rows={10}
+                      style={{ fontFamily: 'Consolas, Monaco, monospace', fontSize: 13 }}
+                      placeholder="#!/bin/bash&#10;pytest -v --junitxml=report.xml tests/"
+                    />
+                  </Form.Item>
+                ),
+              },
+              {
+                key: 'report',
+                label: '测试报告配置',
+                children: (
+                  <>
+                    <Card size="small" title="JUnit 测试报告" variant="borderless" style={{ background: '#fafafa', marginBottom: 16 }}>
+                      <Row gutter={16}>
+                        <Col span={14}>
+                          <Form.Item
+                            name="test_result_path"
+                            label="JUnit 报告所在文件 / 目录"
+                            tooltip="支持填入相对于工作区的 XML 文件路径或目录，例如 report.xml 或 target/surefire-reports"
+                            style={{ marginBottom: 0 }}
+                          >
+                            <Input placeholder="例如: report.xml" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={10}>
+                          <Form.Item
+                            name="junit_test_result_pass_rate"
+                            label="用例通过率阈值 (%)"
+                            tooltip="低于该阈值时测试步骤将被标记为失败"
+                            style={{ marginBottom: 0 }}
+                          >
+                            <InputNumber min={0} max={100} style={{ width: '100%' }} />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    </Card>
+
+                    <Card size="small" title="HTML 测试报告" variant="borderless" style={{ background: '#fafafa', marginBottom: 16 }}>
+                      <Form.Item
+                        name="test_report_path"
+                        label="HTML 测试报告文件 / 目录"
+                        tooltip="填入生成的 HTML 报告主入口路径，测试完成后可在报告选项卡中在线查看"
+                        style={{ marginBottom: 0 }}
+                      >
+                        <Input placeholder="例如: report.html 或 html-report/index.html" />
+                      </Form.Item>
+                    </Card>
+
+                    <Card size="small" title="测试产物导出目录 (Artifact Paths)" variant="borderless" style={{ background: '#fafafa' }}>
+                      <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
+                        配置测试执行完毕后需上传归档的报告所在目录或日志产物路径。
+                      </Typography.Paragraph>
+                      <Form.List name="artifact_paths">
+                        {(fields, { add, remove }) => (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {fields.map(({ key, name, ...restField }) => (
+                              <Row key={key} gutter={12} align="middle">
+                                <Col span={22}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'path']}
+                                    label="产物所在目录 / 文件路径"
+                                    rules={[{ required: true, message: '请输入产物路径' }]}
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    <Input placeholder="例如: test-results/ 或 allure-report/" />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={2} style={{ textAlign: 'center', paddingTop: 28 }}>
+                                  <Button
+                                    type="text"
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    onClick={() => remove(name)}
+                                  />
+                                </Col>
+                              </Row>
+                            ))}
+                            <Button
+                              type="dashed"
+                              onClick={() => add({ path: '' })}
+                              icon={<PlusOutlined />}
+                              block
+                            >
+                              添加报告 / 产物导出路径
+                            </Button>
+                          </div>
+                        )}
+                      </Form.List>
+                    </Card>
+                  </>
+                ),
+              },
+            ]}
+          />
         </Form>
       </Modal>
 
