@@ -637,6 +637,7 @@ export const ServiceDetailPage: React.FC = () => {
             containerName={terminalPod.container}
             projectName={projectName}
             envName={envName || ''}
+            production={envProduction}
             height={540}
           />
         )}
