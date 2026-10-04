@@ -11,6 +11,9 @@ import {
   CloseCircleOutlined,
   DeleteOutlined,
   DatabaseOutlined,
+  StopOutlined,
+  BellOutlined,
+  BranchesOutlined,
 } from '@ant-design/icons';
 import type { JobType } from '../../api/workflow';
 
@@ -34,7 +37,16 @@ export const JobNode = memo(({ data }: { data: JobNodeData }) => {
       case 'zadig-deploy':
       case 'zadig-helm-chart-deploy':
       case 'zadig-vm-deploy':
+      case 'custom-deploy':
         return <CloudUploadOutlined style={{ color: '#52c41a' }} />;
+      case 'k8s-resource-patch':
+        return <CodeOutlined style={{ color: '#1890ff' }} />;
+      case 'offline-service':
+        return <StopOutlined style={{ color: '#ff4d4f' }} />;
+      case 'notification':
+        return <BellOutlined style={{ color: '#faad14' }} />;
+      case 'workflow-trigger':
+        return <BranchesOutlined style={{ color: '#722ed1' }} />;
       case 'freestyle':
         return <CodeOutlined style={{ color: '#722ed1' }} />;
       case 'sql':

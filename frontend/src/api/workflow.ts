@@ -7,12 +7,16 @@ export type JobType =
   | 'zadig-deploy'
   | 'zadig-helm-chart-deploy'
   | 'zadig-vm-deploy'
+  | 'custom-deploy'
+  | 'k8s-resource-patch'
+  | 'offline-service'
+  | 'notification'
+  | 'workflow-trigger'
   | 'zadig-test'
   | 'zadig-scanning'
   | 'zadig-distribute-image'
   | 'zadig-restart'
   | 'approval'
-  | 'custom-deploy'
   | 'freestyle'
   | 'sql'
   | 'plugin'
@@ -45,6 +49,29 @@ export interface ServiceAndVMDeployItem {
   }>;
 }
 
+export interface CustomDeployTargetItem {
+  target: string;
+  image?: string;
+  image_name?: string;
+}
+
+export interface K8sPatchItem {
+  resource_name: string;
+  resource_kind: string;
+  resource_group?: string;
+  resource_version?: string;
+  patch_content: string;
+  patch_strategy?: 'strategic-merge' | 'merge' | 'json' | string;
+}
+
+export interface ServiceTriggerWorkflowInfoItem {
+  service_name?: string;
+  service_module?: string;
+  workflow_name: string;
+  project_name: string;
+  params?: Array<{ name: string; value: string }>;
+}
+
 export interface WorkflowJobSpec {
   service_name?: string;
   service_module?: string;
@@ -65,6 +92,26 @@ export interface WorkflowJobSpec {
   s3_storage_id?: string;
   docker_registry_id?: string;
   origin_job_name?: string;
+  // 批次 19b-1 扩展
+  namespace?: string;
+  cluster_id?: string;
+  cluster_source?: string;
+  timeout?: number;
+  targets?: CustomDeployTargetItem[];
+  patch_items?: K8sPatchItem[];
+  env_type?: string;
+  env_name?: string;
+  services?: string[];
+  webhook_type?: string;
+  content?: string;
+  title?: string;
+  webhook_notification_config?: { webhook: string };
+  wechat_notification_config?: { webhook: string };
+  dingding_notification_config?: { webhook: string; is_at_all?: boolean; at_mobiles?: string[] };
+  feishu_notification_config?: { webhook: string };
+  trigger_type?: string;
+  is_enable_check?: boolean;
+  fixed_workflow_list?: ServiceTriggerWorkflowInfoItem[];
   [key: string]: unknown;
 }
 
