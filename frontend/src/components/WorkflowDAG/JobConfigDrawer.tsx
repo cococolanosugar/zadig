@@ -39,6 +39,9 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
   const [envOptions, setEnvOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [testOptions, setTestOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [scanOptions, setScanOptions] = useState<Array<{ label: string; value: string }>>([]);
+  const [clusterOptions, setClusterOptions] = useState<Array<{ label: string; value: string }>>([]);
+  const [customDeploySource, setCustomDeploySource] = useState<'runtime' | 'fromjob'>('runtime');
+  const [notificationWebhookType, setNotificationWebhookType] = useState<string>('dingding');
   const [deployType, setDeployType] = useState<'k8s' | 'helm'>('k8s');
   const [vmDeploySource, setVmDeploySource] = useState<'runtime' | 'fromjob'>('runtime');
   const [mergingImage, setMergingImage] = useState(false);
@@ -50,6 +53,11 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
       setDeployType(isHelm ? 'helm' : 'k8s');
       const vmSrc = (job.spec?.source as 'runtime' | 'fromjob') || 'runtime';
       setVmDeploySource(vmSrc);
+      const cdSrc = (job.spec?.source as 'runtime' | 'fromjob') || 'runtime';
+      setCustomDeploySource(cdSrc);
+      const notifType = (job.spec?.webhook_type as string) || 'dingding';
+      setNotificationWebhookType(notifType);
+
       form.setFieldsValue({
         name: job.name,
         type: job.type,
@@ -79,11 +87,47 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         service_and_vm_deploys: Array.isArray(job.spec?.service_and_vm_deploys) && job.spec.service_and_vm_deploys.length > 0
           ? job.spec.service_and_vm_deploys
           : [{ service_name: '', service_module: '', deploy_name: '', deploy_artifact_type: 'file', file_name: '', artifact_url: '', image: '' }],
+        // custom-deploy
+        cluster_id: job.spec?.cluster_id || '',
+        namespace: job.spec?.namespace || '',
+        timeout: job.spec?.timeout || 60,
+        cd_skip_check_run_status: !!job.spec?.skip_check_run_status,
+        cd_source: cdSrc,
+        cd_job_name: job.spec?.job_name || '',
+        targets: Array.isArray(job.spec?.targets) && job.spec.targets.length > 0
+          ? job.spec.targets
+          : [{ target: '', image: '' }],
+        // k8s-resource-patch
+        patch_items: Array.isArray(job.spec?.patch_items) && job.spec.patch_items.length > 0
+          ? job.spec.patch_items
+          : [{ resource_kind: 'Deployment', resource_name: '', patch_strategy: 'strategic-merge', patch_content: '' }],
+        // offline-service
+        env_type: (job.spec?.env_type as string) || 'zadig',
+        env_name: (job.spec?.env_name as string) || '',
+        offline_source: (job.spec?.source as string) || 'fixed',
+        services: Array.isArray(job.spec?.services) ? job.spec.services : [],
+        // notification
+        webhook_type: notifType,
+        title: (job.spec?.title as string) || '',
+        content: (job.spec?.content as string) || '',
+        webhook_url:
+          job.spec?.dingding_notification_config?.webhook ||
+          job.spec?.wechat_notification_config?.webhook ||
+          job.spec?.feishu_notification_config?.webhook ||
+          job.spec?.webhook_notification_config?.webhook ||
+          '',
+        is_at_all: !!job.spec?.dingding_notification_config?.is_at_all,
+        // workflow-trigger
+        trigger_type: (job.spec?.trigger_type as string) || 'fixed',
+        is_enable_check: !!job.spec?.is_enable_check,
+        fixed_workflow_list: Array.isArray(job.spec?.fixed_workflow_list) && job.spec.fixed_workflow_list.length > 0
+          ? job.spec.fixed_workflow_list
+          : [{ project_name: (job.spec?.project_name as string) || '', workflow_name: '', service_name: '' }],
       });
     }
   }, [job, form]);
 
-  // 按需加载环境/测试/扫描列表
+  // 按需加载环境/测试/扫描/集群列表
   useEffect(() => {
     if (!visible || !job) return;
     const projectName = job.spec?.project_name as string | undefined;
@@ -92,7 +136,8 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
       job.type === 'zadig-deploy' ||
       job.type === 'zadig-helm-chart-deploy' ||
       job.type === 'zadig-vm-deploy' ||
-      job.type === 'zadig-restart'
+      job.type === 'zadig-restart' ||
+      job.type === 'offline-service'
     ) {
       http
         .get<Array<{ name: string; alias?: string }>>(`/api/aslan/environment/environments?projectName=${projectName || ''}`, {
@@ -103,6 +148,23 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
           setEnvOptions(list.map((e) => ({ label: e.alias ? `${e.name} (${e.alias})` : e.name, value: e.name })));
         })
         .catch(() => setEnvOptions([]));
+    }
+    // 集群列表
+    if (job.type === 'custom-deploy' || job.type === 'k8s-resource-patch') {
+      http
+        .get<Array<{ id?: string; _id?: string; name?: string }>>(`/api/aslan/cluster/clusters?projectName=${projectName || ''}`, {
+          skipErrorHandler: true,
+        })
+        .then((res) => {
+          const list = Array.isArray(res) ? res : [];
+          setClusterOptions(
+            list.map((c) => ({
+              label: c.name || c.id || c._id || 'Cluster',
+              value: (c.id || c._id || '') as string,
+            }))
+          );
+        })
+        .catch(() => setClusterOptions([]));
     }
     if (job.type === 'zadig-test') {
       http
@@ -224,6 +286,65 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         source: values.source as string,
         job_name: values.source === 'fromjob' ? (values.job_name as string) : undefined,
         service_and_vm_deploys: values.service_and_vm_deploys as any[],
+        // custom-deploy
+        ...(job.type === 'custom-deploy'
+          ? {
+              cluster_id: (values.cluster_id as string) || '',
+              namespace: (values.namespace as string) || '',
+              timeout: Number(values.timeout) || 60,
+              skip_check_run_status: !!values.cd_skip_check_run_status,
+              source: (values.cd_source as string) || 'runtime',
+              job_name: values.cd_source === 'fromjob' ? (values.cd_job_name as string) : undefined,
+              targets: Array.isArray(values.targets) ? values.targets : [],
+            }
+          : {}),
+        // k8s-resource-patch
+        ...(job.type === 'k8s-resource-patch'
+          ? {
+              cluster_id: (values.cluster_id as string) || '',
+              namespace: (values.namespace as string) || '',
+              patch_items: Array.isArray(values.patch_items) ? values.patch_items : [],
+            }
+          : {}),
+        // offline-service
+        ...(job.type === 'offline-service'
+          ? {
+              env_type: 'zadig',
+              env_name: (values.env_name as string) || '',
+              source: (values.offline_source as string) || 'fixed',
+              services: Array.isArray(values.services)
+                ? (values.services as string[])
+                : values.services
+                ? [values.services as string]
+                : [],
+            }
+          : {}),
+        // notification
+        ...(job.type === 'notification'
+          ? {
+              webhook_type: (values.webhook_type as string) || 'dingding',
+              title: (values.title as string) || '',
+              content: (values.content as string) || '',
+              webhook_notification_config:
+                values.webhook_type === 'webhook' ? { webhook: (values.webhook_url as string) || '' } : undefined,
+              wechat_notification_config:
+                values.webhook_type === 'wechat' ? { webhook: (values.webhook_url as string) || '' } : undefined,
+              dingding_notification_config:
+                values.webhook_type === 'dingding'
+                  ? { webhook: (values.webhook_url as string) || '', is_at_all: !!values.is_at_all }
+                  : undefined,
+              feishu_notification_config:
+                values.webhook_type === 'feishu' ? { webhook: (values.webhook_url as string) || '' } : undefined,
+            }
+          : {}),
+        // workflow-trigger
+        ...(job.type === 'workflow-trigger'
+          ? {
+              trigger_type: (values.trigger_type as string) || 'fixed',
+              is_enable_check: !!values.is_enable_check,
+              fixed_workflow_list: Array.isArray(values.fixed_workflow_list) ? values.fixed_workflow_list : [],
+            }
+          : {}),
       },
     };
     onSave(updated);
@@ -804,6 +925,498 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
               initialValue={24}
             >
               <InputNumber min={1} max={168} style={{ width: 140 }} />
+            </Form.Item>
+          </>
+        )}
+
+        {job?.type === 'custom-deploy' && (
+          <>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="cluster_id"
+                  label="目标集群"
+                  rules={[{ required: true, message: '请选择部署目标集群' }]}
+                >
+                  <Select
+                    showSearch
+                    options={clusterOptions}
+                    placeholder="请选择 Kubernetes 集群"
+                    notFoundContent="暂无可用集群"
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="namespace"
+                  label="命名空间 (Namespace)"
+                  rules={[{ required: true, message: '请输入命名空间' }]}
+                >
+                  <Input placeholder="例如: default 或 qa-env" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="timeout"
+                  label="部署超时时间 (分钟)"
+                  initialValue={60}
+                >
+                  <InputNumber min={1} max={1440} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="cd_skip_check_run_status"
+                  label="运行状态检查"
+                  valuePropName="checked"
+                  tooltip="开启后不阻塞等待 Pod 处于 Ready 状态"
+                >
+                  <Switch checkedChildren="跳过检查" unCheckedChildren="等待就绪" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Form.Item name="cd_source" label="镜像来源" initialValue="runtime">
+              <Radio.Group
+                onChange={(e) => setCustomDeploySource(e.target.value)}
+                options={[
+                  { label: '运行时指定镜像', value: 'runtime' },
+                  { label: '从前序任务获取', value: 'fromjob' },
+                ]}
+              />
+            </Form.Item>
+
+            {customDeploySource === 'fromjob' && (
+              <Form.Item
+                name="cd_job_name"
+                label="前序构建任务名称"
+                rules={[{ required: true, message: '请输入前序任务名称' }]}
+              >
+                <Input placeholder="例如: build-app" />
+              </Form.Item>
+            )}
+
+            <Form.Item
+              label="部署目标容器配置 (Targets)"
+              tooltip="指定需要部署更新的工作负载与容器镜像"
+            >
+              <Form.List name="targets">
+                {(fields, { add, remove }) => (
+                  <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+                    {fields.map(({ key, name, ...restField }) => (
+                      <Card
+                        key={key}
+                        size="small"
+                        variant="borderless"
+                        style={{ background: 'var(--ant-color-fill-quaternary, #f9f9f9)' }}
+                        title={`部署目标 #${name + 1}`}
+                        extra={
+                          fields.length > 1 ? (
+                            <Button
+                              type="text"
+                              danger
+                              icon={<DeleteOutlined />}
+                              onClick={() => remove(name)}
+                            >
+                              删除
+                            </Button>
+                          ) : null
+                        }
+                      >
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'target']}
+                              label="目标工作负载及容器"
+                              rules={[{ required: true, message: '请输入目标（格式: type/name/container）' }]}
+                              tooltip="格式: workload_type/workload_name/container_name，例如: deployment/my-app/app"
+                            >
+                              <Input placeholder="deployment/app-name/container-name" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'image']}
+                              label="镜像地址 (Image)"
+                              tooltip="可留空由运行时指定或固定镜像地址"
+                            >
+                              <Input placeholder="例如: registry.example.com/app:v1.0" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                      </Card>
+                    ))}
+                    <Button
+                      type="dashed"
+                      onClick={() => add({ target: '', image: '' })}
+                      block
+                      icon={<PlusOutlined />}
+                    >
+                      添加部署目标容器
+                    </Button>
+                  </Space>
+                )}
+              </Form.List>
+            </Form.Item>
+          </>
+        )}
+
+        {job?.type === 'k8s-resource-patch' && (
+          <>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="cluster_id"
+                  label="目标集群"
+                  rules={[{ required: true, message: '请选择集群' }]}
+                >
+                  <Select
+                    showSearch
+                    options={clusterOptions}
+                    placeholder="请选择 Kubernetes 集群"
+                    notFoundContent="暂无可用集群"
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="namespace"
+                  label="命名空间 (Namespace)"
+                  rules={[{ required: true, message: '请输入命名空间' }]}
+                >
+                  <Input placeholder="例如: default 或 qa-env" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Form.Item
+              label="Patch 清单条目 (PatchItems)"
+              tooltip="按顺序依次对指定的 Kubernetes 资源执行 Patch 操作"
+            >
+              <Form.List name="patch_items">
+                {(fields, { add, remove }) => (
+                  <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+                    {fields.map(({ key, name, ...restField }) => (
+                      <Card
+                        key={key}
+                        size="small"
+                        variant="borderless"
+                        style={{ background: 'var(--ant-color-fill-quaternary, #f9f9f9)' }}
+                        title={`Patch 项 #${name + 1}`}
+                        extra={
+                          fields.length > 1 ? (
+                            <Button
+                              type="text"
+                              danger
+                              icon={<DeleteOutlined />}
+                              onClick={() => remove(name)}
+                            >
+                              删除
+                            </Button>
+                          ) : null
+                        }
+                      >
+                        <Row gutter={16}>
+                          <Col span={8}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'resource_kind']}
+                              label="资源类型"
+                              rules={[{ required: true, message: '请选择或输入资源类型' }]}
+                            >
+                              <Select
+                                showSearch
+                                options={[
+                                  { label: 'Deployment', value: 'Deployment' },
+                                  { label: 'StatefulSet', value: 'StatefulSet' },
+                                  { label: 'DaemonSet', value: 'DaemonSet' },
+                                  { label: 'Service', value: 'Service' },
+                                  { label: 'ConfigMap', value: 'ConfigMap' },
+                                  { label: 'Ingress', value: 'Ingress' },
+                                  { label: 'Secret', value: 'Secret' },
+                                ]}
+                              />
+                            </Form.Item>
+                          </Col>
+                          <Col span={8}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'resource_name']}
+                              label="资源名称"
+                              rules={[{ required: true, message: '请输入资源名称' }]}
+                            >
+                              <Input placeholder="例如: my-service" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={8}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'patch_strategy']}
+                              label="Patch 策略"
+                              rules={[{ required: true, message: '请选择 Patch 策略' }]}
+                            >
+                              <Select
+                                options={[
+                                  { label: 'strategic-merge', value: 'strategic-merge' },
+                                  { label: 'merge', value: 'merge' },
+                                  { label: 'json', value: 'json' },
+                                ]}
+                              />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Form.Item
+                          {...restField}
+                          name={[name, 'patch_content']}
+                          label="Patch 内容 (YAML / JSON)"
+                          rules={[{ required: true, message: '请输入 Patch 内容' }]}
+                          tooltip="Kubernetes API 支持的标准 patch 内容结构"
+                        >
+                          <Input.TextArea
+                            rows={4}
+                            placeholder={'spec:\n  template:\n    spec:\n      containers:\n      - name: app\n        image: nginx:latest'}
+                            style={{ fontFamily: 'monospace' }}
+                          />
+                        </Form.Item>
+                      </Card>
+                    ))}
+                    <Button
+                      type="dashed"
+                      onClick={() =>
+                        add({
+                          resource_kind: 'Deployment',
+                          resource_name: '',
+                          patch_strategy: 'strategic-merge',
+                          patch_content: '',
+                        })
+                      }
+                      block
+                      icon={<PlusOutlined />}
+                    >
+                      添加 Patch 资源项
+                    </Button>
+                  </Space>
+                )}
+              </Form.List>
+            </Form.Item>
+          </>
+        )}
+
+        {job?.type === 'offline-service' && (
+          <>
+            <Form.Item
+              name="env_name"
+              label="目标环境"
+              rules={[{ required: true, message: '请选择要下线服务所在环境' }]}
+            >
+              <Select
+                showSearch
+                options={envOptions}
+                placeholder="选择目标环境"
+                notFoundContent="暂无可用环境"
+              />
+            </Form.Item>
+
+            <Form.Item name="offline_source" label="服务指定方式" initialValue="fixed">
+              <Radio.Group
+                options={[
+                  { label: '固定服务列表', value: 'fixed' },
+                  { label: '运行时选择服务', value: 'runtime' },
+                ]}
+              />
+            </Form.Item>
+
+            <Form.Item
+              noStyle
+              shouldUpdate={(prev, cur) => prev.offline_source !== cur.offline_source}
+            >
+              {({ getFieldValue }) =>
+                getFieldValue('offline_source') !== 'runtime' ? (
+                  <Form.Item
+                    name="services"
+                    label="待下线服务名称"
+                    rules={[{ required: true, message: '请输入或选择待下线服务' }]}
+                    tooltip="输入服务名称并按回车添加多个服务"
+                  >
+                    <Select
+                      mode="tags"
+                      placeholder="输入服务名称回车添加，如: service-a"
+                      tokenSeparators={[',', ' ']}
+                    />
+                  </Form.Item>
+                ) : null
+              }
+            </Form.Item>
+          </>
+        )}
+
+        {job?.type === 'notification' && (
+          <>
+            <Form.Item
+              name="webhook_type"
+              label="通知渠道类型"
+              rules={[{ required: true, message: '请选择通知渠道' }]}
+              initialValue="dingding"
+            >
+              <Radio.Group
+                onChange={(e) => setNotificationWebhookType(e.target.value)}
+                options={[
+                  { label: '钉钉 (DingTalk)', value: 'dingding' },
+                  { label: '企业微信 (WeChat Work)', value: 'wechat' },
+                  { label: '飞书 (Feishu)', value: 'feishu' },
+                  { label: '通用 Webhook', value: 'webhook' },
+                ]}
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="webhook_url"
+              label="Webhook 回调地址"
+              rules={[{ required: true, message: '请输入 Webhook URL' }]}
+              tooltip="填入群机器人提供的完整 Webhook URL 接口地址"
+            >
+              <Input placeholder="https://oapi.dingtalk.com/robot/send?access_token=..." />
+            </Form.Item>
+
+            <Form.Item
+              name="title"
+              label="消息标题"
+              rules={[{ required: true, message: '请输入消息通知标题' }]}
+            >
+              <Input placeholder="例如: 工作流发布通知" />
+            </Form.Item>
+
+            <Form.Item
+              name="content"
+              label="消息正文内容"
+              rules={[{ required: true, message: '请输入通知内容' }]}
+              tooltip="支持 Markdown 语法与工作流环境变量，如 {{.workflow.name}}"
+            >
+              <Input.TextArea
+                rows={4}
+                placeholder="发布任务已完成，服务名: {{.service.name}}，状态: {{.status}}"
+              />
+            </Form.Item>
+
+            {notificationWebhookType === 'dingding' && (
+              <Form.Item
+                name="is_at_all"
+                label="群全员提醒 (@所有人)"
+                valuePropName="checked"
+              >
+                <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+              </Form.Item>
+            )}
+          </>
+        )}
+
+        {job?.type === 'workflow-trigger' && (
+          <>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item name="trigger_type" label="触发模式" initialValue="fixed">
+                  <Radio.Group
+                    options={[
+                      { label: '固定工作流 (Fixed)', value: 'fixed' },
+                      { label: '通用动态触发 (Common)', value: 'common' },
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="is_enable_check"
+                  label="执行结果状态检查"
+                  valuePropName="checked"
+                  tooltip="开启后本任务将等待被触发工作流执行结束，并校验其成功状态"
+                >
+                  <Switch checkedChildren="等待并校验结果" unCheckedChildren="仅异步触发" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Form.Item
+              label="目标工作流清单 (FixedWorkflows)"
+              tooltip="配置当执行到本任务时需要被触发的下游工作流"
+            >
+              <Form.List name="fixed_workflow_list">
+                {(fields, { add, remove }) => (
+                  <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+                    {fields.map(({ key, name, ...restField }) => (
+                      <Card
+                        key={key}
+                        size="small"
+                        variant="borderless"
+                        style={{ background: 'var(--ant-color-fill-quaternary, #f9f9f9)' }}
+                        title={`下游工作流 #${name + 1}`}
+                        extra={
+                          fields.length > 1 ? (
+                            <Button
+                              type="text"
+                              danger
+                              icon={<DeleteOutlined />}
+                              onClick={() => remove(name)}
+                            >
+                              删除
+                            </Button>
+                          ) : null
+                        }
+                      >
+                        <Row gutter={16}>
+                          <Col span={8}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'project_name']}
+                              label="所属项目名称"
+                              rules={[{ required: true, message: '请输入项目标识' }]}
+                            >
+                              <Input placeholder="例如: zadig" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={8}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'workflow_name']}
+                              label="工作流标识"
+                              rules={[{ required: true, message: '请输入工作流标识' }]}
+                            >
+                              <Input placeholder="例如: deploy-sub-service" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={8}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'service_name']}
+                              label="关联服务名 (可选)"
+                            >
+                              <Input placeholder="例如: sub-service" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                      </Card>
+                    ))}
+                    <Button
+                      type="dashed"
+                      onClick={() =>
+                        add({
+                          project_name: (job?.spec?.project_name as string) || '',
+                          workflow_name: '',
+                          service_name: '',
+                        })
+                      }
+                      block
+                      icon={<PlusOutlined />}
+                    >
+                      添加下游触发工作流
+                    </Button>
+                  </Space>
+                )}
+              </Form.List>
             </Form.Item>
           </>
         )}
