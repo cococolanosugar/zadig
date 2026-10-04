@@ -25,6 +25,7 @@ import {
   Switch,
   Radio,
   Tooltip,
+  Divider,
 } from 'antd';
 import {
   PlusOutlined,
@@ -41,6 +42,7 @@ import {
   EditOutlined,
   SettingOutlined,
   InfoCircleOutlined,
+  BellOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -74,6 +76,42 @@ const mapScanTask = (t: Record<string, unknown>): ScanningTaskItem => ({
   duration: t.run_time as number,
 });
 
+export interface NotifyCtl {
+  enabled: boolean;
+  webhook_type: 'dingding' | 'feishu' | 'feishu_person' | 'wechat' | 'msteams' | 'mail' | 'webhook' | string;
+  notify_type: string[];
+  dingding_notification_config?: {
+    hook_address?: string;
+    at_mobiles?: string[];
+    is_at_all?: boolean;
+  };
+  wechat_notification_config?: {
+    hook_address?: string;
+    at_users?: string[];
+    is_at_all?: boolean;
+  };
+  lark_hook_notification_config?: {
+    hook_address?: string;
+    at_users?: string[];
+    is_at_all?: boolean;
+  };
+  lark_person_notification_config?: {
+    app_id?: string;
+  };
+  msteams_notification_config?: {
+    hook_address?: string;
+    at_emails?: string[];
+  };
+  mail_notification_config?: {
+    target_users?: Array<{ user_id?: string; name?: string; email?: string }>;
+    target_emails?: string[];
+  };
+  webhook_notification_config?: {
+    address?: string;
+    token?: string;
+  };
+}
+
 export interface ScanningCacheSetting {
   cache_enable: boolean;
   cache_dir_type: 'workspace' | 'user_defined' | string;
@@ -98,7 +136,7 @@ export interface ScanningAdvancedSetting {
     enabled: boolean;
     items: unknown[];
   };
-  notify_ctls?: unknown[];
+  notify_ctls?: NotifyCtl[];
   cache?: ScanningCacheSetting;
   concurrency_limit?: number;
   custom_annotations?: Array<{ key: string; value: string }>;
@@ -184,6 +222,14 @@ export const ScannersPage: React.FC = () => {
       cache_dir_type: adv?.cache?.cache_dir_type || 'workspace',
       cache_user_dir: adv?.cache?.cache_user_dir || '',
       hook_enabled: adv?.hook_ctl?.enabled !== false,
+      notify_ctls: (adv?.notify_ctls || []).map((nc: any) => ({
+        ...nc,
+        mail_notification_config: nc.mail_notification_config
+          ? {
+              target_emails: (nc.mail_notification_config.target_users || []).map((u: any) => u.email || u.name || ''),
+            }
+          : undefined,
+      })),
     });
     setModalVisible(true);
   }, [form]);
@@ -205,6 +251,7 @@ export const ScannersPage: React.FC = () => {
         cache_dir_type: 'workspace',
         hook_enabled: true,
         artifact_paths: [],
+        notify_ctls: [],
       });
       setModalVisible(true);
     } else if (location.pathname.includes('/scanner/edit/') || location.pathname.includes('/scanner/ai-review/edit/')) {
@@ -436,7 +483,26 @@ export const ScannersPage: React.FC = () => {
           enabled: values.hook_enabled !== false,
           items: editingScanner?.advanced_settings?.hook_ctl?.items || [],
         },
-        notify_ctls: editingScanner?.advanced_settings?.notify_ctls || [],
+        notify_ctls: (values.notify_ctls || []).map((nc: any) => ({
+          enabled: nc.enabled !== false,
+          webhook_type: nc.webhook_type || 'dingding',
+          notify_type: nc.notify_type || ['passed', 'failed'],
+          dingding_notification_config: nc.webhook_type === 'dingding' ? nc.dingding_notification_config : undefined,
+          wechat_notification_config: nc.webhook_type === 'wechat' ? nc.wechat_notification_config : undefined,
+          lark_hook_notification_config: nc.webhook_type === 'feishu' ? nc.lark_hook_notification_config : undefined,
+          lark_person_notification_config: nc.webhook_type === 'feishu_person' ? nc.lark_person_notification_config : undefined,
+          msteams_notification_config: nc.webhook_type === 'msteams' ? nc.msteams_notification_config : undefined,
+          mail_notification_config:
+            nc.webhook_type === 'mail' && nc.mail_notification_config?.target_emails
+              ? {
+                  target_users: (nc.mail_notification_config.target_emails || []).map((email: string) => ({
+                    email,
+                    name: email,
+                  })),
+                }
+              : undefined,
+          webhook_notification_config: nc.webhook_type === 'webhook' ? nc.webhook_notification_config : undefined,
+        })),
         cache: {
           cache_enable: !!values.cache_enable,
           cache_dir_type: values.cache_dir_type || 'workspace',
@@ -1025,6 +1091,326 @@ export const ScannersPage: React.FC = () => {
                         <Switch />
                       </Form.Item>
                     </div>
+
+                    <Divider style={{ margin: '12px 0' }} />
+
+                    <div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: 12,
+                        }}
+                      >
+                        <Space>
+                          <BellOutlined style={{ color: '#0066ff' }} />
+                          <Text strong>通知配置 (NotifyCtl)</Text>
+                          <Tooltip title="扫描任务执行完成或失败时，通过指定 IM 机器人、个人或 Webhook 通道推送通知">
+                            <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                          </Tooltip>
+                        </Space>
+                      </div>
+
+                      <Form.List name="notify_ctls">
+                        {(fields, { add, remove }) => (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {fields.map(({ key, name, ...restField }) => (
+                              <Card
+                                key={key}
+                                size="small"
+                                variant="borderless"
+                                style={{
+                                  background: '#f8fafc',
+                                  border: '1px solid #e2e8f0',
+                                  borderRadius: 6,
+                                }}
+                                styles={{ body: { padding: '12px 16px' } }}
+                              >
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    marginBottom: 12,
+                                  }}
+                                >
+                                  <Space>
+                                    <Tag color="blue">通知通道 #{name + 1}</Tag>
+                                    <Form.Item
+                                      {...restField}
+                                      name={[name, 'enabled']}
+                                      valuePropName="checked"
+                                      noStyle
+                                      initialValue={true}
+                                    >
+                                      <Switch size="small" checkedChildren="开启" unCheckedChildren="关闭" />
+                                    </Form.Item>
+                                  </Space>
+                                  <Button
+                                    type="text"
+                                    danger
+                                    size="small"
+                                    icon={<DeleteOutlined />}
+                                    onClick={() => remove(name)}
+                                  >
+                                    移除
+                                  </Button>
+                                </div>
+
+                                <Row gutter={16}>
+                                  <Col span={8}>
+                                    <Form.Item
+                                      {...restField}
+                                      name={[name, 'webhook_type']}
+                                      label="通道类型"
+                                      rules={[{ required: true, message: '请选择通道类型' }]}
+                                      initialValue="dingding"
+                                    >
+                                      <Select
+                                        options={[
+                                          { label: '钉钉机器人 (DingTalk)', value: 'dingding' },
+                                          { label: '企业微信群机器人 (WeChat)', value: 'wechat' },
+                                          { label: '飞书群机器人 (Lark Hook)', value: 'feishu' },
+                                          { label: '飞书个人 (Lark Person)', value: 'feishu_person' },
+                                          { label: 'Microsoft Teams', value: 'msteams' },
+                                          { label: '邮件通知 (Mail)', value: 'mail' },
+                                          { label: '通用 Webhook', value: 'webhook' },
+                                        ]}
+                                      />
+                                    </Form.Item>
+                                  </Col>
+
+                                  <Col span={16}>
+                                    <Form.Item
+                                      {...restField}
+                                      name={[name, 'notify_type']}
+                                      label="通知事件"
+                                      rules={[{ required: true, message: '请至少选择一个通知事件' }]}
+                                      initialValue={['passed', 'failed']}
+                                    >
+                                      <Select
+                                        mode="multiple"
+                                        placeholder="选择触发通知的事件"
+                                        options={[
+                                          { label: '执行成功 (passed)', value: 'passed' },
+                                          { label: '执行失败 (failed)', value: 'failed' },
+                                          { label: '任务超时 (timeout)', value: 'timeout' },
+                                          { label: '任务取消 (cancelled)', value: 'cancelled' },
+                                        ]}
+                                      />
+                                    </Form.Item>
+                                  </Col>
+                                </Row>
+
+                                {/* 动态通道参数 */}
+                                <Form.Item
+                                  noStyle
+                                  shouldUpdate={(prev, curr) =>
+                                    prev?.notify_ctls?.[name]?.webhook_type !==
+                                    curr?.notify_ctls?.[name]?.webhook_type
+                                  }
+                                >
+                                  {({ getFieldValue }) => {
+                                    const wType = getFieldValue(['notify_ctls', name, 'webhook_type']) || 'dingding';
+                                    if (wType === 'dingding') {
+                                      return (
+                                        <Row gutter={16}>
+                                          <Col span={14}>
+                                            <Form.Item
+                                              {...restField}
+                                              name={[name, 'dingding_notification_config', 'hook_address']}
+                                              label="Webhook 机器人地址"
+                                              rules={[{ required: true, message: '请输入钉钉 Webhook 地址' }]}
+                                            >
+                                              <Input placeholder="https://oapi.dingtalk.com/robot/send?access_token=..." />
+                                            </Form.Item>
+                                          </Col>
+                                          <Col span={6}>
+                                            <Form.Item
+                                              {...restField}
+                                              name={[name, 'dingding_notification_config', 'at_mobiles']}
+                                              label="@ 手机号 (可选)"
+                                            >
+                                              <Select mode="tags" placeholder="手机号回车添加" />
+                                            </Form.Item>
+                                          </Col>
+                                          <Col span={4}>
+                                            <Form.Item
+                                              {...restField}
+                                              name={[name, 'dingding_notification_config', 'is_at_all']}
+                                              valuePropName="checked"
+                                              label="@所有人"
+                                            >
+                                              <Switch size="small" />
+                                            </Form.Item>
+                                          </Col>
+                                        </Row>
+                                      );
+                                    } else if (wType === 'wechat') {
+                                      return (
+                                        <Row gutter={16}>
+                                          <Col span={14}>
+                                            <Form.Item
+                                              {...restField}
+                                              name={[name, 'wechat_notification_config', 'hook_address']}
+                                              label="企业微信 Webhook 地址"
+                                              rules={[{ required: true, message: '请输入企业微信 Webhook 地址' }]}
+                                            >
+                                              <Input placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." />
+                                            </Form.Item>
+                                          </Col>
+                                          <Col span={6}>
+                                            <Form.Item
+                                              {...restField}
+                                              name={[name, 'wechat_notification_config', 'at_users']}
+                                              label="@ 用户 ID (可选)"
+                                            >
+                                              <Select mode="tags" placeholder="用户 ID 回车添加" />
+                                            </Form.Item>
+                                          </Col>
+                                          <Col span={4}>
+                                            <Form.Item
+                                              {...restField}
+                                              name={[name, 'wechat_notification_config', 'is_at_all']}
+                                              valuePropName="checked"
+                                              label="@所有人"
+                                            >
+                                              <Switch size="small" />
+                                            </Form.Item>
+                                          </Col>
+                                        </Row>
+                                      );
+                                    } else if (wType === 'feishu') {
+                                      return (
+                                        <Row gutter={16}>
+                                          <Col span={14}>
+                                            <Form.Item
+                                              {...restField}
+                                              name={[name, 'lark_hook_notification_config', 'hook_address']}
+                                              label="飞书群 Webhook 地址"
+                                              rules={[{ required: true, message: '请输入飞书 Webhook 地址' }]}
+                                            >
+                                              <Input placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." />
+                                            </Form.Item>
+                                          </Col>
+                                          <Col span={6}>
+                                            <Form.Item
+                                              {...restField}
+                                              name={[name, 'lark_hook_notification_config', 'at_users']}
+                                              label="@ 成员 (可选)"
+                                            >
+                                              <Select mode="tags" placeholder="open_id 回车添加" />
+                                            </Form.Item>
+                                          </Col>
+                                          <Col span={4}>
+                                            <Form.Item
+                                              {...restField}
+                                              name={[name, 'lark_hook_notification_config', 'is_at_all']}
+                                              valuePropName="checked"
+                                              label="@所有人"
+                                            >
+                                              <Switch size="small" />
+                                            </Form.Item>
+                                          </Col>
+                                        </Row>
+                                      );
+                                    } else if (wType === 'feishu_person') {
+                                      return (
+                                        <Form.Item
+                                          {...restField}
+                                          name={[name, 'lark_person_notification_config', 'app_id']}
+                                          label="飞书应用 App ID"
+                                          rules={[{ required: true, message: '请输入飞书应用 App ID' }]}
+                                        >
+                                          <Input placeholder="cli_xxxxxxxxxxx" />
+                                        </Form.Item>
+                                      );
+                                    } else if (wType === 'msteams') {
+                                      return (
+                                        <Row gutter={16}>
+                                          <Col span={16}>
+                                            <Form.Item
+                                              {...restField}
+                                              name={[name, 'msteams_notification_config', 'hook_address']}
+                                              label="Teams Incoming Webhook"
+                                              rules={[{ required: true, message: '请输入 Teams Webhook 地址' }]}
+                                            >
+                                              <Input placeholder="https://outlook.office.com/webhook/..." />
+                                            </Form.Item>
+                                          </Col>
+                                          <Col span={8}>
+                                            <Form.Item
+                                              {...restField}
+                                              name={[name, 'msteams_notification_config', 'at_emails']}
+                                              label="@ 用户邮箱 (可选)"
+                                            >
+                                              <Select mode="tags" placeholder="邮箱回车添加" />
+                                            </Form.Item>
+                                          </Col>
+                                        </Row>
+                                      );
+                                    } else if (wType === 'mail') {
+                                      return (
+                                        <Form.Item
+                                          {...restField}
+                                          name={[name, 'mail_notification_config', 'target_emails']}
+                                          label="收件人邮箱"
+                                          rules={[{ required: true, message: '请至少输入一个收件人邮箱' }]}
+                                        >
+                                          <Select mode="tags" placeholder="输入邮箱后回车添加" />
+                                        </Form.Item>
+                                      );
+                                    } else if (wType === 'webhook') {
+                                      return (
+                                        <Row gutter={16}>
+                                          <Col span={14}>
+                                            <Form.Item
+                                              {...restField}
+                                              name={[name, 'webhook_notification_config', 'address']}
+                                              label="回调接口 URL"
+                                              rules={[{ required: true, message: '请输入 Webhook URL' }]}
+                                            >
+                                              <Input placeholder="https://api.example.com/webhook/scan-callback" />
+                                            </Form.Item>
+                                          </Col>
+                                          <Col span={10}>
+                                            <Form.Item
+                                              {...restField}
+                                              name={[name, 'webhook_notification_config', 'token']}
+                                              label="鉴权 Token (可选)"
+                                            >
+                                              <Input placeholder="Bearer Token 或签名密钥" />
+                                            </Form.Item>
+                                          </Col>
+                                        </Row>
+                                      );
+                                    }
+                                    return null;
+                                  }}
+                                </Form.Item>
+                              </Card>
+                            ))}
+
+                            <Button
+                              type="dashed"
+                              onClick={() =>
+                                add({
+                                  enabled: true,
+                                  webhook_type: 'dingding',
+                                  notify_type: ['passed', 'failed'],
+                                  dingding_notification_config: { hook_address: '', at_mobiles: [], is_at_all: false },
+                                })
+                              }
+                              icon={<PlusOutlined />}
+                              style={{ width: '100%' }}
+                            >
+                              添加通知通道
+                            </Button>
+                          </div>
+                        )}
+                      </Form.List>
+                    </div>
                   </div>
                 ),
               },
@@ -1213,6 +1599,19 @@ export const ScannersPage: React.FC = () => {
               </Descriptions.Item>
               <Descriptions.Item label="调度集群">
                 {detailScanner.advanced_settings?.cluster_id || '默认集群'}
+              </Descriptions.Item>
+              <Descriptions.Item label="通知配置" span={2}>
+                {detailScanner.advanced_settings?.notify_ctls && detailScanner.advanced_settings.notify_ctls.length > 0 ? (
+                  <Space wrap size={4}>
+                    {detailScanner.advanced_settings.notify_ctls.map((nc, idx) => (
+                      <Tag key={idx} color={nc.enabled ? 'blue' : 'default'}>
+                        {nc.webhook_type}: {(nc.notify_type || []).join('/')}
+                      </Tag>
+                    ))}
+                  </Space>
+                ) : (
+                  <Text type="secondary">未配置</Text>
+                )}
               </Descriptions.Item>
             </Descriptions>
 
