@@ -36,6 +36,7 @@ import {
   DiffOutlined,
   GlobalOutlined,
   FieldTimeOutlined,
+  DeploymentUnitOutlined,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
@@ -55,6 +56,7 @@ import ShareEnvModal from './ShareEnvModal';
 import PortalServiceModal from './PortalServiceModal';
 import IstioGrayscaleDrawer from './IstioGrayscaleDrawer';
 import SleepCronModal from './SleepCronModal';
+import EnvRevisionDrawer from './EnvRevisionDrawer';
 import LogViewer from '../../components/Terminal/LogViewer';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
@@ -215,6 +217,9 @@ export const EnvironmentsPage: React.FC = () => {
 
   // 定时睡眠与唤醒弹窗 (F8)
   const [sleepCronModalOpen, setSleepCronModalOpen] = useState(false);
+
+  // 环境版本与快照记录抽屉状态 (F10)
+  const [revisionDrawerOpen, setRevisionDrawerOpen] = useState(false);
 
   const fetchChangeLogs = useCallback(
     async (page = 1) => {
@@ -786,6 +791,13 @@ export const EnvironmentsPage: React.FC = () => {
               >
                 节点列表
               </Button>
+              <Button
+                icon={<DeploymentUnitOutlined />}
+                onClick={() => setRevisionDrawerOpen(true)}
+                disabled={!currentEnv}
+              >
+                环境版本
+              </Button>
               <Dropdown
                 menu={{
                   items: [
@@ -799,6 +811,13 @@ export const EnvironmentsPage: React.FC = () => {
                         setAliasModalOpen(true);
                       },
                       disabled: !currentEnv,
+                    },
+                    {
+                      key: 'revision',
+                      icon: <DeploymentUnitOutlined />,
+                      label: '环境版本与快照',
+                      disabled: !currentEnv,
+                      onClick: () => setRevisionDrawerOpen(true),
                     },
                     {
                       key: 'sleep',
@@ -1394,6 +1413,18 @@ export const EnvironmentsPage: React.FC = () => {
         envName={currentEnv || ''}
         production={currentEnvObj?.production ?? false}
         onClose={() => setSleepCronModalOpen(false)}
+        onSuccess={() => {
+          loadEnvironments();
+        }}
+      />
+
+      {/* Environment Revision and Snapshots Drawer (F10) */}
+      <EnvRevisionDrawer
+        open={revisionDrawerOpen}
+        projectName={activeProject || ''}
+        envName={currentEnv || ''}
+        production={currentEnvObj?.production ?? false}
+        onClose={() => setRevisionDrawerOpen(false)}
         onSuccess={() => {
           loadEnvironments();
         }}

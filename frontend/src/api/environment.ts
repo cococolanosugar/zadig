@@ -696,7 +696,66 @@ export const environmentApi = {
       payload
     );
   },
+
+  /**
+   * List environment product revisions.
+   * GET /api/aslan/environment/revision/products?projectName=&envName=&production=
+   */
+  async getProductsRevision(
+    projectName: string,
+    envName: string,
+    production = false
+  ): Promise<EnvProductRevision[]> {
+    const prodParam = production ? '&production=true' : '';
+    const res = await http.get<EnvProductRevision[]>(
+      `/api/aslan/environment/revision/products?projectName=${encodeURIComponent(projectName)}&envName=${encodeURIComponent(envName)}${prodParam}`
+    );
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * List environment product revision snapshots.
+   * GET /api/aslan/environment/revision/productsnaps?projectName=&envName=&production=
+   */
+  async getProductsRevisionSnaps(
+    projectName: string,
+    envName: string,
+    production = false
+  ): Promise<EnvProductRevision[]> {
+    const prodParam = production ? '&production=true' : '';
+    const res = await http.get<EnvProductRevision[]>(
+      `/api/aslan/environment/revision/productsnaps?projectName=${encodeURIComponent(projectName)}&envName=${encodeURIComponent(envName)}${prodParam}`
+    );
+    return Array.isArray(res) ? res : [];
+  },
 };
+
+export interface EnvSvcRevision {
+  service_name: string;
+  type: string;
+  current_revision: number;
+  next_revision: number;
+  updatable: boolean;
+  deploy_strategy?: string;
+  error?: string;
+  deleted?: boolean;
+  new?: boolean;
+  containers?: Array<{ name: string; image: string }>;
+  update_service_tmpl?: boolean;
+  variable_yaml?: string;
+  variable_kvs?: Array<{ key: string; value: string }>;
+}
+
+export interface EnvProductRevision {
+  id?: string;
+  env_name: string;
+  product_name: string;
+  current_revision: number;
+  next_revision: number;
+  updatable: boolean;
+  services: EnvSvcRevision[];
+  isPublic?: boolean;
+}
 
 export interface EnvSleepCronArg {
   sleep_cron_enable: boolean;
