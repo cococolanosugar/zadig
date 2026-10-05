@@ -11,26 +11,30 @@ import {
   BellOutlined,
   NotificationOutlined,
   CheckCircleOutlined,
+  MailOutlined,
+  PhoneOutlined,
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
+import dayjs from 'dayjs';
 import { useAuthStore } from '../../stores/auth';
 import { feedback } from '../../utils/feedback';
 import http from '../../api/client';
+import authApi, { type PersonalUserInfo } from '../../api/auth';
 import notificationApi, { type SubscriptionItem } from '../../api/notification';
 
 const { Title, Text, Paragraph } = Typography;
 
 export const UserProfilePage: React.FC = () => {
-  const { userInfo, roles, token: userJwtToken } = useAuthStore();
+  const { userInfo, roles, token: userJwtToken, updateUserInfo } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
 
   const getActiveTab = () => {
     const path = location.pathname;
-    if (path.endsWith('/info')) return 'info';
     if (path.endsWith('/security')) return 'security';
     if (path.endsWith('/preference')) return 'preference';
-    return 'mcp';
+    if (path.endsWith('/mcp')) return 'mcp';
+    return 'info';
   };
 
   const activeTab = getActiveTab();
@@ -42,6 +46,71 @@ export const UserProfilePage: React.FC = () => {
   // MCP Token state
   const [apiToken, setApiToken] = useState<string>(userInfo?.token || userJwtToken || 'zadig_mcp_sec_live_token');
   const [rotatingToken, setRotatingToken] = useState<boolean>(false);
+
+  // 基本信息 (Personal Info) 状态
+  const [infoForm] = Form.useForm();
+  const [personalUser, setPersonalUser] = useState<PersonalUserInfo | null>(null);
+  const [loadingPersonal, setLoadingPersonal] = useState<boolean>(false);
+  const [savingPersonal, setSavingPersonal] = useState<boolean>(false);
+
+  const loadPersonalInfo = useCallback(async () => {
+    if (!userInfo?.uid) return;
+    setLoadingPersonal(true);
+    try {
+      const res = await authApi.getPersonalUser(userInfo.uid);
+      setPersonalUser(res);
+      infoForm.setFieldsValue({
+        name: res.name || '',
+        email: res.email || '',
+        phone: res.phone && res.phone !== '0' ? res.phone : '',
+      });
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '获取个人资料失败';
+      feedback.message.error(msg);
+    } finally {
+      setLoadingPersonal(false);
+    }
+  }, [userInfo?.uid, infoForm]);
+
+  useEffect(() => {
+    if (activeTab === 'info') {
+      loadPersonalInfo();
+    }
+  }, [activeTab, loadPersonalInfo]);
+
+  const handleSavePersonalInfo = async () => {
+    if (!userInfo?.uid) {
+      feedback.message.error('无法定位当前用户身份信息');
+      return;
+    }
+    try {
+      const values = await infoForm.validateFields();
+      setSavingPersonal(true);
+      await authApi.updatePersonalUser(userInfo.uid, {
+        name: values.name.trim(),
+        email: values.email.trim(),
+        phone: (values.phone || '').trim(),
+      });
+      feedback.message.success('个人基本信息已成功保存');
+      updateUserInfo({
+        name: values.name.trim(),
+        email: values.email.trim(),
+        phone: (values.phone || '').trim(),
+      });
+      await loadPersonalInfo();
+    } catch (err: any) {
+      if (!err?.errorFields) {
+        const msg =
+          (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+          err?.message ||
+          '保存个人信息失败';
+        feedback.message.error(msg);
+      }
+    } finally {
+      setSavingPersonal(false);
+    }
+  };
 
   // Password update form state
   const [passwordForm] = Form.useForm();
@@ -261,18 +330,10 @@ export const UserProfilePage: React.FC = () => {
 
   const tabItems = [
     {
-      key: 'mcp',
-      label: (
-        <span>
-          <ApiOutlined /> 配置 MCP (Model Context Protocol)
-        </span>
-      ),
-    },
-    {
       key: 'info',
       label: (
         <span>
-          <UserOutlined /> 账号设置
+          <UserOutlined /> 基本信息
         </span>
       ),
     },
@@ -289,6 +350,14 @@ export const UserProfilePage: React.FC = () => {
       label: (
         <span>
           <SettingOutlined /> 偏好设置
+        </span>
+      ),
+    },
+    {
+      key: 'mcp',
+      label: (
+        <span>
+          <ApiOutlined /> 配置 MCP (Model Context Protocol)
         </span>
       ),
     },
@@ -399,29 +468,189 @@ export const UserProfilePage: React.FC = () => {
             </Form>
           </div>
         ) : activeTab === 'info' ? (
-          <div style={{ maxWidth: 720 }}>
-            <Descriptions
-              title="当前用户基础信息"
-              bordered
-              column={1}
-              size="middle"
-              styles={{ label: { width: 160, fontWeight: 500, backgroundColor: '#fafafa' } }}
-              items={[
-                { key: 'account', label: '账号名称', children: userInfo?.account || '-' },
-                { key: 'email', label: '电子邮箱', children: userInfo?.email || '-' },
-                { key: 'name', label: '显示昵称', children: userInfo?.name || '超级管理员' },
-                {
-                  key: 'roles',
-                  label: '系统权限',
-                  children: (
-                    <Tag color="magenta">
-                      {roles.includes('admin') ? '超级管理员 (System Admin)' : '普通研发人员'}
-                    </Tag>
-                  ),
-                },
-                { key: 'source', label: '账号源', children: '内置系统用户 (system)' },
-              ]}
+          <div style={{ maxWidth: 760 }}>
+            <Alert
+              title="个人基本信息"
+              description="您可以在此处维护您的个人姓名、联系邮箱与手机号。修改邮箱或手机号可能会影响您的系统登录与通知接收，请确保信息真实有效。"
+              type="info"
+              showIcon
+              style={{ marginBottom: 24, borderRadius: 6 }}
             />
+
+            {loadingPersonal && !personalUser ? (
+              <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                <Spin description="正在加载个人资料..." />
+              </div>
+            ) : (
+              <Card
+                title={
+                  <Space>
+                    <UserOutlined style={{ color: '#1677ff' }} />
+                    <span>基本信息</span>
+                  </Space>
+                }
+                variant="borderless"
+                style={{ borderRadius: 8, border: '1px solid #f0f0f0', background: '#fafbfc' }}
+                extra={
+                  <Button
+                    icon={<ReloadOutlined />}
+                    loading={loadingPersonal}
+                    onClick={loadPersonalInfo}
+                  >
+                    刷新
+                  </Button>
+                }
+              >
+                <Descriptions
+                  column={{ xxl: 2, xl: 2, lg: 2, md: 1, sm: 1, xs: 1 }}
+                  size="small"
+                  styles={{ label: { width: 120, fontWeight: 500, color: '#595959' } }}
+                  style={{ marginBottom: 24 }}
+                  items={[
+                    {
+                      key: 'account',
+                      label: '账号名称',
+                      children: <Text strong>{personalUser?.account || userInfo?.account || '-'}</Text>,
+                    },
+                    {
+                      key: 'source',
+                      label: '账号来源',
+                      children: (
+                        <Tag color={personalUser?.identity_type === 'system' ? 'default' : 'blue'}>
+                          {personalUser?.identity_type === 'system' ? '内置系统账号' : personalUser?.identity_type || '系统账号'}
+                        </Tag>
+                      ),
+                    },
+                    {
+                      key: 'roles',
+                      label: '系统权限',
+                      children: (
+                        <Tag color="magenta">
+                          {personalUser?.admin || roles.includes('admin') ? '超级管理员 (System Admin)' : '普通用户'}
+                        </Tag>
+                      ),
+                    },
+                    {
+                      key: 'user_groups',
+                      label: '所属用户组',
+                      children: personalUser?.user_groups?.length ? (
+                        <Space wrap size={[4, 4]}>
+                          {personalUser.user_groups.map((g) => (
+                            <Tag key={g.name} color="geekblue">
+                              {g.name}
+                            </Tag>
+                          ))}
+                        </Space>
+                      ) : (
+                        <Text type="secondary">无所属用户组</Text>
+                      ),
+                    },
+                    {
+                      key: 'last_login',
+                      label: '上次登录时间',
+                      children: personalUser?.last_login_time ? (
+                        <Text type="secondary">
+                          {dayjs.unix(personalUser.last_login_time).format('YYYY-MM-DD HH:mm:ss')}
+                        </Text>
+                      ) : (
+                        '-'
+                      ),
+                    },
+                    {
+                      key: 'mfa_status',
+                      label: 'MFA 认证',
+                      children: (
+                        <Tag color={personalUser?.mfa_enabled ? 'success' : 'default'}>
+                          {personalUser?.mfa_enabled ? '已启用' : '未启用'}
+                        </Tag>
+                      ),
+                    },
+                  ]}
+                />
+
+                <Form
+                  form={infoForm}
+                  layout="vertical"
+                  onFinish={handleSavePersonalInfo}
+                  requiredMark="optional"
+                >
+                  <Form.Item
+                    name="name"
+                    label="用户姓名"
+                    rules={[
+                      { required: true, message: '请输入用户姓名' },
+                      { max: 32, message: '姓名长度不能超过 32 个字符' },
+                    ]}
+                    extra="用于系统顶栏、操作审计日志、流水线历史记录中展示的用户昵称"
+                  >
+                    <Input
+                      prefix={<UserOutlined style={{ color: '#bfbfbf' }} />}
+                      placeholder="请输入用户姓名"
+                      maxLength={32}
+                    />
+                  </Form.Item>
+
+                  <Form.Item
+                    name="email"
+                    label="电子邮箱"
+                    rules={[
+                      { required: true, message: '请输入电子邮箱' },
+                      { type: 'email', message: '请输入有效合法的电子邮箱地址' },
+                    ]}
+                    extra="用于接收系统通知、告警信息以及登录凭据找回"
+                  >
+                    <Input
+                      prefix={<MailOutlined style={{ color: '#bfbfbf' }} />}
+                      placeholder="例如: admin@example.com"
+                    />
+                  </Form.Item>
+
+                  <Form.Item
+                    name="phone"
+                    label="手机号码"
+                    rules={[
+                      {
+                        pattern: /^(1[3-9]\d{9}|0|\+?\d{6,15})?$/,
+                        message: '请输入有效的联系电话号码',
+                      },
+                    ]}
+                    extra="用于接收紧急短信通知或移动端二次认证 (选填)"
+                  >
+                    <Input
+                      prefix={<PhoneOutlined style={{ color: '#bfbfbf' }} />}
+                      placeholder="请输入手机号码 (选填)"
+                    />
+                  </Form.Item>
+
+                  <Form.Item style={{ marginTop: 24, marginBottom: 0 }}>
+                    <Space size={12}>
+                      <Button
+                        type="primary"
+                        htmlType="submit"
+                        icon={<SaveOutlined />}
+                        loading={savingPersonal}
+                      >
+                        保存基本信息
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          if (personalUser) {
+                            infoForm.setFieldsValue({
+                              name: personalUser.name || '',
+                              email: personalUser.email || '',
+                              phone: personalUser.phone && personalUser.phone !== '0' ? personalUser.phone : '',
+                            });
+                          }
+                        }}
+                        disabled={savingPersonal}
+                      >
+                        重置修改
+                      </Button>
+                    </Space>
+                  </Form.Item>
+                </Form>
+              </Card>
+            )}
           </div>
         ) : activeTab === 'security' ? (
           <div style={{ maxWidth: 720 }}>

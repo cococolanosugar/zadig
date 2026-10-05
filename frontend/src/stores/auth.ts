@@ -19,6 +19,8 @@ interface AuthState {
   publicKey: string | null;
   isAuthenticated: boolean;
   setAuth: (token: string, userInfo: UserInfo) => void;
+  setUserInfo: (userInfo: UserInfo) => void;
+  updateUserInfo: (partial: Partial<UserInfo>) => void;
   setRoles: (roles: string[]) => void;
   setPublicKey: (key: string) => void;
   logout: () => void;
@@ -68,6 +70,16 @@ export const useAuthStore = create<AuthState>()(
           userInfo,
           isAuthenticated: true,
         });
+      },
+
+      setUserInfo: (userInfo: UserInfo) => {
+        set({ userInfo });
+      },
+
+      updateUserInfo: (partial: Partial<UserInfo>) => {
+        set((state) => ({
+          userInfo: state.userInfo ? { ...state.userInfo, ...partial } : null,
+        }));
       },
 
       setRoles: (roles: string[]) => {
