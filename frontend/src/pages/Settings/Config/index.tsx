@@ -21,6 +21,7 @@ import {
   Checkbox,
   Drawer,
   Popconfirm,
+  Descriptions,
 } from 'antd';
 import {
   MailOutlined,
@@ -67,6 +68,7 @@ import systemConfigApi, {
   type CreateKeyVaultArgs,
   type NavigationItem,
   type CustomNavigationConfig,
+  type GitWebhookConfig,
 } from '../../../api/systemConfig';
 import emailApi from '../../../api/email';
 import settingsApi, { type ProxyConfig } from '../../../api/settings';
@@ -202,6 +204,11 @@ export const SystemConfigPage: React.FC = () => {
   const [workflowHookForm] = Form.useForm();
   const [savingHook, setSavingHook] = useState(false);
   const [hookLicenseBlocked, setHookLicenseBlocked] = useState(false);
+
+  // 系统 Git Webhook 状态
+  const [gitWebhookConfig, setGitWebhookConfig] = useState<GitWebhookConfig | null>(null);
+  const [gitSecretVisible, setGitSecretVisible] = useState(false);
+  const [loadingGitWebhook, setLoadingGitWebhook] = useState(false);
 
   // 工作流参数 (KeyVault) 状态
   const [keyVaultGroups, setKeyVaultGroups] = useState<KeyVaultGroupItem[]>([]);
@@ -390,6 +397,16 @@ export const SystemConfigPage: React.FC = () => {
           ) {
             setHookLicenseBlocked(true);
           }
+        }
+      } else if (tab === 'gitWebhook') {
+        setLoadingGitWebhook(true);
+        try {
+          const res = await systemConfigApi.getGitWebhookConfig();
+          setGitWebhookConfig(res);
+        } catch {
+          // ignore
+        } finally {
+          setLoadingGitWebhook(false);
         }
       } else if (tab === 'workflowParam') {
         try {
@@ -801,6 +818,26 @@ export const SystemConfigPage: React.FC = () => {
     feedback.message.success(`已复制参数引用: {{${expr}}}`);
   };
 
+  const handleCopyText = async (text: string, label: string) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      feedback.message.success(`已复制 ${label}`);
+    } catch {
+      feedback.message.error(`复制 ${label} 失败，请手动复制`);
+    }
+  };
+
   const handleOpenEditNavItem = (item: NavigationItem) => {
     setEditingNavItem(item);
     navForm.setFieldsValue({
@@ -1102,6 +1139,14 @@ export const SystemConfigPage: React.FC = () => {
       label: (
         <span>
           <LinkOutlined /> 外部链接
+        </span>
+      ),
+    },
+    {
+      key: 'gitWebhook',
+      label: (
+        <span>
+          <ApiOutlined /> Git Webhook
         </span>
       ),
     },
@@ -2083,6 +2128,162 @@ export const SystemConfigPage: React.FC = () => {
               }}
             />
           </div>
+        ) : activeTab === 'gitWebhook' ? (
+          <div style={{ maxWidth: 840 }}>
+            <Alert
+              title="代码源 Webhook 服务端说明"
+              description="当在外部代码托管系统（如 GitHub、GitLab、Gitee、Gerrit 等）中配置 Webhook 时，请将 Webhook URL 和 Secret 填入相应代码库的 Webhook 配置中。代码仓库发生 push、pull_request、tag 等事件时将推送通知给 Zadig，触发工作流自动化执行。"
+              type="info"
+              showIcon
+              style={{ marginBottom: 20 }}
+            />
+
+            <Card
+              title={
+                <Space>
+                  <ApiOutlined style={{ color: '#1677ff' }} />
+                  <span>Git Webhook 基础凭证</span>
+                </Space>
+              }
+              variant="borderless"
+              extra={
+                <Button
+                  icon={<ReloadOutlined />}
+                  loading={loadingGitWebhook}
+                  onClick={() => loadTabData('gitWebhook')}
+                >
+                  刷新
+                </Button>
+              }
+              style={{ marginBottom: 24, background: '#fafbfc', border: '1px solid #f0f0f0', borderRadius: 8 }}
+            >
+              {loadingGitWebhook && !gitWebhookConfig ? (
+                <div style={{ padding: '32px 0', textAlign: 'center' }}>
+                  <Spin description="正在获取 Webhook 凭证..." />
+                </div>
+              ) : (
+                <Space orientation="vertical" size={20} style={{ width: '100%' }}>
+                  <div>
+                    <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text strong>Webhook 地址 (Payload URL)</Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        代码源平台推送事件的目标接收地址
+                      </Text>
+                    </div>
+                    <Space.Compact style={{ width: '100%' }}>
+                      <Input
+                        readOnly
+                        value={gitWebhookConfig?.url || ''}
+                        placeholder="尚未配置 Webhook 地址"
+                        style={{ fontFamily: 'monospace' }}
+                      />
+                      <Button
+                        icon={<CopyOutlined />}
+                        disabled={!gitWebhookConfig?.url}
+                        onClick={() => handleCopyText(gitWebhookConfig?.url || '', 'Webhook 地址')}
+                      >
+                        复制
+                      </Button>
+                    </Space.Compact>
+                    {!gitWebhookConfig?.url && (
+                      <Text type="warning" style={{ fontSize: 12, marginTop: 4, display: 'block' }}>
+                        提示：若未展示有效域名，可在「系统地址 (Server URL)」中统一配置
+                      </Text>
+                    )}
+                  </div>
+
+                  <div>
+                    <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Space size={6}>
+                        <Text strong>签名密钥 (Secret Token)</Text>
+                        <Tag color="blue">HMAC 校验</Tag>
+                      </Space>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        用于接收方与代码平台校验 Webhook 请求合法性
+                      </Text>
+                    </div>
+                    <Space.Compact style={{ width: '100%' }}>
+                      <Input
+                        readOnly
+                        type={gitSecretVisible ? 'text' : 'password'}
+                        value={gitWebhookConfig?.secret || ''}
+                        placeholder="尚未生成 Secret"
+                        style={{ fontFamily: 'monospace' }}
+                      />
+                      <Button
+                        icon={gitSecretVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                        disabled={!gitWebhookConfig?.secret}
+                        onClick={() => setGitSecretVisible(!gitSecretVisible)}
+                      >
+                        {gitSecretVisible ? '隐藏' : '显示'}
+                      </Button>
+                      <Button
+                        icon={<CopyOutlined />}
+                        disabled={!gitWebhookConfig?.secret}
+                        onClick={() => handleCopyText(gitWebhookConfig?.secret || '', 'Secret 密钥')}
+                      >
+                        复制
+                      </Button>
+                    </Space.Compact>
+                  </div>
+                </Space>
+              )}
+            </Card>
+
+            <Card
+              title="代码源 Webhook 接入指引"
+              variant="borderless"
+              style={{ background: '#fafbfc', border: '1px solid #f0f0f0', borderRadius: 8 }}
+            >
+              <Descriptions
+                column={1}
+                styles={{ label: { width: 140, fontWeight: 500 } }}
+                items={[
+                  {
+                    key: 'content-type',
+                    label: 'Content type',
+                    children: <Tag color="green">application/json</Tag>,
+                  },
+                  {
+                    key: 'events',
+                    label: '触发事件 (Events)',
+                    children: (
+                      <Space wrap size={[6, 6]}>
+                        <Tag>Push events (代码提交推送)</Tag>
+                        <Tag>Pull / Merge Request events (PR/MR 创建、更新与合并)</Tag>
+                        <Tag>Tag push events (标签推送)</Tag>
+                      </Space>
+                    ),
+                  },
+                  {
+                    key: 'ssl',
+                    label: 'SSL 验证',
+                    children: <Text type="secondary">若您的 Zadig 系统配置了正式 HTTPS 证书，建议开启 SSL 校验；自签名证书环境可关闭。</Text>,
+                  },
+                  {
+                    key: 'guide',
+                    label: '代码平台入口',
+                    children: (
+                      <Space orientation="vertical" size={6} style={{ width: '100%' }}>
+                        <div>
+                          <Text strong>GitHub: </Text>
+                          <Text type="secondary">代码仓库 → Settings → Webhooks → Add webhook</Text>
+                        </div>
+                        <div>
+                          <Text strong>GitLab: </Text>
+                          <Text type="secondary">代码仓库 → Settings → Webhooks → Add new webhook</Text>
+                        </div>
+                        <div>
+                          <Text strong>Gitee: </Text>
+                          <Text type="secondary">代码仓库 → 管理 → WebHooks → 添加 WebHook</Text>
+                        </div>
+                      </Space>
+                    ),
+                  },
+                ]}
+              />
+            </Card>
+          </div>
         ) : activeTab === 'workflowHook' ? (
           <div style={{ maxWidth: 720 }}>
             {hookLicenseBlocked ? (
@@ -2096,7 +2297,18 @@ export const SystemConfigPage: React.FC = () => {
             ) : (
               <Alert
                 title="全局工作流 Hook 说明"
-                description="开启后，系统内所有通用工作流与自定义工作流执行时，将在指定任务生命周期事件触发时向配置的回调地址推送 JSON 格式 Webhook 消息。可通过签名密钥 (Secret) 校验来源合法性。"
+                description={
+                  <div>
+                    <div>开启后，系统内所有通用工作流与自定义工作流执行时，将在指定任务生命周期事件触发时向配置的回调地址推送 JSON 格式 Webhook 消息。可通过签名密钥 (Secret) 校验来源合法性。</div>
+                    <div style={{ marginTop: 4 }}>
+                      <Text type="secondary">若需要配置从 GitHub / GitLab 等代码源接收提交并触发工作流，请前往 </Text>
+                      <Button type="link" size="small" style={{ padding: 0 }} onClick={() => handleTabChange('gitWebhook')}>
+                        Git Webhook
+                      </Button>
+                      <Text type="secondary"> 查看配置信息。</Text>
+                    </div>
+                  </div>
+                }
                 type="info"
                 showIcon
                 style={{ marginBottom: 20 }}

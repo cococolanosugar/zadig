@@ -153,7 +153,17 @@ export const systemConfigApi = {
   async updateSystemNavigation(items: NavigationItem[]): Promise<void> {
     await http.put('/api/aslan/system/navigation', { items });
   },
+
+  // --- 8. Git Webhook 配置 ---
+  async getGitWebhookConfig(): Promise<GitWebhookConfig> {
+    return http.get<GitWebhookConfig>('/api/aslan/system/webhook/config');
+  },
 };
+
+export interface GitWebhookConfig {
+  url: string;
+  secret: string;
+}
 
 export interface NavigationItem {
   name: string;
