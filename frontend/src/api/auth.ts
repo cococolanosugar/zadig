@@ -150,6 +150,46 @@ export const authApi = {
       return { name, enabled: false };
     }
   },
+
+  /**
+   * 获取当前登录用户个人资料详情
+   * GET /api/v1/users/:uid/personal (pkg/microservice/user/core/handler/user/user.go:192)
+   */
+  async getPersonalUser(uid: string): Promise<PersonalUserInfo> {
+    return http.get<PersonalUserInfo>(`/api/v1/users/${encodeURIComponent(uid)}/personal`);
+  },
+
+  /**
+   * 自助更新当前登录用户个人资料 (仅支持本人)
+   * PUT /api/v1/users/:uid/personal (pkg/microservice/user/core/handler/user/user.go:480)
+   */
+  async updatePersonalUser(uid: string, args: UpdatePersonalUserArgs): Promise<{ message: string }> {
+    return http.put<{ message: string }>(`/api/v1/users/${encodeURIComponent(uid)}/personal`, args);
+  },
 };
 
+export interface PersonalUserInfo {
+  last_login_time?: number;
+  uid: string;
+  name: string;
+  identity_type?: string;
+  email: string;
+  phone?: string;
+  account: string;
+  mfa_enabled?: boolean;
+  token?: string;
+  has_api_token?: boolean;
+  api_token_enabled?: boolean;
+  user_groups?: Array<{ name: string; system_role_names?: string[] }>;
+  system_role_bindings?: Array<{ role: string }>;
+  admin?: boolean;
+}
+
+export interface UpdatePersonalUserArgs {
+  name: string;
+  email: string;
+  phone?: string;
+}
+
 export default authApi;
+
