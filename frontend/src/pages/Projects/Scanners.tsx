@@ -166,6 +166,14 @@ export interface ScannerItem {
   outputs?: unknown[];
 }
 
+export interface ScanningRepoItem {
+  codehost_id: number;
+  source: string;
+  repo_namespace: string;
+  repo_name: string;
+  code_repo_scannings?: unknown[];
+}
+
 export const ScannersPage: React.FC = () => {
   const { projectName, scannerName: routeScannerName, taskId: routeTaskId } = useParams<{
     projectName: string;
@@ -182,21 +190,43 @@ export const ScannersPage: React.FC = () => {
   const [reportDrawerVisible, setReportDrawerVisible] = useState<boolean>(false);
   const [selectedScanner, setSelectedScanner] = useState<ScannerItem | null>(null);
   const [clusters, setClusters] = useState<ClusterItem[]>([]);
+  const [repoList, setRepoList] = useState<ScanningRepoItem[]>([]);
+  const [repoLoading, setRepoLoading] = useState<boolean>(false);
+  const [manualRepoInput, setManualRepoInput] = useState<boolean>(false);
   const [form] = Form.useForm();
   const selectedResReq = Form.useWatch('res_req', form);
   const selectedCacheEnable = Form.useWatch('cache_enable', form);
   const selectedCacheDirType = Form.useWatch('cache_dir_type', form);
   const selectedClusterId = Form.useWatch('cluster_id', form);
 
+  // 加载扫描代码库列表 (F9)
+  const fetchScanningRepos = useCallback(async () => {
+    if (!projectName) return;
+    setRepoLoading(true);
+    try {
+      const res = await http.get<ScanningRepoItem[]>(
+        `/api/aslan/testing/scanning/repo?projectName=${encodeURIComponent(projectName)}`,
+        { skipErrorHandler: true }
+      );
+      setRepoList(Array.isArray(res) ? res : []);
+    } catch {
+      setRepoList([]);
+    } finally {
+      setRepoLoading(false);
+    }
+  }, [projectName]);
+
   // 加载集群列表
   useEffect(() => {
     settingsApi.getClusters().then((res) => {
       setClusters(Array.isArray(res) ? res : []);
     }).catch(() => {});
-  }, []);
+    fetchScanningRepos();
+  }, [fetchScanningRepos]);
 
   const handleOpenEdit = useCallback((target: ScannerItem) => {
     setEditingScanner(target);
+    fetchScanningRepos();
     const adv = target.advanced_settings;
     const scannerType =
       target.scanner_type === 'ai_review'
@@ -205,11 +235,14 @@ export const ScannersPage: React.FC = () => {
         ? 'sonar'
         : target.scanner_type || 'standard';
 
+    const currentRepo = target.repos?.[0]?.repo_name || '';
+    setManualRepoInput(!currentRepo || (!repoList.some((r) => r.repo_name === currentRepo) && repoList.length === 0));
+
     form.setFieldsValue({
       name: target.name,
       description: target.description,
       scanner_type: scannerType,
-      repo_name: target.repos?.[0]?.repo_name || '',
+      repo_name: currentRepo,
       artifact_paths: adv?.artifact_paths || [],
       timeout: adv?.timeout ?? 600,
       concurrency_limit: adv?.concurrency_limit ?? 1,
@@ -232,7 +265,15 @@ export const ScannersPage: React.FC = () => {
       })),
     });
     setModalVisible(true);
-  }, [form]);
+  }, [form, repoList, fetchScanningRepos]);
+
+  const handleOpenCreate = useCallback(() => {
+    setEditingScanner(null);
+    form.resetFields();
+    setManualRepoInput(false);
+    fetchScanningRepos();
+    setModalVisible(true);
+  }, [form, fetchScanningRepos]);
 
   // 路由 /scanner/create、/scanner/edit/:name 自动打开弹窗
   useEffect(() => {
@@ -513,12 +554,25 @@ export const ScannersPage: React.FC = () => {
         custom_labels: editingScanner?.advanced_settings?.custom_labels || [],
       };
 
+      const selectedRepoObj = repoList.find((r) => r.repo_name === values.repo_name);
+      const repoPayload = values.repo_name
+        ? [
+            {
+              repo_name: values.repo_name.trim(),
+              branch: 'main',
+              codehost_id: selectedRepoObj?.codehost_id,
+              source: selectedRepoObj?.source,
+              repo_namespace: selectedRepoObj?.repo_namespace,
+            },
+          ]
+        : [{ repo_name: 'main-repo', branch: 'main' }];
+
       const payload = {
         name: values.name,
         project_name: projectName,
         description: values.description,
         scanner_type: scannerType,
-        repos: [{ repo_name: values.repo_name || 'main-repo', branch: 'main' }],
+        repos: repoPayload,
         script: editingScanner?.script || '#!/bin/bash\nset -e',
         advanced_settings: adv,
         check_quality_gate: false,
@@ -792,10 +846,7 @@ export const ScannersPage: React.FC = () => {
             <Button
               type="primary"
               icon={<PlusOutlined />}
-              onClick={() => {
-                form.resetFields();
-                setModalVisible(true);
-              }}
+              onClick={handleOpenCreate}
             >
               新建审查规则
             </Button>
@@ -817,10 +868,7 @@ export const ScannersPage: React.FC = () => {
                 <Button
                   type="primary"
                   icon={<PlusOutlined />}
-                  onClick={() => {
-                    form.resetFields();
-                    setModalVisible(true);
-                  }}
+                  onClick={handleOpenCreate}
                 >
                   新建审查规则
                 </Button>
@@ -891,8 +939,58 @@ export const ScannersPage: React.FC = () => {
             <Input placeholder="说明该审查模块的检测规范与门禁目标" />
           </Form.Item>
 
-          <Form.Item name="repo_name" label="关联代码仓库">
-            <Input placeholder="例如：koderover/backend-core" />
+          <Form.Item
+            name="repo_name"
+            label={
+              <Space>
+                <span>关联代码仓库</span>
+                {repoList.length > 0 && (
+                  <Button
+                    type="link"
+                    size="small"
+                    style={{ padding: 0, height: 'auto', fontSize: 12 }}
+                    onClick={() => setManualRepoInput(!manualRepoInput)}
+                  >
+                    {manualRepoInput ? '切换为下拉选择' : '手动输入'}
+                  </Button>
+                )}
+              </Space>
+            }
+            rules={[{ required: true, message: '请选择或输入关联代码仓库' }]}
+            tooltip="代码审查任务执行时拉取的 Git 代码仓库"
+            extra={
+              repoList.length === 0
+                ? '提示：当前项目暂无扫描代码库，可直接在此手动输入代码仓库名称'
+                : undefined
+            }
+          >
+            {repoList.length > 0 && !manualRepoInput ? (
+              <Select
+                showSearch
+                allowClear
+                placeholder="请选择代码仓库"
+                loading={repoLoading}
+                options={(() => {
+                  const currentVal = form.getFieldValue('repo_name');
+                  const opts = repoList.map((r) => {
+                    const fullName = r.repo_namespace ? `${r.repo_namespace}/${r.repo_name}` : r.repo_name;
+                    return {
+                      label: `${fullName} (${r.source || 'git'})`,
+                      value: r.repo_name,
+                    };
+                  });
+                  if (currentVal && !opts.some((o) => o.value === currentVal)) {
+                    opts.unshift({
+                      label: `${currentVal} (当前配置)`,
+                      value: currentVal,
+                    });
+                  }
+                  return opts;
+                })()}
+              />
+            ) : (
+              <Input placeholder="请输入代码库名称，例如 zadig 或 koderover/zadig" />
+            )}
           </Form.Item>
 
           <Collapse
