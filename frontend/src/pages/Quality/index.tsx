@@ -45,6 +45,10 @@ import {
   CodeOutlined,
   EditOutlined,
   DeleteOutlined,
+  FileTextOutlined,
+  ShareAltOutlined,
+  FullscreenOutlined,
+  ExportOutlined,
 } from '@ant-design/icons';
 import http from '../../api/client';
 import statApi, {
@@ -312,6 +316,29 @@ export const QualityCenterPage: React.FC = () => {
   const [reportLoading, setReportLoading] = useState(false);
   const [taskLogs, setTaskLogs] = useState<string[]>([]);
   const [sseConnected, setSseConnected] = useState<boolean>(false);
+  const [htmlReportModalOpen, setHtmlReportModalOpen] = useState(false);
+  const [activeReportTab, setActiveReportTab] = useState<'overview' | 'junit' | 'html'>('overview');
+
+  const getHtmlReportUrl = useCallback(() => {
+    if (!reportTask || !detailTest) return '';
+    const proj = detailTest.product_name || projectName || '';
+    return `/api/aslan/testing/report/html/testing/${encodeURIComponent(proj)}/${encodeURIComponent(reportTask.name)}/${reportTask.taskId}/`;
+  }, [reportTask, detailTest, projectName]);
+
+  const handleCopyHtmlShareLink = useCallback(() => {
+    const relUrl = getHtmlReportUrl();
+    if (!relUrl) return;
+    const fullUrl = `${window.location.origin}${relUrl}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(fullUrl).then(() => {
+        feedback.message.success('已复制 HTML 报告分享链接');
+      }).catch(() => {
+        feedback.message.info(`HTML 报告地址: ${fullUrl}`);
+      });
+    } else {
+      feedback.message.info(`HTML 报告地址: ${fullUrl}`);
+    }
+  }, [getHtmlReportUrl]);
 
   // 独立测试任务实时状态与日志 SSE 订阅 (GET /api/aslan/testing/sse/:testName/tasks/:taskID)
   useEffect(() => {
@@ -1808,26 +1835,36 @@ export const QualityCenterPage: React.FC = () => {
         )}
       </Drawer>
 
-      {/* 测试任务详情 / JUnit 报告 (对齐旧版测试报告页) */}
+      {/* 测试任务详情 / JUnit 报告 / HTML 报告在线预览 (深度对齐旧版测试中心) */}
       <Drawer
         title={`任务详情: ${reportTask?.name || ''} #${reportTask?.taskId ?? ''}`}
         placement="right"
         open={!!reportTask}
         onClose={() => setReportTask(null)}
-        size="large"
+        size={860}
         extra={
           reportTask && detailTest ? (
-            <Button
-              size="small"
-              onClick={() =>
-                window.open(
-                  `/api/aslan/testing/report/html/testing/${encodeURIComponent(detailTest.product_name || projectName || '')}/${encodeURIComponent(reportTask.name)}/${reportTask.taskId}/`,
-                  '_blank'
-                )
-              }
-            >
-              打开 HTML 报告
-            </Button>
+            <Space size={8}>
+              <Tooltip title="复制测试报告分享链接">
+                <Button size="small" icon={<ShareAltOutlined />} onClick={handleCopyHtmlShareLink}>
+                  分享链接
+                </Button>
+              </Tooltip>
+              <Tooltip title="全屏沉浸式预览 HTML 报告">
+                <Button size="small" icon={<FullscreenOutlined />} onClick={() => setHtmlReportModalOpen(true)}>
+                  全屏预览
+                </Button>
+              </Tooltip>
+              <Tooltip title="在新标签页中打开原始报告">
+                <Button
+                  size="small"
+                  icon={<ExportOutlined />}
+                  onClick={() => window.open(getHtmlReportUrl(), '_blank')}
+                >
+                  新窗口打开
+                </Button>
+              </Tooltip>
+            </Space>
           ) : null
         }
       >
@@ -1836,180 +1873,287 @@ export const QualityCenterPage: React.FC = () => {
             <Spin size="large" />
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* 任务概览 */}
-            {taskDetail && (
-              <Descriptions bordered column={2} size="small">
-                <Descriptions.Item label="状态">
-                  <Tag color={String(taskDetail.status) === 'passed' ? 'success' : String(taskDetail.status) === 'failed' ? 'error' : 'processing'}>
-                    {String(taskDetail.status || '-')}
-                  </Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="触发人">{String(taskDetail.task_creator || '-')}</Descriptions.Item>
-                <Descriptions.Item label="开始时间">
-                  {taskDetail.start_time ? new Date(Number(taskDetail.start_time) * 1000).toLocaleString() : '-'}
-                </Descriptions.Item>
-                <Descriptions.Item label="结束时间">
-                  {taskDetail.end_time ? new Date(Number(taskDetail.end_time) * 1000).toLocaleString() : '-'}
-                </Descriptions.Item>
-              </Descriptions>
-            )}
+          <Tabs
+            activeKey={activeReportTab}
+            onChange={(k) => setActiveReportTab(k as 'overview' | 'junit' | 'html')}
+            items={[
+              {
+                key: 'overview',
+                label: (
+                  <Space size={4}>
+                    <CodeOutlined />
+                    <span>概览与执行日志</span>
+                  </Space>
+                ),
+                children: (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {/* 任务概览 */}
+                    {taskDetail && (
+                      <Descriptions bordered column={2} size="small">
+                        <Descriptions.Item label="状态">
+                          <Tag color={String(taskDetail.status) === 'passed' ? 'success' : String(taskDetail.status) === 'failed' ? 'error' : 'processing'}>
+                            {String(taskDetail.status || '-')}
+                          </Tag>
+                        </Descriptions.Item>
+                        <Descriptions.Item label="触发人">{String(taskDetail.task_creator || '-')}</Descriptions.Item>
+                        <Descriptions.Item label="开始时间">
+                          {taskDetail.start_time ? new Date(Number(taskDetail.start_time) * 1000).toLocaleString() : '-'}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="结束时间">
+                          {taskDetail.end_time ? new Date(Number(taskDetail.end_time) * 1000).toLocaleString() : '-'}
+                        </Descriptions.Item>
+                      </Descriptions>
+                    )}
 
-            {/* 实时执行日志 (对齐 GET /api/aslan/testing/sse/:testName/tasks/:taskID) */}
-            <Card
-              size="small"
-              title={
-                <Space>
-                  <CodeOutlined style={{ color: '#0066ff' }} />
-                  <span>实时执行日志流</span>
-                  <Badge
-                    status={sseConnected ? 'processing' : 'default'}
-                    text={sseConnected ? '实时监听中' : '日志流已结束'}
-                  />
-                </Space>
-              }
-              extra={
-                <Button size="small" onClick={() => setTaskLogs([])}>
-                  清空日志
-                </Button>
-              }
-            >
-              <div
-                style={{
-                  background: '#1e1e1e',
-                  color: '#d4d4d4',
-                  padding: 12,
-                  borderRadius: 6,
-                  fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                  maxHeight: 260,
-                  overflowY: 'auto',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all',
-                }}
-              >
-                {taskLogs.length > 0 ? (
-                  taskLogs.map((log, index) => {
-                    const isError = log.includes('error') || log.includes('异常') || log.includes('failed');
-                    const isSuccess = log.includes('passed') || log.includes('成功');
-                    return (
+                    {/* 实时执行日志 */}
+                    <Card
+                      size="small"
+                      title={
+                        <Space>
+                          <CodeOutlined style={{ color: '#0066ff' }} />
+                          <span>实时执行日志流</span>
+                          <Badge
+                            status={sseConnected ? 'processing' : 'default'}
+                            text={sseConnected ? '实时监听中' : '日志流已结束'}
+                          />
+                        </Space>
+                      }
+                      extra={
+                        <Button size="small" onClick={() => setTaskLogs([])}>
+                          清空日志
+                        </Button>
+                      }
+                    >
                       <div
-                        key={index}
                         style={{
-                          color: isError ? '#f87171' : isSuccess ? '#4ade80' : '#d4d4d4',
+                          background: '#1e1e1e',
+                          color: '#d4d4d4',
+                          padding: 12,
+                          borderRadius: 6,
+                          fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                          fontSize: 12,
+                          lineHeight: 1.5,
+                          maxHeight: 300,
+                          overflowY: 'auto',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-all',
                         }}
                       >
-                        {log}
+                        {taskLogs.length > 0 ? (
+                          taskLogs.map((log, index) => {
+                            const isError = log.includes('error') || log.includes('异常') || log.includes('failed');
+                            const isSuccess = log.includes('passed') || log.includes('成功');
+                            return (
+                              <div
+                                key={index}
+                                style={{
+                                  color: isError ? '#f87171' : isSuccess ? '#4ade80' : '#d4d4d4',
+                                }}
+                              >
+                                {log}
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div style={{ color: '#94a3b8' }}>暂无日志输出，等待实时数据流推送...</div>
+                        )}
                       </div>
-                    );
-                  })
-                ) : (
-                  <div style={{ color: '#94a3b8' }}>暂无日志输出，等待实时数据流推送...</div>
-                )}
-              </div>
-            </Card>
+                    </Card>
 
-            {/* JUnit 测试报告 */}
-            <Card size="small" title="JUnit 测试报告">
-              {junitSuites.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {junitSuites.map((suite, i) => {
-                    const total = suite.tests || 0;
-                    const failed = (suite.failures || 0) + (suite.errors || 0);
-                    return (
-                      <div key={suite.name || i} style={{ border: '1px solid #f0f0f0', borderRadius: 6, padding: 12 }}>
-                        <Space wrap style={{ marginBottom: 8 }}>
-                          <Text strong>{suite.name || '默认套件'}</Text>
-                          <Tag color="blue">总数 {total}</Tag>
-                          <Tag color="success">成功 {suite.successes ?? total - failed - (suite.skips || 0)}</Tag>
-                          <Tag color="error">失败 {suite.failures || 0}</Tag>
-                          <Tag color="warning">错误 {suite.errors || 0}</Tag>
-                          <Tag color="default">跳过 {suite.skips || 0}</Tag>
-                          <Text type="secondary" style={{ fontSize: 12 }}>耗时 {suite.time ?? 0}s</Text>
-                        </Space>
-                        <Table
-                          rowKey={(c) => c.tc_name}
-                          dataSource={suite.testcase || []}
-                          pagination={false}
-                          size="small"
-                          columns={[
-                            {
-                              title: '用例',
-                              dataIndex: 'tc_name',
-                              render: (n: string) => <Text code>{n}</Text>,
-                            },
-                            {
-                              title: '结果',
-                              key: 'result',
-                              width: 90,
-                              render: (_, c: JUnitCase) =>
-                                c.failure ? (
-                                  <Tag color="error">失败</Tag>
-                                ) : c.error ? (
-                                  <Tag color="error">错误</Tag>
-                                ) : c.skipped ? (
-                                  <Tag color="default">跳过</Tag>
-                                ) : (
-                                  <Tag color="success">通过</Tag>
-                                ),
-                            },
-                            {
-                              title: '耗时 (s)',
-                              dataIndex: 'time',
-                              width: 90,
-                              render: (t: number) => Number(t ?? 0).toFixed(2),
-                            },
-                            {
-                              title: '失败信息',
-                              key: 'failure',
-                              render: (_, c: JUnitCase) =>
-                                c.failure?.message || c.error?.message ? (
-                                  <Text type="danger" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                                    {c.failure?.message || c.error?.message}
-                                  </Text>
-                                ) : c.system_out ? (
-                                  <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>{c.system_out}</Text>
-                                ) : (
-                                  '-'
-                                ),
-                            },
-                          ]}
-                          locale={{
-                            emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该套件无用例数据" />,
+                    {/* 任务事件 */}
+                    <Card size="small" title="任务生命周期事件">
+                      {taskEvents.length > 0 ? (
+                        <Timeline
+                          items={taskEvents.map((e, i) => ({
+                            key: i,
+                            color: e.event_type === 'error' ? 'red' : e.event_type === 'warning' ? 'orange' : 'blue',
+                            children: (
+                              <div>
+                                <Text type="secondary" style={{ fontSize: 12 }}>{e.time}</Text>
+                                <div style={{ fontSize: 13 }}>{e.message}</div>
+                              </div>
+                            ),
+                          }))}
+                        />
+                      ) : (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无任务事件" />
+                      )}
+                    </Card>
+                  </div>
+                ),
+              },
+              {
+                key: 'junit',
+                label: (
+                  <Space size={4}>
+                    <CheckCircleOutlined />
+                    <span>JUnit 测试用例</span>
+                  </Space>
+                ),
+                children: (
+                  <Card size="small" title="JUnit 测试报告套件">
+                    {junitSuites.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {junitSuites.map((suite, i) => {
+                          const total = suite.tests || 0;
+                          const failed = (suite.failures || 0) + (suite.errors || 0);
+                          return (
+                            <div key={suite.name || i} style={{ border: '1px solid #f0f0f0', borderRadius: 6, padding: 12 }}>
+                              <Space wrap style={{ marginBottom: 8 }}>
+                                <Text strong>{suite.name || '默认套件'}</Text>
+                                <Tag color="blue">总数 {total}</Tag>
+                                <Tag color="success">成功 {suite.successes ?? total - failed - (suite.skips || 0)}</Tag>
+                                <Tag color="error">失败 {suite.failures || 0}</Tag>
+                                <Tag color="warning">错误 {suite.errors || 0}</Tag>
+                                <Tag color="default">跳过 {suite.skips || 0}</Tag>
+                                <Text type="secondary" style={{ fontSize: 12 }}>耗时 {suite.time ?? 0}s</Text>
+                              </Space>
+                              <Table
+                                rowKey={(c) => c.tc_name}
+                                dataSource={suite.testcase || []}
+                                pagination={false}
+                                size="small"
+                                columns={[
+                                  {
+                                    title: '用例',
+                                    dataIndex: 'tc_name',
+                                    render: (n: string) => <Text code>{n}</Text>,
+                                  },
+                                  {
+                                    title: '结果',
+                                    key: 'result',
+                                    width: 80,
+                                    render: (_, c: JUnitCase) =>
+                                      c.failure ? (
+                                        <Tag color="error">失败</Tag>
+                                      ) : c.error ? (
+                                        <Tag color="error">错误</Tag>
+                                      ) : c.skipped ? (
+                                        <Tag color="default">跳过</Tag>
+                                      ) : (
+                                        <Tag color="success">通过</Tag>
+                                      ),
+                                  },
+                                  {
+                                    title: '耗时 (s)',
+                                    dataIndex: 'time',
+                                    width: 90,
+                                    render: (t: number) => Number(t ?? 0).toFixed(2),
+                                  },
+                                  {
+                                    title: '失败信息',
+                                    key: 'failure',
+                                    render: (_, c: JUnitCase) =>
+                                      c.failure?.message || c.error?.message ? (
+                                        <Text type="danger" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                                          {c.failure?.message || c.error?.message}
+                                        </Text>
+                                      ) : c.system_out ? (
+                                        <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>{c.system_out}</Text>
+                                      ) : (
+                                        '-'
+                                      ),
+                                  },
+                                ]}
+                                locale={{
+                                  emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该套件无用例数据" />,
+                                }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无 JUnit 报告数据（任务可能未完成或未产出报告）" />
+                    )}
+                  </Card>
+                ),
+              },
+              {
+                key: 'html',
+                label: (
+                  <Space size={4}>
+                    <FileTextOutlined />
+                    <span>HTML 测试报告</span>
+                  </Space>
+                ),
+                children: (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        在线渲染第三方测试报告引擎产出的静态 HTML（如 Allure、Mochawesome、Newman 等）。
+                      </Text>
+                      <Space>
+                        <Button size="small" icon={<FullscreenOutlined />} onClick={() => setHtmlReportModalOpen(true)}>
+                          放大全屏
+                        </Button>
+                        <Button size="small" icon={<ExportOutlined />} onClick={() => window.open(getHtmlReportUrl(), '_blank')}>
+                          新窗口打开
+                        </Button>
+                      </Space>
+                    </div>
+                    {getHtmlReportUrl() ? (
+                      <div
+                        style={{
+                          border: '1px solid #e2e8f0',
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                          background: '#fff',
+                          minHeight: 520,
+                        }}
+                      >
+                        <iframe
+                          title="HTML Test Report"
+                          src={getHtmlReportUrl()}
+                          style={{
+                            width: '100%',
+                            height: 600,
+                            border: 'none',
+                            display: 'block',
                           }}
+                          sandbox="allow-scripts allow-same-origin allow-popups"
                         />
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无 JUnit 报告数据（任务可能未完成或未产出报告）" />
-              )}
-            </Card>
-
-            {/* 任务事件 */}
-            <Card size="small" title="任务事件">
-              {taskEvents.length > 0 ? (
-                <Timeline
-                  items={taskEvents.map((e, i) => ({
-                    key: i,
-                    color: e.event_type === 'error' ? 'red' : e.event_type === 'warning' ? 'orange' : 'blue',
-                    children: (
-                      <div>
-                        <Text type="secondary" style={{ fontSize: 12 }}>{e.time}</Text>
-                        <div style={{ fontSize: 13 }}>{e.message}</div>
-                      </div>
-                    ),
-                  }))}
-                />
-              ) : (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无任务事件" />
-              )}
-            </Card>
-          </div>
+                    ) : (
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未生成 HTML 报告" />
+                    )}
+                  </div>
+                ),
+              },
+            ]}
+          />
         )}
       </Drawer>
+
+      {/* HTML 测试报告全屏沉浸式预览弹窗 */}
+      <Modal
+        open={htmlReportModalOpen}
+        onCancel={() => setHtmlReportModalOpen(false)}
+        width="94vw"
+        style={{ top: 20 }}
+        footer={null}
+        title={
+          <Space>
+            <FileTextOutlined style={{ color: '#0066ff' }} />
+            <span>HTML 测试报告全屏预览: {reportTask?.name || ''} #{reportTask?.taskId ?? ''}</span>
+          </Space>
+        }
+        styles={{ body: { height: '82vh', padding: 0 } }}
+      >
+        {getHtmlReportUrl() && (
+          <iframe
+            title="Fullscreen HTML Test Report"
+            src={getHtmlReportUrl()}
+            style={{
+              width: '100%',
+              height: '100%',
+              border: 'none',
+              borderRadius: 6,
+            }}
+            sandbox="allow-scripts allow-same-origin allow-popups"
+          />
+        )}
+      </Modal>
     </div>
   );
 };
