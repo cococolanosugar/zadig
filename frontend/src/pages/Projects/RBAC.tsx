@@ -414,12 +414,11 @@ const RBACPage: React.FC = () => {
             <Select
               placeholder={identityType === 'group' ? '选择用户组' : '选择用户'}
               options={identityOptions}
-              showSearch
-              optionFilterProp="label"
+              showSearch={{ optionFilterProp: 'label' }}
             />
           </Form.Item>
           <Form.Item name="role" label="分配角色" rules={[{ required: true, message: '请选择角色' }]}>
-            <Select placeholder="选择角色" options={roleOptions} showSearch optionFilterProp="label" />
+            <Select placeholder="选择角色" options={roleOptions} showSearch={{ optionFilterProp: 'label' }} />
           </Form.Item>
           {bindingRole && (
             <Text type="secondary" style={{ fontSize: 12 }}>
