@@ -612,7 +612,131 @@ export const settingsApi = {
   async setSystemLanguage(language: string): Promise<unknown> {
     return http.put('/api/aslan/system/language', { language });
   },
+
+  // --- Project Management (Jira, Meego, PingCode, Tapd) ---
+  async getProjectManagements(): Promise<ProjectManagementItem[]> {
+    try {
+      const res = await http.get<ProjectManagementItem[]>('/api/aslan/system/project_management', { skipErrorHandler: true });
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  async createProjectManagement(payload: Partial<ProjectManagementItem>): Promise<unknown> {
+    return http.post('/api/aslan/system/project_management', payload);
+  },
+
+  async updateProjectManagement(id: string, payload: Partial<ProjectManagementItem>): Promise<unknown> {
+    return http.put(`/api/aslan/system/project_management/${id}`, payload);
+  },
+
+  async deleteProjectManagement(id: string): Promise<unknown> {
+    return http.delete(`/api/aslan/system/project_management/${id}`);
+  },
+
+  async validateProjectManagement(payload: Partial<ProjectManagementItem>): Promise<unknown> {
+    return http.post('/api/aslan/system/project_management/validate', payload);
+  },
+
+  // --- Configuration Management (Apollo, Nacos) ---
+  async getConfigurations(): Promise<ConfigurationManagementItem[]> {
+    try {
+      const res = await http.get<ConfigurationManagementItem[]>('/api/aslan/system/configuration', { skipErrorHandler: true });
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  async createConfiguration(payload: Partial<ConfigurationManagementItem>): Promise<unknown> {
+    return http.post('/api/aslan/system/configuration', payload);
+  },
+
+  async updateConfiguration(id: string, payload: Partial<ConfigurationManagementItem>): Promise<unknown> {
+    return http.put(`/api/aslan/system/configuration/${id}`, payload);
+  },
+
+  async deleteConfiguration(id: string): Promise<unknown> {
+    return http.delete(`/api/aslan/system/configuration/${id}`);
+  },
+
+  async validateConfiguration(payload: Partial<ConfigurationManagementItem>): Promise<unknown> {
+    return http.post('/api/aslan/system/configuration/validate', payload);
+  },
+
+  async getNacosNamespaces(nacosId: string): Promise<Array<{ namespaced_name?: string; namespace_id?: string }>> {
+    try {
+      const res = await http.get<Array<{ namespaced_name?: string; namespace_id?: string }>>(`/api/aslan/system/nacos/${nacosId}`, { skipErrorHandler: true });
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  // --- Jenkins Dynamic Job and Args ---
+  async getJenkinsJobNames(jenkinsId: string): Promise<string[]> {
+    try {
+      const res = await http.get<string[]>(`/api/aslan/system/jenkins/jobNames/${jenkinsId}`, { skipErrorHandler: true });
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  async getJenkinsBuildArgs(jenkinsId: string, jobName: string): Promise<Array<{ name: string; default_value?: unknown; description?: string; type?: string }>> {
+    try {
+      const res = await http.get<Array<{ name: string; default_value?: unknown; description?: string; type?: string }>>(
+        `/api/aslan/system/jenkins/buildArgs/${jenkinsId}/${encodeURIComponent(jobName)}`,
+        { skipErrorHandler: true }
+      );
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
 };
+
+export interface ProjectManagementItem {
+  id?: string;
+  name?: string;
+  type: 'jira' | 'meego' | 'pingcode' | 'tapd';
+  jira_host?: string;
+  jira_user?: string;
+  jira_token?: string;
+  jira_auth_type?: string;
+  meego_plugin_id?: string;
+  meego_plugin_secret?: string;
+  meego_user_key?: string;
+  pingcode_client_id?: string;
+  pingcode_client_secret?: string;
+  tapd_client_id?: string;
+  tapd_client_secret?: string;
+  updated_at?: number;
+  update_by?: string;
+}
+
+export interface ConfigurationManagementItem {
+  id?: string;
+  name?: string;
+  type: 'apollo' | 'nacos' | 'nacos3' | 'nacos-ee-mse';
+  server_address: string;
+  auth_type?: string;
+  nacos_auth_config?: {
+    username?: string;
+    password?: string;
+    access_key?: string;
+    secret_key?: string;
+    namespace?: string;
+    group?: string;
+  };
+  apollo_auth_config?: {
+    server_address?: string;
+    token?: string;
+  };
+  updated_at?: number;
+  updated_by?: string;
+}
 
 export interface CapacityRetention {
   max_days: number;
