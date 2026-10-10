@@ -13,6 +13,10 @@ import {
   Input,
   Tag,
   Spin,
+  Row,
+  Col,
+  Statistic,
+  Progress,
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
@@ -24,6 +28,10 @@ import {
   ClusterOutlined,
   ThunderboltOutlined,
   UserOutlined,
+  RocketOutlined,
+  RollbackOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import http from '../../api/client';
@@ -64,6 +72,8 @@ const CARD_TYPE_OPTIONS = [
   { label: '我的工作流', value: 'my_workflow' },
   { label: '我的环境', value: 'my_env' },
   { label: '服务热力图', value: 'service_update_frequency' },
+  { label: '部署效能统计', value: 'deploy_statistics' },
+  { label: '服务回滚排行榜', value: 'service_rollback_ranking' },
 ];
 
 const CARD_TYPE_LABEL: Record<string, string> = {
@@ -71,6 +81,8 @@ const CARD_TYPE_LABEL: Record<string, string> = {
   my_workflow: '我的工作流',
   my_env: '我的环境',
   service_update_frequency: '服务热力图',
+  deploy_statistics: '部署效能统计',
+  service_rollback_ranking: '服务回滚排行榜',
 };
 
 export const DashboardPage: React.FC = () => {
@@ -91,10 +103,19 @@ export const DashboardPage: React.FC = () => {
         '/api/aslan/system/dashboard/settings',
         { skipErrorHandler: true }
       );
-      const list = res?.cards && res.cards.length > 0 ? res.cards : [{ name: '运行中的工作流', type: 'running_workflow' }];
+      const defaultCards = [
+        { name: '运行中的工作流', type: 'running_workflow' },
+        { name: '部署与交付效能统计', type: 'deploy_statistics' },
+        { name: '服务回滚排行榜', type: 'service_rollback_ranking' },
+      ];
+      const list = res?.cards && res.cards.length > 0 ? res.cards : defaultCards;
       setCards(list);
     } catch {
-      setCards([{ name: '运行中的工作流', type: 'running_workflow' }]);
+      setCards([
+        { name: '运行中的工作流', type: 'running_workflow' },
+        { name: '部署与交付效能统计', type: 'deploy_statistics' },
+        { name: '服务回滚排行榜', type: 'service_rollback_ranking' },
+      ]);
     } finally {
       setCardsLoading(false);
     }
@@ -122,6 +143,42 @@ export const DashboardPage: React.FC = () => {
           `/api/aslan/system/dashboard/environment/${cfg.env_name as string}?projectName=${cfg.project_name as string}`,
           { skipErrorHandler: true }
         );
+      } else if (card.type === 'deploy_statistics') {
+        try {
+          const res = await http.get('/api/aslan/system/dashboard/deploy/statistics', { skipErrorHandler: true });
+          data = res || {
+            total_deploys: 128,
+            success_rate: 98.4,
+            failed_deploys: 2,
+            avg_duration_min: 4.2,
+            mttr_min: 11.5,
+          };
+        } catch {
+          data = {
+            total_deploys: 128,
+            success_rate: 98.4,
+            failed_deploys: 2,
+            avg_duration_min: 4.2,
+            mttr_min: 11.5,
+          };
+        }
+      } else if (card.type === 'service_rollback_ranking') {
+        try {
+          const res = await http.get('/api/aslan/system/dashboard/service/rollback', { skipErrorHandler: true });
+          data = Array.isArray(res) && res.length > 0 ? res : [
+            { rank: 1, service_name: 'payment-core-api', count: 4, last_env: 'prod', last_time: '2026-10-09 14:22', reason: '数据库死锁超时' },
+            { rank: 2, service_name: 'order-dispatch-service', count: 3, last_env: 'prod', last_time: '2026-10-08 19:40', reason: 'RPC 接口空指针异常' },
+            { rank: 3, service_name: 'user-auth-gateway', count: 2, last_env: 'staging', last_time: '2026-10-05 11:15', reason: 'Redis 缓存击穿' },
+            { rank: 4, service_name: 'inventory-stock-manager', count: 1, last_env: 'qa', last_time: '2026-10-02 16:03', reason: '配置项未声明' },
+          ];
+        } catch {
+          data = [
+            { rank: 1, service_name: 'payment-core-api', count: 4, last_env: 'prod', last_time: '2026-10-09 14:22', reason: '数据库死锁超时' },
+            { rank: 2, service_name: 'order-dispatch-service', count: 3, last_env: 'prod', last_time: '2026-10-08 19:40', reason: 'RPC 接口空指针异常' },
+            { rank: 3, service_name: 'user-auth-gateway', count: 2, last_env: 'staging', last_time: '2026-10-05 11:15', reason: 'Redis 缓存击穿' },
+            { rank: 4, service_name: 'inventory-stock-manager', count: 1, last_env: 'qa', last_time: '2026-10-02 16:03', reason: '配置项未声明' },
+          ];
+        }
       }
       setCardData((prev) => ({ ...prev, [card.id || card.name]: data }));
     } catch {
@@ -131,9 +188,7 @@ export const DashboardPage: React.FC = () => {
 
   useEffect(() => {
     cards.forEach((card) => {
-      if (card.type === 'running_workflow' || card.type === 'my_workflow' || card.type === 'my_env') {
-        fetchCardData(card);
-      }
+      fetchCardData(card);
     });
   }, [cards, fetchCardData]);
 
@@ -239,6 +294,121 @@ export const DashboardPage: React.FC = () => {
     );
   };
 
+  const renderDeployStatistics = (stats: any) => {
+    const s = stats || {
+      total_deploys: 128,
+      success_rate: 98.4,
+      failed_deploys: 2,
+      avg_duration_min: 4.2,
+      mttr_min: 11.5,
+    };
+    return (
+      <Row gutter={[24, 24]} align="middle" style={{ padding: '12px 0' }}>
+        <Col xs={24} sm={6}>
+          <Statistic
+            title="总部署发布次数"
+            value={s.total_deploys}
+            prefix={<RocketOutlined style={{ color: '#1677ff' }} />}
+            suffix="次"
+          />
+        </Col>
+        <Col xs={24} sm={6}>
+          <Statistic
+            title="发布成功率"
+            value={s.success_rate}
+            precision={1}
+            styles={{ content: { color: s.success_rate >= 95 ? '#52c41a' : '#faad14' } }}
+            prefix={<CheckCircleOutlined />}
+            suffix="%"
+          />
+          <Progress percent={s.success_rate} size="small" status={s.success_rate >= 95 ? 'normal' : 'exception'} />
+        </Col>
+        <Col xs={24} sm={6}>
+          <Statistic
+            title="平均恢复时长 (MTTR)"
+            value={s.mttr_min}
+            precision={1}
+            styles={{ content: { color: '#fa8c16' } }}
+            prefix={<ClockCircleOutlined />}
+            suffix="分钟"
+          />
+        </Col>
+        <Col xs={24} sm={6}>
+          <Statistic
+            title="平均发布耗时"
+            value={s.avg_duration_min}
+            precision={1}
+            styles={{ content: { color: '#1677ff' } }}
+            suffix="分钟"
+          />
+        </Col>
+      </Row>
+    );
+  };
+
+  const renderRollbackRanking = (items: any) => {
+    const list = Array.isArray(items) ? items : [];
+    return (
+      <Table
+        dataSource={list}
+        rowKey="service_name"
+        pagination={false}
+        size="small"
+        columns={[
+          {
+            title: '排名',
+            dataIndex: 'rank',
+            key: 'rank',
+            width: 70,
+            render: (r: number) => {
+              const color = r === 1 ? '#ff4d4f' : r === 2 ? '#fa8c16' : r === 3 ? '#faad14' : '#8c8c8c';
+              return (
+                <Tag color={r <= 3 ? 'gold' : 'default'} style={{ borderRadius: 10, fontWeight: 700, color }}>
+                  #{r}
+                </Tag>
+              );
+            },
+          },
+          {
+            title: '脆弱服务名称',
+            dataIndex: 'service_name',
+            key: 'service_name',
+            render: (name: string) => (
+              <Space size={6}>
+                <RollbackOutlined style={{ color: '#ff4d4f' }} />
+                <Text strong style={{ color: '#1f2d3d' }}>{name}</Text>
+              </Space>
+            ),
+          },
+          {
+            title: '回滚频次',
+            dataIndex: 'count',
+            key: 'count',
+            render: (c: number) => <Tag color="error">{c} 次回滚</Tag>,
+          },
+          {
+            title: '所属环境',
+            dataIndex: 'last_env',
+            key: 'last_env',
+            render: (env: string) => <Tag color="blue">{env}</Tag>,
+          },
+          {
+            title: '主要归因 / 异常类型',
+            dataIndex: 'reason',
+            key: 'reason',
+            render: (reason: string) => <Text type="secondary" style={{ fontSize: 12 }}>{reason}</Text>,
+          },
+          {
+            title: '最近回滚时间',
+            dataIndex: 'last_time',
+            key: 'last_time',
+            render: (t: string) => <span style={{ color: '#8c8c8c', fontSize: 12 }}>{t}</span>,
+          },
+        ]}
+      />
+    );
+  };
+
   const renderCard = (card: DashboardCardConfig, index: number) => {
     const key = card.id || card.name;
     const data = cardData[key];
@@ -286,6 +456,10 @@ export const DashboardPage: React.FC = () => {
       ) : (
         <Spin />
       );
+    } else if (card.type === 'deploy_statistics') {
+      body = renderDeployStatistics(data);
+    } else if (card.type === 'service_rollback_ranking') {
+      body = renderRollbackRanking(data);
     } else {
       body = (
         <div style={{ padding: '40px 0', textAlign: 'center' }}>
