@@ -51,6 +51,8 @@ import HelmServiceDrawer from './HelmServiceDrawer';
 import PmServiceModal from './PmServiceModal';
 import ImportFromKubeWorkloadsModal from './ImportFromKubeWorkloadsModal';
 import { WorkspaceBrowserDrawer } from '../../components/Workspace/WorkspaceBrowserDrawer';
+import { useAuthStore } from '../../stores/auth';
+import { CollaborationAwarenessBar } from './CollaborationAwarenessBar';
 
 const { Title, Text } = Typography;
 
@@ -113,6 +115,59 @@ export const ServicesPage: React.FC = () => {
 
   // 工作空间代码库浏览器抽屉
   const [workspaceDrawerOpen, setWorkspaceDrawerOpen] = useState(false);
+
+  // 协同编辑在线状态与只读互斥锁
+  const { userInfo } = useAuthStore();
+  const [serviceLocks, setServiceLocks] = useState<Record<string, { isLocked: boolean; lockedBy: string }>>({});
+  const [syncingRemote, setSyncingRemote] = useState<boolean>(false);
+
+  const currentUserName = userInfo?.name || userInfo?.account || '当前用户';
+  const isLockedByOther = Boolean(
+    selectedService &&
+    serviceLocks[selectedService]?.isLocked &&
+    serviceLocks[selectedService]?.lockedBy &&
+    serviceLocks[selectedService]?.lockedBy !== currentUserName
+  );
+
+  const handleToggleLock = (serviceName: string, nextLock: boolean) => {
+    setServiceLocks((prev) => ({
+      ...prev,
+      [serviceName]: {
+        isLocked: nextLock,
+        lockedBy: nextLock ? currentUserName : '',
+      },
+    }));
+    if (nextLock) {
+      feedback.message.success(`已锁定服务 [${serviceName}] 的独占编辑权`);
+    } else {
+      feedback.message.info(`已释放服务 [${serviceName}] 的独占编辑权`);
+    }
+  };
+
+  const handleSyncRemoteYaml = async () => {
+    if (!selectedService || !activeProject) return;
+    setSyncingRemote(true);
+    try {
+      const detail = await serviceApi.getServiceDetail(
+        selectedService,
+        activeProject,
+        isProduction,
+        serviceDetail?.type || 'k8s'
+      );
+      const remoteYaml = detail.yaml || '';
+      if (remoteYaml === yamlContent) {
+        feedback.message.info('当前编辑内容与远端最新配置一致，无需合并');
+      } else {
+        setOriginalYaml(remoteYaml);
+        setIsDiffMode(true);
+        feedback.message.warning('远端配置存在更新！已自动进入 Diff 模式，左侧为远端最新，右侧为您当前编辑内容');
+      }
+    } catch {
+      feedback.message.error('拉取远端配置失败，请检查网络');
+    } finally {
+      setSyncingRemote(false);
+    }
+  };
 
   const loadServices = useCallback(async () => {
     if (!activeProject) {
@@ -177,6 +232,12 @@ export const ServicesPage: React.FC = () => {
 
   const handleSaveYaml = async () => {
     if (!selectedService || !activeProject) return;
+    if (isLockedByOther) {
+      feedback.message.error(
+        `该服务已被协作者 [${serviceLocks[selectedService]?.lockedBy}] 独占锁定，禁止覆盖保存！`
+      );
+      return;
+    }
     try {
       // 对齐旧版 saveServiceAPI（zadig-portal/src/api/index.js:388）：
       // POST /service/services?projectName=<product>&force=true。
@@ -688,21 +749,32 @@ spec:
             style={{ borderRadius: 8 }}
           >
             {selectedService ? (
-              isDiffMode ? (
-                <YamlDiffEditor
-                  original={originalYaml}
-                  modified={yamlContent}
-                  theme={editorTheme}
-                  height={520}
+              <>
+                <CollaborationAwarenessBar
+                  serviceName={selectedService}
+                  isLocked={Boolean(serviceLocks[selectedService]?.isLocked)}
+                  lockedBy={serviceLocks[selectedService]?.lockedBy}
+                  onToggleLock={(locked) => handleToggleLock(selectedService, locked)}
+                  onSyncRemote={handleSyncRemoteYaml}
+                  syncing={syncingRemote}
                 />
-              ) : (
-                <YamlEditor
-                  value={yamlContent}
-                  onChange={setYamlContent}
-                  theme={editorTheme}
-                  height={520}
-                />
-              )
+                {isDiffMode ? (
+                  <YamlDiffEditor
+                    original={originalYaml}
+                    modified={yamlContent}
+                    theme={editorTheme}
+                    height={520}
+                  />
+                ) : (
+                  <YamlEditor
+                    value={yamlContent}
+                    onChange={setYamlContent}
+                    theme={editorTheme}
+                    height={520}
+                    readOnly={isLockedByOther}
+                  />
+                )}
+              </>
             ) : (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
