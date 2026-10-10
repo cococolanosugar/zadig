@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Tabs, Table, Tag, Typography, Button, Space, Input, Row, Col, Spin, Empty, Badge, Drawer, Tooltip, Modal, Form, Popconfirm, message as antdMessage } from 'antd';
+import { Card, Tabs, Table, Tag, Typography, Button, Space, Input, Row, Col, Spin, Empty, Badge, Drawer, Tooltip, Modal, Form, Popconfirm } from 'antd';
 import {
   AppstoreOutlined,
   BranchesOutlined,
@@ -22,6 +22,7 @@ import templateApi, {
   type ScannerTemplateItem,
   templateCrudApi,
 } from '../../api/template';
+import { feedback } from '../../utils/feedback';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -64,7 +65,7 @@ export const TemplateCenterPage: React.FC = () => {
   const openCreateTemplate = () => {
     const kind = activeTab === 'dockerfiles' ? 'dockerfile' : activeTab === 'k8s-yamls' ? 'yaml' : null;
     if (!kind) {
-      antdMessage.info('该类模板由对应功能模块内创建（服务/构建/扫描配置保存后自动收录）');
+      feedback.message.info('该类模板由对应功能模块内创建（服务/构建/扫描配置保存后自动收录）');
       return;
     }
     setEditing({ kind, name: '', content: '' });
@@ -92,7 +93,7 @@ export const TemplateCenterPage: React.FC = () => {
       } else {
         await templateCrudApi.createDockerfileTemplate({ name: values.name, content: values.content });
       }
-      antdMessage.success('模板已保存（保存时自动提取变量）');
+      feedback.message.success('模板已保存（保存时自动提取变量）');
       setEditing(null);
       // 重新拉取当前 tab 列表
       if (editing.kind === 'yaml') {
@@ -111,20 +112,20 @@ export const TemplateCenterPage: React.FC = () => {
   const handleDeleteYamlTemplate = async (id: string) => {
     try {
       await templateCrudApi.deleteYamlTemplate(id);
-      antdMessage.success('模板已删除');
+      feedback.message.success('模板已删除');
       setYamlTemplates((prev) => prev.filter((t) => t.id !== id));
     } catch {
-      antdMessage.error('删除失败（可能仍被服务引用）');
+      feedback.message.error('删除失败（可能仍被服务引用）');
     }
   };
 
   const handleDeleteDockerfileTemplate = async (id: string) => {
     try {
       await templateCrudApi.deleteDockerfileTemplate(id);
-      antdMessage.success('模板已删除');
+      feedback.message.success('模板已删除');
       setDockerfileTemplates((prev) => prev.filter((t) => t.id !== id));
     } catch {
-      antdMessage.error('删除失败（可能仍被服务引用）');
+      feedback.message.error('删除失败（可能仍被服务引用）');
     }
   };
 

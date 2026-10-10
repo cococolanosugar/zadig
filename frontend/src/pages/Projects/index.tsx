@@ -36,6 +36,8 @@ import {
   CloseOutlined,
   EditOutlined,
   ApartmentOutlined,
+  StarFilled,
+  StarOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -118,15 +120,60 @@ export const ProjectsPage: React.FC = () => {
     navigate(`/v1/projects/detail/${projectName}/pipelines`);
   };
 
-  const filteredProjects = projectList.filter((p) => {
-    const name = p.name || p.product_name || '';
-    const alias = p.alias || '';
-    if (!searchText) return true;
-    return (
-      name.toLowerCase().includes(searchText.toLowerCase()) ||
-      alias.toLowerCase().includes(searchText.toLowerCase())
-    );
+  const [favoriteProjects, setFavoriteProjects] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('zadig_favorite_projects');
+      return saved ? new Set(JSON.parse(saved)) : new Set<string>();
+    } catch {
+      return new Set<string>();
+    }
   });
+  const [favoriteOnly, setFavoriteOnly] = useState(false);
+
+  const handleToggleFavorite = (projectName: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    setFavoriteProjects((prev) => {
+      const next = new Set(prev);
+      const isFav = next.has(projectName);
+      if (isFav) {
+        next.delete(projectName);
+        feedback.message.info(`已取消收藏项目 ${projectName}`);
+      } else {
+        next.add(projectName);
+        feedback.message.success(`已收藏项目 ${projectName}`);
+      }
+      try {
+        localStorage.setItem('zadig_favorite_projects', JSON.stringify(Array.from(next)));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  const filteredProjects = projectList
+    .filter((p) => {
+      const name = p.name || p.product_name || '';
+      const alias = p.alias || '';
+      if (favoriteOnly && !favoriteProjects.has(name)) {
+        return false;
+      }
+      if (!searchText) return true;
+      return (
+        name.toLowerCase().includes(searchText.toLowerCase()) ||
+        alias.toLowerCase().includes(searchText.toLowerCase())
+      );
+    })
+    .sort((a, b) => {
+      const nameA = a.name || a.product_name || '';
+      const nameB = b.name || b.product_name || '';
+      const aFav = favoriteProjects.has(nameA) ? 1 : 0;
+      const bFav = favoriteProjects.has(nameB) ? 1 : 0;
+      if (aFav !== bFav) return bFav - aFav;
+      return (b.updated_at || 0) - (a.updated_at || 0);
+    });
 
   const [groupModalVisible, setGroupModalVisible] = useState(false);
   const [groupModalType, setGroupModalType] = useState<'create' | 'edit'>('create');
@@ -264,6 +311,15 @@ export const ProjectsPage: React.FC = () => {
         </div>
 
         <Space orientation="horizontal" size={12}>
+          <Button
+            type={favoriteOnly ? 'primary' : 'default'}
+            icon={<StarFilled style={{ color: favoriteOnly ? '#faad14' : undefined }} />}
+            onClick={() => setFavoriteOnly(!favoriteOnly)}
+            style={{ borderRadius: 4 }}
+          >
+            已收藏 ({favoriteProjects.size})
+          </Button>
+
           {/* Dual View Switcher (Card / Table) */}
           <Radio.Group
             value={viewMode}
@@ -432,22 +488,38 @@ export const ProjectsPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <Popconfirm
-                        title={`确定删除项目 ${name}？`}
-                        description="删除项目将一并清除其所属的服务配置与工作流。"
-                        onConfirm={(e) => handleDelete(name, e)}
-                        okText="删除"
-                        cancelText="取消"
-                      >
-                        <Button
-                          type="text"
-                          danger
-                          icon={<DeleteOutlined />}
-                          size="small"
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ opacity: 0.6 }}
-                        />
-                      </Popconfirm>
+                      <Space size={4}>
+                        <Tooltip title={favoriteProjects.has(name) ? '取消收藏' : '收藏项目'}>
+                          <Button
+                            type="text"
+                            icon={
+                              favoriteProjects.has(name) ? (
+                                <StarFilled style={{ color: '#faad14' }} />
+                              ) : (
+                                <StarOutlined style={{ color: '#bfbfbf' }} />
+                              )
+                            }
+                            size="small"
+                            onClick={(e) => handleToggleFavorite(name, e)}
+                          />
+                        </Tooltip>
+                        <Popconfirm
+                          title={`确定删除项目 ${name}？`}
+                          description="删除项目将一并清除其所属的服务配置与工作流。"
+                          onConfirm={(e) => handleDelete(name, e)}
+                          okText="删除"
+                          cancelText="取消"
+                        >
+                          <Button
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined />}
+                            size="small"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ opacity: 0.6 }}
+                          />
+                        </Popconfirm>
+                      </Space>
                     </div>
 
                     <div
@@ -495,6 +567,7 @@ export const ProjectsPage: React.FC = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14 }}>
               <thead>
                 <tr style={{ backgroundColor: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
+                  <th style={{ width: 48, padding: '12px 8px', textAlign: 'center' }}></th>
                   <th style={{ padding: '12px 20px', fontWeight: 600 }}>项目标识 (Name)</th>
                   <th style={{ padding: '12px 20px', fontWeight: 600 }}>显示别名</th>
                   <th style={{ padding: '12px 20px', fontWeight: 600 }}>创建/更新人</th>
@@ -509,6 +582,7 @@ export const ProjectsPage: React.FC = () => {
                   const updateTime = record.updatedAt
                     ? dayjs(record.updatedAt * 1000).format('YYYY-MM-DD HH:mm')
                     : '-';
+                  const isFav = favoriteProjects.has(name);
 
                   return (
                     <tr
@@ -516,6 +590,22 @@ export const ProjectsPage: React.FC = () => {
                       style={{ borderBottom: '1px solid #f0f0f0', cursor: 'pointer' }}
                       onClick={() => handleEnterProject(record)}
                     >
+                      <td style={{ padding: '16px 8px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                        <Tooltip title={isFav ? '取消收藏' : '收藏项目'}>
+                          <Button
+                            type="text"
+                            icon={
+                              isFav ? (
+                                <StarFilled style={{ color: '#faad14' }} />
+                              ) : (
+                                <StarOutlined style={{ color: '#bfbfbf' }} />
+                              )
+                            }
+                            size="small"
+                            onClick={(e) => handleToggleFavorite(name, e)}
+                          />
+                        </Tooltip>
+                      </td>
                       <td style={{ padding: '16px 20px' }}>
                         <Space orientation="horizontal">
                           <DeploymentUnitOutlined style={{ color: '#0066ff' }} />
