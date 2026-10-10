@@ -37,6 +37,7 @@ import {
   GlobalOutlined,
   FieldTimeOutlined,
   DeploymentUnitOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
@@ -57,6 +58,7 @@ import PortalServiceModal from './PortalServiceModal';
 import IstioGrayscaleDrawer from './IstioGrayscaleDrawer';
 import SleepCronModal from './SleepCronModal';
 import EnvRevisionDrawer from './EnvRevisionDrawer';
+import CollaborationTopologyDrawer from './CollaborationTopologyDrawer';
 import LogViewer from '../../components/Terminal/LogViewer';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
@@ -206,6 +208,10 @@ export const EnvironmentsPage: React.FC = () => {
   // 自测模式 (ShareEnv) 弹窗状态
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [shareModalMode, setShareModalMode] = useState<'enable' | 'disable'>('enable');
+  const [shareEnvTarget, setShareEnvTarget] = useState<string>('');
+
+  // 环境协作模式拓扑抽屉状态
+  const [topologyDrawerOpen, setTopologyDrawerOpen] = useState(false);
 
   // 入口服务网关配置弹窗 (PortalService)
   const [portalModalOpen, setPortalModalOpen] = useState(false);
@@ -744,6 +750,12 @@ export const EnvironmentsPage: React.FC = () => {
                 disabled={!currentEnv}
               >
                 管理服务
+              </Button>
+              <Button
+                icon={<ApartmentOutlined />}
+                onClick={() => setTopologyDrawerOpen(true)}
+              >
+                协作拓扑
               </Button>
               {isHelmEnv && (
                 <>
@@ -1360,10 +1372,13 @@ export const EnvironmentsPage: React.FC = () => {
       {shareModalOpen && (
         <ShareEnvModal
           open={shareModalOpen}
-          onClose={() => setShareModalOpen(false)}
+          onClose={() => {
+            setShareModalOpen(false);
+            setShareEnvTarget('');
+          }}
           projectName={activeProject || ''}
-          envName={currentEnv}
-          clusterId={currentEnvObj?.cluster_id}
+          envName={shareEnvTarget || currentEnv}
+          clusterId={environments.find((e) => e.name === (shareEnvTarget || currentEnv))?.cluster_id || currentEnvObj?.cluster_id}
           mode={shareModalMode}
           onSuccess={() => {
             loadEnvironments();
@@ -1427,6 +1442,19 @@ export const EnvironmentsPage: React.FC = () => {
         onClose={() => setRevisionDrawerOpen(false)}
         onSuccess={() => {
           loadEnvironments();
+        }}
+      />
+
+      {/* Collaboration Environment Topology Drawer */}
+      <CollaborationTopologyDrawer
+        open={topologyDrawerOpen}
+        onClose={() => setTopologyDrawerOpen(false)}
+        projectName={activeProject || ''}
+        environments={environments}
+        onConfigureShareEnv={(envName, mode) => {
+          setShareEnvTarget(envName);
+          setShareModalMode(mode);
+          setShareModalOpen(true);
         }}
       />
     </div>
