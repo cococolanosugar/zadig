@@ -200,6 +200,7 @@ export const SystemIntegrationPage: React.FC = () => {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [testingConnection, setTestingConnection] = useState<boolean>(false);
   const [form] = Form.useForm();
+  const selectedVendor = Form.useWatch('vendor', form) || currentCategory?.supportVendors[0];
 
   // 需要加密 key 的分类（connectors/codehosts/cloud_service/external）：实时生成 encryptedKey
   // （generateAesKey(32) + rsaEncrypt(aesKey, publicKey)，publicKey 来自 /system/rsaKey/publicKey）
@@ -247,11 +248,54 @@ export const SystemIntegrationPage: React.FC = () => {
     if (!currentCategory) return;
     try {
       setTestingConnection(true);
-      // 后端无 /connection 端点；连通性验证 = 分类列表 GET 成功（数据面可达）；
-      // 需 encryptedKey 的分类同样实时生成
-      const url = await buildListUrl(currentCategory);
-      await http.get(url, { skipErrorHandler: true });
-      feedback.message.success('连通性测试通过！服务响应状态正常');
+      const values = form.getFieldsValue();
+      if (currentCategory.key === 'project') {
+        let pmType = 'jira';
+        if (values.vendor === '飞书项目') pmType = 'meego';
+        else if (values.vendor === 'PingCode') pmType = 'pingcode';
+        else if (values.vendor === 'TAPD') pmType = 'tapd';
+
+        await http.post('/api/aslan/system/project_management/validate', {
+          name: values.name || 'test-pm',
+          type: pmType,
+          jira_host: values.jira_host || values.url,
+          jira_user: values.jira_user,
+          jira_token: values.jira_token || values.token,
+          jira_auth_type: values.jira_auth_type || 'Basic',
+          meego_plugin_id: values.meego_plugin_id,
+          meego_plugin_secret: values.meego_plugin_secret,
+          meego_user_key: values.meego_user_key,
+          pingcode_client_id: values.pingcode_client_id,
+          pingcode_client_secret: values.pingcode_client_secret,
+          tapd_client_id: values.tapd_client_id,
+          tapd_client_secret: values.tapd_client_secret,
+        }, { skipErrorHandler: true });
+        feedback.message.success('研发管理系统连通性握手验证成功！');
+      } else if (currentCategory.key === 'config') {
+        const configType = values.nacos_version || (values.vendor === 'Nacos' ? 'nacos' : 'apollo');
+        await http.post('/api/aslan/system/configuration/validate', {
+          name: values.name || 'test-config',
+          type: configType,
+          server_address: values.url,
+          nacos_auth_config: values.vendor === 'Nacos' ? {
+            username: values.nacos_username,
+            password: values.nacos_password,
+            access_key: values.nacos_ak,
+            secret_key: values.nacos_sk,
+            namespace: values.nacos_namespace,
+            group: values.nacos_group,
+          } : undefined,
+          apollo_auth_config: values.vendor === 'Apollo' ? {
+            server_address: values.url,
+            token: values.token,
+          } : undefined,
+        }, { skipErrorHandler: true });
+        feedback.message.success('配置中心服务连通性验证成功！');
+      } else {
+        const url = await buildListUrl(currentCategory);
+        await http.get(url, { skipErrorHandler: true });
+        feedback.message.success('连通性测试通过！服务响应状态正常');
+      }
     } catch (err: any) {
       feedback.message.error(err?.response?.data?.description || err?.message || '连通性测试失败，请检查服务地址或凭据配置');
     } finally {
@@ -264,14 +308,60 @@ export const SystemIntegrationPage: React.FC = () => {
     try {
       const values = await form.validateFields();
       setLoading(true);
-      // POST 直接用 base 路径（encryptedKey 仅列表 GET 需要）
-      await http.post(currentCategory.apiEndpoint, values);
+      let payload: any = values;
+
+      if (currentCategory.key === 'project') {
+        let pmType = 'jira';
+        if (values.vendor === '飞书项目') pmType = 'meego';
+        else if (values.vendor === 'PingCode') pmType = 'pingcode';
+        else if (values.vendor === 'TAPD') pmType = 'tapd';
+
+        payload = {
+          name: values.name,
+          type: pmType,
+          jira_host: values.jira_host || values.url,
+          jira_user: values.jira_user,
+          jira_token: values.jira_token || values.token,
+          jira_auth_type: values.jira_auth_type || 'Basic',
+          meego_plugin_id: values.meego_plugin_id,
+          meego_plugin_secret: values.meego_plugin_secret,
+          meego_user_key: values.meego_user_key,
+          pingcode_client_id: values.pingcode_client_id,
+          pingcode_client_secret: values.pingcode_client_secret,
+          tapd_client_id: values.tapd_client_id,
+          tapd_client_secret: values.tapd_client_secret,
+        };
+        await http.post('/api/aslan/system/project_management', payload);
+      } else if (currentCategory.key === 'config') {
+        const configType = values.nacos_version || (values.vendor === 'Nacos' ? 'nacos' : 'apollo');
+        payload = {
+          name: values.name,
+          type: configType,
+          server_address: values.url,
+          nacos_auth_config: values.vendor === 'Nacos' ? {
+            username: values.nacos_username,
+            password: values.nacos_password,
+            access_key: values.nacos_ak,
+            secret_key: values.nacos_sk,
+            namespace: values.nacos_namespace,
+            group: values.nacos_group,
+          } : undefined,
+          apollo_auth_config: values.vendor === 'Apollo' ? {
+            server_address: values.url,
+            token: values.token,
+          } : undefined,
+        };
+        await http.post('/api/aslan/system/configuration', payload);
+      } else {
+        await http.post(currentCategory.apiEndpoint, values);
+      }
+
       feedback.message.success(`[${values.name}] 集成配置保存成功！`);
       setModalVisible(false);
       form.resetFields();
       await fetchItems(currentCategory);
     } catch (err: any) {
-      feedback.message.error(err?.message || '保存集成配置失败');
+      feedback.message.error(err?.response?.data?.description || err?.message || '保存集成配置失败');
     } finally {
       setLoading(false);
     }
@@ -519,35 +609,199 @@ export const SystemIntegrationPage: React.FC = () => {
               </Select>
             </Form.Item>
 
-            <Form.Item
-              name="url"
-              label="服务地址 (Server URL)"
-              rules={[{ required: true, message: '请输入服务访问地址' }]}
-            >
-              <Input placeholder="https://..." />
-            </Form.Item>
-
-            {currentCategory.key === 'ai' ? (
+            {/* 1. 项目管理 (Project Management: Jira / Meego / PingCode / TAPD) 专属字段 */}
+            {currentCategory.key === 'project' ? (
+              <>
+                {selectedVendor === '飞书项目' ? (
+                  <>
+                    <Form.Item
+                      name="meego_plugin_id"
+                      label="飞书项目 Plugin ID"
+                      rules={[{ required: true, message: '请输入飞书项目 Plugin ID' }]}
+                    >
+                      <Input placeholder="飞书开放平台应用凭据 Plugin ID" />
+                    </Form.Item>
+                    <Form.Item
+                      name="meego_plugin_secret"
+                      label="飞书项目 Plugin Secret"
+                      rules={[{ required: true, message: '请输入 Plugin Secret' }]}
+                    >
+                      <Input.Password placeholder="飞书开放平台应用凭据 Plugin Secret" />
+                    </Form.Item>
+                    <Form.Item
+                      name="meego_user_key"
+                      label="飞书项目 User Key"
+                      rules={[{ required: true, message: '请输入 User Key' }]}
+                    >
+                      <Input placeholder="拥有项目操作权限的飞书项目 User Key" />
+                    </Form.Item>
+                  </>
+                ) : selectedVendor === 'PingCode' ? (
+                  <>
+                    <Form.Item
+                      name="pingcode_client_id"
+                      label="PingCode Client ID"
+                      rules={[{ required: true, message: '请输入 Client ID' }]}
+                    >
+                      <Input placeholder="PingCode 开放应用 Client ID" />
+                    </Form.Item>
+                    <Form.Item
+                      name="pingcode_client_secret"
+                      label="PingCode Client Secret"
+                      rules={[{ required: true, message: '请输入 Client Secret' }]}
+                    >
+                      <Input.Password placeholder="PingCode 开放应用 Client Secret" />
+                    </Form.Item>
+                  </>
+                ) : selectedVendor === 'TAPD' ? (
+                  <>
+                    <Form.Item
+                      name="tapd_client_id"
+                      label="TAPD 企业 / 应用 Client ID"
+                      rules={[{ required: true, message: '请输入 TAPD Client ID' }]}
+                    >
+                      <Input placeholder="腾讯 TAPD 应用 Client ID" />
+                    </Form.Item>
+                    <Form.Item
+                      name="tapd_client_secret"
+                      label="TAPD Client Secret"
+                      rules={[{ required: true, message: '请输入 TAPD Client Secret' }]}
+                    >
+                      <Input.Password placeholder="腾讯 TAPD 应用 Secret" />
+                    </Form.Item>
+                  </>
+                ) : (
+                  <>
+                    <Form.Item
+                      name="url"
+                      label="Jira 服务地址"
+                      rules={[{ required: true, message: '请输入 Jira 服务访问地址' }]}
+                    >
+                      <Input placeholder="https://jira.example.com" />
+                    </Form.Item>
+                    <Form.Item
+                      name="jira_user"
+                      label="Jira 用户名 / 邮箱"
+                      rules={[{ required: true, message: '请输入 Jira 用户名' }]}
+                    >
+                      <Input placeholder="admin@example.com" />
+                    </Form.Item>
+                    <Form.Item
+                      name="token"
+                      label="Jira API Token / 访问密钥"
+                      rules={[{ required: true, message: '请输入 API Token' }]}
+                    >
+                      <Input.Password placeholder="Jira 个人访问令牌 (PAT) 或 API Token" />
+                    </Form.Item>
+                    <Form.Item
+                      name="jira_auth_type"
+                      label="认证方式"
+                      initialValue="Basic"
+                    >
+                      <Select>
+                        <Option value="Basic">Basic 认证</Option>
+                        <Option value="BearerToken">Personal Access Token (PAT)</Option>
+                        <Option value="Cookie">Cookie 认证</Option>
+                      </Select>
+                    </Form.Item>
+                  </>
+                )}
+              </>
+            ) : currentCategory.key === 'config' ? (
+              /* 2. 配置管理 (Config Center: Nacos / Apollo) 专属字段 */
               <>
                 <Form.Item
-                  name="apiKey"
-                  label="API Key / 访问凭证"
-                  rules={[{ required: true, message: '请输入 API Key' }]}
+                  name="url"
+                  label="配置中心服务地址 (Server Address)"
+                  rules={[{ required: true, message: '请输入配置中心地址' }]}
                 >
-                  <Input.Password placeholder="sk-..." />
+                  <Input placeholder="http://127.0.0.1:8848 或 http://apollo-configservice:8080" />
                 </Form.Item>
-                <Form.Item name="modelName" label="默认模型" initialValue="gpt-4o">
-                  <Input placeholder="例如：gpt-4o, qwen-max, deepseek-chat" />
-                </Form.Item>
+
+                {selectedVendor === 'Nacos' ? (
+                  <>
+                    <Form.Item
+                      name="nacos_version"
+                      label="Nacos 版本架构"
+                      initialValue="nacos"
+                    >
+                      <Select>
+                        <Option value="nacos">Nacos 1.x (开源版)</Option>
+                        <Option value="nacos3">Nacos 2.x / 3.x (gRPC 模式)</Option>
+                        <Option value="nacos-ee-mse">阿里云 MSE 微服务引擎 (企业版)</Option>
+                      </Select>
+                    </Form.Item>
+                    <Form.Item
+                      name="nacos_namespace"
+                      label="默认命名空间 (Namespace ID)"
+                      initialValue="public"
+                    >
+                      <Input placeholder="默认 public 或指定环境命名空间 ID" />
+                    </Form.Item>
+                    <Form.Item
+                      name="nacos_group"
+                      label="默认配置分组 (Group)"
+                      initialValue="DEFAULT_GROUP"
+                    >
+                      <Input placeholder="DEFAULT_GROUP" />
+                    </Form.Item>
+                    <Form.Item name="nacos_username" label="用户名 (若启用鉴权)">
+                      <Input placeholder="nacos" />
+                    </Form.Item>
+                    <Form.Item name="nacos_password" label="密码 (若启用鉴权)">
+                      <Input.Password placeholder="密码" />
+                    </Form.Item>
+                    <Form.Item name="nacos_ak" label="AccessKey (MSE 认证，可选)">
+                      <Input placeholder="阿里云 AccessKey ID" />
+                    </Form.Item>
+                    <Form.Item name="nacos_sk" label="SecretKey (MSE 认证，可选)">
+                      <Input.Password placeholder="阿里云 AccessKey Secret" />
+                    </Form.Item>
+                  </>
+                ) : (
+                  <Form.Item
+                    name="token"
+                    label="Apollo Portal Token / 访问密钥"
+                    rules={[{ required: true, message: '请输入 Apollo 访问令牌' }]}
+                  >
+                    <Input.Password placeholder="Apollo 开放平台授权 Token" />
+                  </Form.Item>
+                )}
               </>
             ) : (
-              <Form.Item
-                name="token"
-                label="API Token / 密码"
-                rules={[{ required: true, message: '请输入鉴权凭据' }]}
-              >
-                <Input.Password placeholder="请输入 Token 或 Secret" />
-              </Form.Item>
+              /* 3. 通用外部系统与 AI / 监控字段 */
+              <>
+                <Form.Item
+                  name="url"
+                  label="服务地址 (Server URL)"
+                  rules={[{ required: true, message: '请输入服务访问地址' }]}
+                >
+                  <Input placeholder="https://..." />
+                </Form.Item>
+
+                {currentCategory.key === 'ai' ? (
+                  <>
+                    <Form.Item
+                      name="apiKey"
+                      label="API Key / 访问凭证"
+                      rules={[{ required: true, message: '请输入 API Key' }]}
+                    >
+                      <Input.Password placeholder="sk-..." />
+                    </Form.Item>
+                    <Form.Item name="modelName" label="默认模型" initialValue="gpt-4o">
+                      <Input placeholder="例如：gpt-4o, qwen-max, deepseek-chat" />
+                    </Form.Item>
+                  </>
+                ) : (
+                  <Form.Item
+                    name="token"
+                    label="API Token / 密码"
+                    rules={[{ required: true, message: '请输入鉴权凭据' }]}
+                  >
+                    <Input.Password placeholder="请输入 Token 或 Secret" />
+                  </Form.Item>
+                )}
+              </>
             )}
 
             <Form.Item name="description" label="描述">
