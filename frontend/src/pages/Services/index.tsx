@@ -50,6 +50,7 @@ import ServiceVariablesDrawer from './ServiceVariablesDrawer';
 import HelmServiceDrawer from './HelmServiceDrawer';
 import PmServiceModal from './PmServiceModal';
 import ImportFromKubeWorkloadsModal from './ImportFromKubeWorkloadsModal';
+import { WorkspaceBrowserDrawer } from '../../components/Workspace/WorkspaceBrowserDrawer';
 
 const { Title, Text } = Typography;
 
@@ -109,6 +110,9 @@ export const ServicesPage: React.FC = () => {
 
   // K8s 集群工作负载载入弹窗
   const [kubeWorkloadModalOpen, setKubeWorkloadModalOpen] = useState(false);
+
+  // 工作空间代码库浏览器抽屉
+  const [workspaceDrawerOpen, setWorkspaceDrawerOpen] = useState(false);
 
   const loadServices = useCallback(async () => {
     if (!activeProject) {
@@ -513,6 +517,12 @@ spec:
                 onClick={() => setHelmDrawerOpen(true)}
               >
                 Helm 服务
+              </Button>
+              <Button
+                icon={<CodeOutlined />}
+                onClick={() => setWorkspaceDrawerOpen(true)}
+              >
+                浏览代码库
               </Button>
               <Button
                 type="primary"
@@ -932,6 +942,15 @@ spec:
             setSelectedService(name);
           }
         }}
+      />
+
+      {/* Code Workspace Browser Drawer */}
+      <WorkspaceBrowserDrawer
+        open={workspaceDrawerOpen}
+        onClose={() => setWorkspaceDrawerOpen(false)}
+        defaultCodeHostId={(serviceDetail as any)?.codehost_id}
+        defaultRepo={(serviceDetail as any)?.repo_name || ''}
+        defaultBranch={(serviceDetail as any)?.branch_name || 'master'}
       />
     </div>
   );
