@@ -28,6 +28,7 @@ export type JobType =
   | 'freestyle'
   | 'sql'
   | 'plugin'
+  | 'jenkins'
   | (string & {});
 
 export interface DeployHelmChartItem {

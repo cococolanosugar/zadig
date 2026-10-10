@@ -335,6 +335,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
               { label: '服务重启 (zadig-restart)', value: 'zadig-restart' },
               { label: '通用脚本任务 (freestyle)', value: 'freestyle' },
               { label: 'SQL 变更任务 (sql)', value: 'sql' },
+              { label: 'Jenkins 任务 (jenkins)', value: 'jenkins' },
               { label: '插件任务 (plugin)', value: 'plugin' },
             ]}
           />

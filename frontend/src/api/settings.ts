@@ -695,7 +695,25 @@ export const settingsApi = {
       return [];
     }
   },
+
+  async getCICDTools(): Promise<CICDToolItem[]> {
+    try {
+      const res = await http.get<CICDToolItem[]>('/api/aslan/system/cicdTools', { skipErrorHandler: true });
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
 };
+
+export interface CICDToolItem {
+  id: string;
+  name: string;
+  type: string;
+  url: string;
+  username?: string;
+  password?: string;
+}
 
 export interface ProjectManagementItem {
   id?: string;

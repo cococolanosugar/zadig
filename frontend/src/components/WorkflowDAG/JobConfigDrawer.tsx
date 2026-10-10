@@ -13,8 +13,9 @@ import {
   Row,
   Col,
   InputNumber,
+  Divider,
 } from 'antd';
-import { SaveOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { SaveOutlined, PlusOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import { workflowApi, type WorkflowJob } from '../../api/workflow';
 import { settingsApi } from '../../api/settings';
 import { feedback } from '../../utils/feedback';
@@ -53,6 +54,10 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
   const [userOptions, setUserOptions] = useState<Array<{ label: string; value: string; name: string }>>([]);
   const [mergingImage, setMergingImage] = useState(false);
   const [validatingSQL, setValidatingSQL] = useState(false);
+  const [jenkinsTools, setJenkinsTools] = useState<Array<{ label: string; value: string }>>([]);
+  const [jenkinsJobs, setJenkinsJobs] = useState<Array<{ label: string; value: string }>>([]);
+  const [loadingJenkinsJobs, setLoadingJenkinsJobs] = useState(false);
+  const [loadingJenkinsArgs, setLoadingJenkinsArgs] = useState(false);
 
   useEffect(() => {
     if (job) {
@@ -214,14 +219,47 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         needed_approvers: Number(nativeApp.needed_approvers) || 1,
         approve_users: nativeUsers,
         description: (job.spec?.description as string) || '',
+        // jenkins
+        jenkins_id: (job.spec?.jenkins_id as string) || '',
+        jenkins_job_name:
+          (job.spec?.job_name as string) ||
+          ((job.spec?.jobs as Array<Record<string, any>>)?.[0]?.job_name as string) ||
+          '',
+        jenkins_parameters: Array.isArray(job.spec?.parameters) && job.spec.parameters.length > 0
+          ? job.spec.parameters
+          : Array.isArray((job.spec?.jobs as Array<Record<string, any>>)?.[0]?.parameters)
+          ? (job.spec?.jobs as Array<Record<string, any>>)[0].parameters
+          : [],
       });
     }
   }, [job, form]);
 
-  // 按需加载环境/测试/扫描/集群/服务列表/审批用户列表
+  // 按需加载环境/测试/扫描/集群/服务列表/审批用户列表/Jenkins
   useEffect(() => {
     if (!visible || !job) return;
     const projectName = job.spec?.project_name as string | undefined;
+
+    // Jenkins 工具与 Job 列表
+    if (job.type === 'jenkins') {
+      settingsApi.getCICDTools().then((tools) => {
+        const list = tools
+          .filter((t) => !t.type || t.type.toLowerCase() === 'jenkins')
+          .map((t) => ({ label: `${t.name} (${t.url})`, value: t.id }));
+        setJenkinsTools(list);
+      });
+      const initialJenkinsId = (job.spec?.jenkins_id as string) || '';
+      if (initialJenkinsId) {
+        setLoadingJenkinsJobs(true);
+        settingsApi
+          .getJenkinsJobNames(initialJenkinsId)
+          .then((jobs) => {
+            setJenkinsJobs(jobs.map((j) => ({ label: j, value: j })));
+          })
+          .catch(() => setJenkinsJobs([]))
+          .finally(() => setLoadingJenkinsJobs(false));
+      }
+    }
+
     // 审批用户列表
     if (job.type === 'approval') {
       settingsApi
@@ -414,6 +452,48 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
       feedback.message.warning('拉取服务 YAML 失败或当前环境未部署该服务');
     } finally {
       setFetchingBgYamlIndex(null);
+    }
+  };
+
+  const handleJenkinsToolChange = async (val: string) => {
+    form.setFieldsValue({ jenkins_job_name: '', jenkins_parameters: [] });
+    setJenkinsJobs([]);
+    if (!val) return;
+    setLoadingJenkinsJobs(true);
+    try {
+      const jobs = await settingsApi.getJenkinsJobNames(val);
+      setJenkinsJobs(jobs.map((j) => ({ label: j, value: j })));
+      feedback.message.success(`已加载 ${jobs.length} 个 Jenkins 任务`);
+    } catch {
+      feedback.message.error('加载 Jenkins 任务列表失败');
+    } finally {
+      setLoadingJenkinsJobs(false);
+    }
+  };
+
+  const handleJenkinsJobChange = async (jobName: string) => {
+    const jenkinsId = form.getFieldValue('jenkins_id') || (job?.spec?.jenkins_id as string);
+    if (!jenkinsId || !jobName) return;
+    setLoadingJenkinsArgs(true);
+    try {
+      const args = await settingsApi.getJenkinsBuildArgs(jenkinsId, jobName);
+      const params = args.map((arg) => ({
+        name: arg.name,
+        value:
+          (arg as any).value !== undefined
+            ? String((arg as any).value)
+            : arg.default_value !== undefined
+            ? String(arg.default_value)
+            : '',
+        type: arg.type || 'string',
+        description: arg.description || '',
+      }));
+      form.setFieldsValue({ jenkins_parameters: params });
+      feedback.message.success(`已解析 ${params.length} 个 Jenkins 构建参数`);
+    } catch {
+      feedback.message.warning('未能拉取到 Jenkins 构建参数，可手动添加');
+    } finally {
+      setLoadingJenkinsArgs(false);
     }
   };
 
@@ -620,6 +700,21 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
                     })
                   : [],
               },
+            }
+          : {}),
+        ...(job.type === 'jenkins'
+          ? {
+              jenkins_id: (values.jenkins_id as string) || '',
+              job_name: (values.jenkins_job_name as string) || '',
+              parameters: Array.isArray(values.jenkins_parameters) ? values.jenkins_parameters : [],
+              jobs: values.jenkins_job_name
+                ? [
+                    {
+                      job_name: values.jenkins_job_name as string,
+                      parameters: Array.isArray(values.jenkins_parameters) ? values.jenkins_parameters : [],
+                    },
+                  ]
+                : [],
             }
           : {}),
       },
@@ -1291,6 +1386,124 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
               <Input.TextArea rows={3} placeholder="说明本次发布审批的背景与影响范围" />
             </Form.Item>
           </>
+        )}
+
+        {job?.type === 'jenkins' && (
+          <Card
+            title="Jenkins 任务与动态参数配置"
+            variant="borderless"
+            style={{ marginBottom: 16, background: '#fafafa' }}
+          >
+            <Form.Item
+              name="jenkins_id"
+              label="Jenkins 集成实例"
+              rules={[{ required: true, message: '请选择 Jenkins 集成实例' }]}
+            >
+              <Select
+                showSearch
+                placeholder="请选择 Jenkins 集成实例"
+                options={jenkinsTools}
+                onChange={handleJenkinsToolChange}
+                notFoundContent={jenkinsTools.length === 0 ? '暂无 Jenkins 集成实例，请先在系统设置中集成' : undefined}
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="jenkins_job_name"
+              label="Jenkins 任务 (Job Name)"
+              rules={[{ required: true, message: '请选择 Jenkins 任务' }]}
+              extra={
+                <Space style={{ marginTop: 4 }}>
+                  <Button
+                    size="small"
+                    icon={<ReloadOutlined />}
+                    loading={loadingJenkinsArgs}
+                    onClick={() => {
+                      const jName = form.getFieldValue('jenkins_job_name');
+                      if (jName) handleJenkinsJobChange(jName);
+                      else feedback.message.warning('请先选择 Jenkins 任务');
+                    }}
+                  >
+                    重新解析并同步构建参数
+                  </Button>
+                </Space>
+              }
+            >
+              <Select
+                showSearch
+                placeholder={loadingJenkinsJobs ? '正在拉取 Jenkins Job 列表...' : '请选择 Jenkins 任务'}
+                loading={loadingJenkinsJobs}
+                options={jenkinsJobs}
+                onChange={handleJenkinsJobChange}
+              />
+            </Form.Item>
+
+            <Divider style={{ margin: '16px 0 12px 0' }}>构建参数 (Build Parameters)</Divider>
+
+            <Form.List name="jenkins_parameters">
+              {(fields, { add, remove }) => (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {fields.map(({ key, name, ...restField }) => (
+                    <Row key={key} gutter={8} align="middle">
+                      <Col span={7}>
+                        <Form.Item
+                          {...restField}
+                          name={[name, 'name']}
+                          rules={[{ required: true, message: '参数名必填' }]}
+                          style={{ marginBottom: 0 }}
+                        >
+                          <Input placeholder="参数名 (如 BRANCH)" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={9}>
+                        <Form.Item
+                          {...restField}
+                          name={[name, 'value']}
+                          style={{ marginBottom: 0 }}
+                        >
+                          <Input placeholder="默认值/参数值" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={6}>
+                        <Form.Item
+                          {...restField}
+                          name={[name, 'type']}
+                          style={{ marginBottom: 0 }}
+                        >
+                          <Select
+                            options={[
+                              { label: 'String', value: 'string' },
+                              { label: 'Choice', value: 'choice' },
+                              { label: 'Boolean', value: 'boolean' },
+                              { label: 'Password', value: 'password' },
+                            ]}
+                            placeholder="参数类型"
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col span={2}>
+                        <Button
+                          type="text"
+                          danger
+                          icon={<DeleteOutlined />}
+                          onClick={() => remove(name)}
+                        />
+                      </Col>
+                    </Row>
+                  ))}
+                  <Button
+                    type="dashed"
+                    onClick={() => add({ name: '', value: '', type: 'string' })}
+                    block
+                    icon={<PlusOutlined />}
+                    style={{ marginTop: 8 }}
+                  >
+                    添加构建参数
+                  </Button>
+                </div>
+              )}
+            </Form.List>
+          </Card>
         )}
 
         {job?.type === 'custom-deploy' && (
