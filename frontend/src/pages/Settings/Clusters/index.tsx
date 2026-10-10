@@ -11,12 +11,14 @@ import {
   ScheduleOutlined,
   CloudServerOutlined,
   FolderOpenOutlined,
+  ClearOutlined,
 } from '@ant-design/icons';
 import { settingsApi, type ClusterItem } from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
 import { ClusterStrategyDrawer } from './ClusterStrategyDrawer';
 import { ClusterCacheModal } from './ClusterCacheModal';
 import { ClusterShareStorageModal } from './ClusterShareStorageModal';
+import { ClusterCleanCacheModal } from './ClusterCleanCacheModal';
 
 const { Text } = Typography;
 
@@ -28,6 +30,7 @@ export const ClustersPage: React.FC = () => {
   const [strategyDrawerVisible, setStrategyDrawerVisible] = useState<boolean>(false);
   const [cacheModalVisible, setCacheModalVisible] = useState<boolean>(false);
   const [shareStorageModalVisible, setShareStorageModalVisible] = useState<boolean>(false);
+  const [cleanCacheModalVisible, setCleanCacheModalVisible] = useState<boolean>(false);
 
   const openStrategyDrawer = (cluster: ClusterItem) => {
     setActiveCluster(cluster);
@@ -193,6 +196,13 @@ export const ClustersPage: React.FC = () => {
         }}
         columns={columns}
         toolBarRender={() => [
+          <Button
+            key="clean-cache"
+            icon={<ClearOutlined />}
+            onClick={() => setCleanCacheModalVisible(true)}
+          >
+            一键清理构建缓存
+          </Button>,
           <ModalForm
             key="add-cluster"
             title="接入 Kubernetes 集群"
@@ -263,6 +273,11 @@ export const ClustersPage: React.FC = () => {
         onClose={() => setShareStorageModalVisible(false)}
         cluster={activeCluster}
         onSuccess={() => actionRef.current?.reload()}
+      />
+
+      <ClusterCleanCacheModal
+        open={cleanCacheModalVisible}
+        onClose={() => setCleanCacheModalVisible(false)}
       />
     </div>
   );
