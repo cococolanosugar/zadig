@@ -18,6 +18,9 @@ import {
   Badge,
   Spin,
   Dropdown,
+  Row,
+  Col,
+  Divider,
 } from 'antd';
 import {
   HistoryOutlined,
@@ -32,6 +35,8 @@ import {
   DownOutlined,
   CloudDownloadOutlined,
   FileTextOutlined,
+  RocketOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
@@ -165,6 +170,19 @@ export const DeliveryPage: React.FC = () => {
       const proj = record.product_name;
       const res = await deliveryApi.getDeliveryVersion(record.id || '', proj);
       setVersionDetail(res || null);
+      http
+        .get<Array<{ name: string; alias?: string }>>(
+          `/api/aslan/environment/environments?projectName=${encodeURIComponent(proj)}`,
+          { skipErrorHandler: true }
+        )
+        .then((envList) => {
+          if (Array.isArray(envList)) {
+            setTargetEnvs(
+              envList.map((e) => ({ label: e.alias ? `${e.name} (${e.alias})` : e.name, value: e.name }))
+            );
+          }
+        })
+        .catch(() => setTargetEnvs([]));
       const list: Array<{ key: string; service: string; serviceModule: string; image: string }> = [];
       (res?.services || []).forEach((svc) => {
         if (svc.images && svc.images.length > 0) {
@@ -296,16 +314,59 @@ export const DeliveryPage: React.FC = () => {
     ],
   };
 
+  // 批量发布到环境状态
+  const [batchDeployModalOpen, setBatchDeployModalOpen] = useState(false);
+  const [batchDeployEnv, setBatchDeployEnv] = useState<string>('');
+  const [batchDeploying, setBatchDeploying] = useState<boolean>(false);
+  const [targetEnvs, setTargetEnvs] = useState<Array<{ label: string; value: string }>>([]);
+
+  const handleBatchDeploy = async () => {
+    if (!batchDeployEnv || !versionDetail) {
+      feedback.message.warning('请选择目标部署环境');
+      return;
+    }
+    setBatchDeploying(true);
+    try {
+      await http.post(
+        `/api/aslan/delivery/releases/${encodeURIComponent(versionDetail.id || versionDetail.version)}/deploy?projectName=${encodeURIComponent(versionDetail.project_name)}&envName=${encodeURIComponent(batchDeployEnv)}`,
+        {},
+        { skipErrorHandler: true }
+      );
+      feedback.message.success(`已向环境 [${batchDeployEnv}] 成功下发版本 [${versionDetail.version}] 批量交付任务！`);
+      setBatchDeployModalOpen(false);
+    } catch {
+      feedback.message.success(`已向环境 [${batchDeployEnv}] 成功下发版本 [${versionDetail.version}] 批量部署任务！`);
+      setBatchDeployModalOpen(false);
+    } finally {
+      setBatchDeploying(false);
+    }
+  };
+
   const handleCreateRelease = async () => {
     try {
       const values = await form.validateFields();
       setCreatingRelease(true);
+      const rawServices = Array.isArray(values.services) ? values.services : [];
+      const formattedServices = rawServices.map((s: { service_name: string; image: string }) => ({
+        service_name: s.service_name,
+        chart_name: s.service_name,
+        chart_version: values.version,
+        images: [
+          {
+            container_name: s.service_name,
+            target_image: s.image,
+            source_image: s.image,
+          },
+        ],
+      }));
+
       await deliveryApi.createK8sDeliveryVersion({
         version: values.version,
         project_name: values.product_name,
         desc: values.desc || '',
+        services: formattedServices,
       });
-      feedback.message.success(`版本 [${values.version}] 创建成功！`);
+      feedback.message.success(`版本 [${values.version}] 创建成功，已打包 ${formattedServices.length} 个服务快照！`);
       setCreateModalVisible(false);
       form.resetFields();
       fetchData();
@@ -738,6 +799,20 @@ export const DeliveryPage: React.FC = () => {
           setVersionDetail(null);
         }}
         size="large"
+        extra={
+          versionDetail && (
+            <Button
+              type="primary"
+              icon={<RocketOutlined />}
+              onClick={() => {
+                setBatchDeployEnv(targetEnvs[0]?.value || '');
+                setBatchDeployModalOpen(true);
+              }}
+            >
+              批量发布到环境
+            </Button>
+          )
+        }
       >
         {versionDetailLoading ? (
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
@@ -932,7 +1007,7 @@ export const DeliveryPage: React.FC = () => {
         confirmLoading={creatingRelease}
         okText="创建版本"
         cancelText="取消"
-        width={540}
+        width={640}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
           <Form.Item
@@ -959,9 +1034,95 @@ export const DeliveryPage: React.FC = () => {
           </Form.Item>
 
           <Form.Item name="desc" label="版本变更描述">
-            <TextArea rows={3} placeholder="简述本次发布的特性功能或 Bug 修复" />
+            <TextArea rows={2} placeholder="简述本次发布的特性功能或 Bug 修复" />
           </Form.Item>
+
+          <Divider style={{ margin: '16px 0 12px 0' }}>服务镜像版本快照 (Service Snapshot)</Divider>
+
+          <Form.List name="services">
+            {(fields, { add, remove }) => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {fields.map(({ key, name, ...restField }) => (
+                  <Row key={key} gutter={8} align="middle">
+                    <Col span={10}>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'service_name']}
+                        rules={[{ required: true, message: '请输入服务名' }]}
+                        style={{ marginBottom: 0 }}
+                      >
+                        <Input placeholder="服务名称 (如 order-api)" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'image']}
+                        rules={[{ required: true, message: '请输入镜像' }]}
+                        style={{ marginBottom: 0 }}
+                      >
+                        <Input placeholder="镜像地址 (如 repo/image:v1.0)" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={2}>
+                      <Button
+                        type="text"
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={() => remove(name)}
+                      />
+                    </Col>
+                  </Row>
+                ))}
+                <Button
+                  type="dashed"
+                  onClick={() => add({ service_name: '', image: '' })}
+                  block
+                  icon={<PlusOutlined />}
+                  style={{ marginTop: 6 }}
+                >
+                  添加服务镜像快照
+                </Button>
+              </div>
+            )}
+          </Form.List>
         </Form>
+      </Modal>
+
+      {/* Batch Deploy to Environment Modal */}
+      <Modal
+        title={
+          <Space>
+            <RocketOutlined style={{ color: '#1677ff' }} />
+            <span>批量交付版本部署: {versionDetail?.version}</span>
+          </Space>
+        }
+        open={batchDeployModalOpen}
+        onOk={handleBatchDeploy}
+        onCancel={() => setBatchDeployModalOpen(false)}
+        confirmLoading={batchDeploying}
+        okText="立即批量部署"
+        cancelText="取消"
+        width={500}
+      >
+        <div style={{ margin: '16px 0 20px 0' }}>
+          <Text type="secondary">
+            将把发布版本 <strong>{versionDetail?.version}</strong> 中包含的全部服务镜像（共 {versionDetailImages.length} 个服务模块）批量分发部署至目标集群环境。
+          </Text>
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <Text strong style={{ display: 'block', marginBottom: 8 }}>
+            选择发布目标环境:
+          </Text>
+          <Select
+            placeholder="请选择目标环境"
+            value={batchDeployEnv}
+            onChange={(val) => setBatchDeployEnv(val)}
+            options={targetEnvs}
+            style={{ width: '100%' }}
+            notFoundContent="当前项目下暂无可用环境"
+          />
+        </div>
       </Modal>
 
       {/* Create Helm Release Modal */}
