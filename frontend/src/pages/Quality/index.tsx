@@ -101,6 +101,7 @@ export interface TestItem {
   test_result_path?: string;
   junit_test_result_pass_rate?: number;
   test_report_path?: string;
+  coverage_report_path?: string;
   artifact_paths?: string[];
   repos?: TestRepo[];
   hook_ctl?: {
@@ -606,6 +607,7 @@ export const QualityCenterPage: React.FC = () => {
       test_result_path: fullRecord.test_result_path || '',
       junit_test_result_pass_rate: fullRecord.junit_test_result_pass_rate ?? 100,
       test_report_path: fullRecord.test_report_path || '',
+      coverage_report_path: fullRecord.coverage_report_path || '',
       artifact_paths:
         Array.isArray(fullRecord.artifact_paths) && fullRecord.artifact_paths.length > 0
           ? fullRecord.artifact_paths.map((p) => ({ path: p }))
@@ -676,6 +678,7 @@ export const QualityCenterPage: React.FC = () => {
         test_result_path: values.test_result_path || '',
         junit_test_result_pass_rate: Number(values.junit_test_result_pass_rate) || 100,
         test_report_path: values.test_report_path || '',
+        coverage_report_path: values.coverage_report_path || '',
         artifact_paths: artifactList,
         repos: repoList,
       };
@@ -1666,6 +1669,17 @@ export const QualityCenterPage: React.FC = () => {
                         style={{ marginBottom: 0 }}
                       >
                         <Input placeholder="例如: report.html 或 html-report/index.html" />
+                      </Form.Item>
+                    </Card>
+
+                    <Card size="small" title="代码覆盖率报告 (Code Coverage)" variant="borderless" style={{ background: '#fafafa', marginBottom: 16 }}>
+                      <Form.Item
+                        name="coverage_report_path"
+                        label="代码覆盖率报告文件 / 目录"
+                        tooltip="填入单测或集成测试生成的代码覆盖率报告路径，例如 coverage/lcov-report/ 或 target/site/jacoco/index.html"
+                        style={{ marginBottom: 0 }}
+                      >
+                        <Input placeholder="例如: coverage/lcov-report/index.html 或 target/site/jacoco/index.html" />
                       </Form.Item>
                     </Card>
 
