@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { ProTable, ModalForm, ProFormText, ProFormTextArea, ProFormRadio, ProFormSwitch } from '@ant-design/pro-components';
-import type { ActionType, ProColumns } from '@ant-design/pro-components';
+import type { ActionType, ProColumns, ProFormInstance } from '@ant-design/pro-components';
 import { Button, Tag, Space, Popconfirm, Typography } from 'antd';
 import {
   PlusOutlined,
@@ -12,6 +12,7 @@ import {
   CloudServerOutlined,
   FolderOpenOutlined,
   ClearOutlined,
+  ApiOutlined,
 } from '@ant-design/icons';
 import { settingsApi, type ClusterItem } from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
@@ -31,6 +32,34 @@ export const ClustersPage: React.FC = () => {
   const [cacheModalVisible, setCacheModalVisible] = useState<boolean>(false);
   const [shareStorageModalVisible, setShareStorageModalVisible] = useState<boolean>(false);
   const [cleanCacheModalVisible, setCleanCacheModalVisible] = useState<boolean>(false);
+  const formRef = useRef<ProFormInstance>();
+  const [validating, setValidating] = useState<boolean>(false);
+
+  const handleTestConnection = async () => {
+    const values = formRef.current?.getFieldsValue();
+    const kubeConfig = values?.kube_config?.trim();
+    if (!kubeConfig) {
+      feedback.message.warning('请先输入 KubeConfig 配置文本再进行连接测试');
+      return;
+    }
+    setValidating(true);
+    try {
+      await settingsApi.validateCluster({
+        name: values.name || 'test-probe',
+        kube_config: kubeConfig,
+        type: values.access_type || 'kubeconfig',
+      });
+      feedback.message.success('集群通信连通性测试通过！Kubernetes API 响应正常');
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data?.description ||
+        (err as Error)?.message ||
+        '集群连接测试失败，请检查 KubeConfig 有效性与网络可达性';
+      feedback.message.error(`连接测试失败: ${msg}`);
+    } finally {
+      setValidating(false);
+    }
+  };
 
   const openStrategyDrawer = (cluster: ClusterItem) => {
     setActiveCluster(cluster);
@@ -206,12 +235,26 @@ export const ClustersPage: React.FC = () => {
           <ModalForm
             key="add-cluster"
             title="接入 Kubernetes 集群"
+            formRef={formRef}
             trigger={
               <Button type="primary" icon={<PlusOutlined />}>
                 添加集群
               </Button>
             }
             width={600}
+            submitter={{
+              render: (_props, defaultDoms) => [
+                <Button
+                  key="test-connection"
+                  icon={<ApiOutlined />}
+                  loading={validating}
+                  onClick={handleTestConnection}
+                >
+                  测试连接
+                </Button>,
+                ...defaultDoms,
+              ],
+            }}
             onFinish={handleCreate}
           >
             <ProFormText
