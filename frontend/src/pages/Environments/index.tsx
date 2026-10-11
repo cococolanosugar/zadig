@@ -17,6 +17,7 @@ import {
   Input,
   Spin,
   Empty,
+  Alert,
 } from 'antd';
 import {
   ClusterOutlined,
@@ -38,6 +39,7 @@ import {
   FieldTimeOutlined,
   DeploymentUnitOutlined,
   ApartmentOutlined,
+  BugOutlined,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
@@ -61,6 +63,7 @@ import EnvRevisionDrawer from './EnvRevisionDrawer';
 import CollaborationTopologyDrawer from './CollaborationTopologyDrawer';
 import LogViewer from '../../components/Terminal/LogViewer';
 import http from '../../api/client';
+import environmentApi from '../../api/environment';
 import { feedback } from '../../utils/feedback';
 
 const { Title, Text } = Typography;
@@ -226,6 +229,43 @@ export const EnvironmentsPage: React.FC = () => {
 
   // 环境版本与快照记录抽屉状态 (F10)
   const [revisionDrawerOpen, setRevisionDrawerOpen] = useState(false);
+
+  // 临时调试容器 (Debug Pod) 注入弹窗状态
+  const [debugModalOpen, setDebugModalOpen] = useState(false);
+  const [debugPodRecord, setDebugPodRecord] = useState<PodItem | null>(null);
+  const [debugImage, setDebugImage] = useState<string>('busybox:latest');
+  const [debugContainerLoading, setDebugContainerLoading] = useState(false);
+
+  const openDebugModal = (pod: PodItem) => {
+    setDebugPodRecord(pod);
+    setDebugImage('busybox:latest');
+    setDebugModalOpen(true);
+  };
+
+  const handleInjectDebugContainer = async () => {
+    if (!activeProject || !currentEnv || !debugPodRecord) return;
+    setDebugContainerLoading(true);
+    try {
+      await environmentApi.patchDebugContainer({
+        projectName: activeProject,
+        envName: currentEnv,
+        podName: debugPodRecord.name,
+        production: Boolean(currentEnvObj?.production),
+        debugImage: debugImage.trim() || 'busybox:latest',
+      });
+      feedback.message.success(`已向 Pod [${debugPodRecord.name}] 成功注入调试容器！`);
+      setDebugModalOpen(false);
+      openTerminal(debugPodRecord);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data?.description ||
+        (err as Error)?.message ||
+        '注入调试容器失败，请确认 Kubernetes 集群支持 Ephemeral Containers 特性';
+      feedback.message.error(msg);
+    } finally {
+      setDebugContainerLoading(false);
+    }
+  };
 
   const fetchChangeLogs = useCallback(
     async (page = 1) => {
@@ -618,6 +658,14 @@ export const EnvironmentsPage: React.FC = () => {
           onClick={() => openTerminal(record)}
         >
           实时终端
+        </Button>,
+        <Button
+          key="debug"
+          type="link"
+          icon={<BugOutlined />}
+          onClick={() => openDebugModal(record)}
+        >
+          服务调试
         </Button>,
         <Button
           key="logs"
@@ -1457,6 +1505,53 @@ export const EnvironmentsPage: React.FC = () => {
           setShareModalOpen(true);
         }}
       />
+
+      {/* Ephemeral Debug Container Injection Modal */}
+      <Modal
+        title={
+          <Space>
+            <BugOutlined style={{ color: '#fa8c16' }} />
+            <span>向 Pod 注入临时调试容器 (Debug Container)</span>
+          </Space>
+        }
+        open={debugModalOpen}
+        onCancel={() => setDebugModalOpen(false)}
+        confirmLoading={debugContainerLoading}
+        onOk={handleInjectDebugContainer}
+        okText="立即注入并连接终端"
+        cancelText="取消"
+        width={520}
+      >
+        <Space orientation="vertical" size={16} style={{ width: '100%', marginTop: 12 }}>
+          <Alert
+            title="Kubernetes Ephemeral Containers 调试机制说明"
+            description="调试容器将通过 Kubernetes Ephemeral Containers 机制动态注入到当前运行 Pod 中，与业务容器共享 Network 和 PID 命名空间，便于网络抓包与故障定位。"
+            type="info"
+            showIcon
+          />
+          <div>
+            <Text strong>目标 Pod 名称: </Text>
+            <Text code>{debugPodRecord?.name}</Text>
+          </div>
+          <div>
+            <Text strong style={{ display: 'block', marginBottom: 6 }}>
+              选择或输入调试镜像:
+            </Text>
+            <Select
+              style={{ width: '100%' }}
+              value={debugImage}
+              onChange={setDebugImage}
+              showSearch
+              options={[
+                { label: 'busybox:latest (极简轻量网络与Shell工具箱)', value: 'busybox:latest' },
+                { label: 'nicolaka/netshoot (全功能网络故障排查套件)', value: 'nicolaka/netshoot' },
+                { label: 'curlimages/curl (HTTP/REST 接口探活工具)', value: 'curlimages/curl' },
+                { label: 'alpine:latest (标准 Alpine Linux 基础镜像)', value: 'alpine:latest' },
+              ]}
+            />
+          </div>
+        </Space>
+      </Modal>
     </div>
   );
 };

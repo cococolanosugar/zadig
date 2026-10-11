@@ -728,6 +728,32 @@ export const environmentApi = {
     );
     return Array.isArray(res) ? res : [];
   },
+  /**
+   * 启动临时调试容器 (Ephemeral Debug Container)
+   * POST /api/aslan/environment/kube/:env/pods/:podName/debugcontainer
+   * (pkg/microservice/aslan/core/environment/handler/debug.go:31)
+   */
+  async patchDebugContainer(args: {
+    envName: string;
+    podName: string;
+    projectName: string;
+    production?: boolean;
+    debugImage?: string;
+    targetContainer?: string;
+  }): Promise<void> {
+    const { envName, podName, projectName, production, debugImage, targetContainer } = args;
+    const params = new URLSearchParams({
+      projectName,
+      production: String(!!production),
+    });
+    if (debugImage) params.append('debugImage', debugImage);
+    if (targetContainer) params.append('targetContainer', targetContainer);
+
+    return http.post<void>(
+      `/api/aslan/environment/kube/${encodeURIComponent(envName)}/pods/${encodeURIComponent(podName)}/debugcontainer?${params.toString()}`,
+      {}
+    );
+  },
 };
 
 export interface EnvSvcRevision {
