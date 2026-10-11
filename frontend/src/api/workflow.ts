@@ -893,6 +893,39 @@ export const workflowApi = {
       `/api/aslan/workflow/v4/bluegreen/${encodeURIComponent(envName)}/${encodeURIComponent(serviceName)}?projectName=${encodeURIComponent(projectName)}`
     );
   },
+
+  /**
+   * 工作流静态配置 Lint 语法与拓扑校验
+   * POST /api/aslan/workflow/v4/lint
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:74)
+   */
+  lintWorkflow(workflowData: unknown) {
+    return http.post<void>('/api/aslan/workflow/v4/lint', workflowData, { skipErrorHandler: true });
+  },
+
+  /**
+   * 获取工作流任务历史列表的自定义列字段
+   * GET /api/aslan/workflow/v4/workflowtask/:workflowName/field?projectName=
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:69)
+   */
+  getWorkflowTaskCustomFields(workflowName: string, projectName: string) {
+    return http.get<string[]>(
+      `/api/aslan/workflow/v4/workflowtask/${encodeURIComponent(workflowName)}/field?projectName=${encodeURIComponent(projectName)}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * 保存工作流任务历史列表的自定义列字段
+   * POST /api/aslan/workflow/v4/workflowtask/:workflowName/field?projectName=
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:68)
+   */
+  setWorkflowTaskCustomFields(workflowName: string, projectName: string, customFields: unknown) {
+    return http.post<void>(
+      `/api/aslan/workflow/v4/workflowtask/${encodeURIComponent(workflowName)}/field?projectName=${encodeURIComponent(projectName)}`,
+      customFields
+    );
+  },
 };
 
 export interface HelmDeployJobMergeImageParams {
