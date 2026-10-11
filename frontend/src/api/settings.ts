@@ -209,6 +209,10 @@ export const settingsApi = {
     return http.post('/api/aslan/cluster/clusters', payload);
   },
 
+  async validateCluster(payload: Partial<ClusterItem>): Promise<unknown> {
+    return http.post('/api/aslan/cluster/clusters/validate', payload);
+  },
+
   async deleteCluster(id: string): Promise<unknown> {
     return http.delete(`/api/aslan/cluster/clusters/${id}`);
   },
