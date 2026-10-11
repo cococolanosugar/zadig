@@ -1,8 +1,8 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { ProTable, ModalForm, ProFormText, ProFormSelect, ProFormSwitch } from '@ant-design/pro-components';
-import type { ActionType, ProColumns } from '@ant-design/pro-components';
+import type { ActionType, ProColumns, ProFormInstance } from '@ant-design/pro-components';
 import { Button, Tag, Space, Popconfirm, Typography } from 'antd';
-import { PlusOutlined, DeleteOutlined, InboxOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, InboxOutlined, CheckCircleOutlined, ApiOutlined } from '@ant-design/icons';
 import { settingsApi, type RegistryItem } from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
 
@@ -10,6 +10,61 @@ const { Text } = Typography;
 
 export const RegistriesPage: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
+  const formRef = useRef<ProFormInstance>();
+  const [validating, setValidating] = useState<boolean>(false);
+
+  const handleSetDefault = async (record: RegistryItem) => {
+    try {
+      await settingsApi.updateRegistry(record.id, {
+        ...record,
+        is_default: true,
+      });
+      feedback.message.success(`已将 [${record.reg_addr}] 设为默认镜像仓库`);
+      actionRef.current?.reload();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data?.description ||
+        (err as Error)?.message ||
+        '设为默认镜像仓库失败';
+      feedback.message.error(msg);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    const values = formRef.current?.getFieldsValue();
+    const regAddr = values?.reg_addr?.trim();
+    if (!regAddr) {
+      feedback.message.warning('请先输入镜像仓库地址');
+      return;
+    }
+    const providerMap: Record<string, string> = {
+      native: 'native',
+      aliyun: 'acr',
+      tencent: 'tcr',
+      dockerhub: 'dockerhub',
+      jfrog: 'jfrog',
+    };
+    setValidating(true);
+    try {
+      await settingsApi.validateRegistry({
+        reg_addr: regAddr,
+        reg_provider: providerMap[values.reg_type as string] || 'native',
+        reg_type: values.reg_type as string,
+        namespace: values?.namespace || '',
+        access_key: values?.access_key || '',
+        secret_key: values?.secret_key || '',
+      });
+      feedback.message.success('镜像仓库连通性测试通过！凭据与服务验证正常');
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data?.description ||
+        (err as Error)?.message ||
+        '镜像仓库连通性测试失败，请检查地址、命名空间与凭据密钥';
+      feedback.message.error(`连接测试失败: ${msg}`);
+    } finally {
+      setValidating(false);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     try {
@@ -84,6 +139,22 @@ export const RegistriesPage: React.FC = () => {
       valueType: 'option',
       key: 'option',
       render: (_, record) => [
+        ...(!record.is_default
+          ? [
+              <Popconfirm
+                key="set-default"
+                title="设为默认镜像仓库？"
+                description="系统构建与服务部署将默认推拉至此镜像仓库。"
+                onConfirm={() => handleSetDefault(record)}
+                okText="设为默认"
+                cancelText="取消"
+              >
+                <Button type="link" size="small">
+                  设为默认
+                </Button>
+              </Popconfirm>,
+            ]
+          : []),
         <Popconfirm
           key="delete"
           title="确定移除该镜像仓库？"
@@ -122,12 +193,26 @@ export const RegistriesPage: React.FC = () => {
           <ModalForm
             key="add-registry"
             title="添加镜像仓库"
+            formRef={formRef}
             trigger={
               <Button type="primary" icon={<PlusOutlined />}>
                 添加镜像仓库
               </Button>
             }
             width={560}
+            submitter={{
+              render: (_props, defaultDoms) => [
+                <Button
+                  key="test-connection"
+                  icon={<ApiOutlined />}
+                  loading={validating}
+                  onClick={handleTestConnection}
+                >
+                  测试连接
+                </Button>,
+                ...defaultDoms,
+              ],
+            }}
             onFinish={handleCreate}
           >
             <ProFormSelect
