@@ -799,6 +799,20 @@ export const PipelinesPage: React.FC = () => {
                 projectName={activeProject || 'default'}
                 onSave={async (updated) => {
                   try {
+                    // 保存前执行后端 Lint 预检校验（端点 /api/aslan/workflow/v4/lint）
+                    try {
+                      await workflowApi.lintWorkflow(updated);
+                    } catch (lintErr: unknown) {
+                      const lintMsg =
+                        (lintErr as { response?: { data?: { description?: string; message?: string } } })?.response?.data
+                          ?.description ||
+                        (lintErr as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+                        (lintErr as Error)?.message ||
+                        '工作流配置未通过拓扑或参数校验';
+                      feedback.message.error(`工作流校验未通过: ${lintMsg}`);
+                      return;
+                    }
+
                     const isNew = !workflows.some((w) => w.name === updated.name);
                     if (isNew) {
                       await workflowApi.createWorkflow(updated);
