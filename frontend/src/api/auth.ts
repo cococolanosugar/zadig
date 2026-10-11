@@ -43,6 +43,14 @@ export interface RoleBindingItem {
   project_name?: string;
 }
 
+export interface ProjectUserPermissionResponse {
+  is_system_admin: boolean;
+  is_project_admin: boolean;
+  project_verbs: string[];
+  workflow_verbs_map?: Record<string, string[]>;
+  environment_verbs_map?: Record<string, string[]>;
+}
+
 export const authApi = {
   /**
    * Fetch the server's active RSA public key.
@@ -77,6 +85,17 @@ export const authApi = {
    */
   async getUserPermissions(): Promise<UserPermissionResponse> {
     return http.get<UserPermissionResponse>('/api/v1/policy/permission', {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * Fetch project-level granular action permissions for current user.
+   * GET /api/v1/policy/permission/project/:name
+   * (pkg/microservice/user/core/handler/router.go:137)
+   */
+  async getProjectUserPermissions(projectName: string): Promise<ProjectUserPermissionResponse> {
+    return http.get<ProjectUserPermissionResponse>(`/api/v1/policy/permission/project/${encodeURIComponent(projectName)}`, {
       skipErrorHandler: true,
     });
   },

@@ -18,11 +18,13 @@ interface AuthState {
   roles: string[];
   publicKey: string | null;
   isAuthenticated: boolean;
+  projectPermissions: Record<string, { is_project_admin: boolean; verbs: string[] }>;
   setAuth: (token: string, userInfo: UserInfo) => void;
   setUserInfo: (userInfo: UserInfo) => void;
   updateUserInfo: (partial: Partial<UserInfo>) => void;
   setRoles: (roles: string[]) => void;
   setPublicKey: (key: string) => void;
+  setProjectPermissions: (projectName: string, perms: { is_project_admin: boolean; verbs: string[] }) => void;
   logout: () => void;
 }
 
@@ -63,6 +65,7 @@ export const useAuthStore = create<AuthState>()(
       roles: initial.roles,
       publicKey: initial.publicKey,
       isAuthenticated: initial.isAuthenticated,
+      projectPermissions: {},
 
       setAuth: (token: string, userInfo: UserInfo) => {
         set({
@@ -88,6 +91,15 @@ export const useAuthStore = create<AuthState>()(
 
       setPublicKey: (publicKey: string) => {
         set({ publicKey });
+      },
+
+      setProjectPermissions: (projectName: string, perms: { is_project_admin: boolean; verbs: string[] }) => {
+        set((state) => ({
+          projectPermissions: {
+            ...state.projectPermissions,
+            [projectName]: perms,
+          },
+        }));
       },
 
       logout: () => {
