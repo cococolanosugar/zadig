@@ -18,6 +18,7 @@ import {
   Spin,
   Empty,
   Alert,
+  Popconfirm,
 } from 'antd';
 import {
   ClusterOutlined,
@@ -40,6 +41,7 @@ import {
   DeploymentUnitOutlined,
   ApartmentOutlined,
   BugOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
@@ -264,6 +266,26 @@ export const EnvironmentsPage: React.FC = () => {
       feedback.message.error(msg);
     } finally {
       setDebugContainerLoading(false);
+    }
+  };
+
+  const handleRestartPod = async (pod: PodItem) => {
+    if (!activeProject || !currentEnv) return;
+    try {
+      await environmentApi.restartPod({
+        projectName: activeProject,
+        envName: currentEnv,
+        podName: pod.name,
+        production: Boolean(currentEnvObj?.production),
+      });
+      feedback.message.success(`Pod [${pod.name}] 重启调度已触发！`);
+      await loadWorkloadPods();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data?.description ||
+        (err as Error)?.message ||
+        '重启 Pod 失败';
+      feedback.message.error(msg);
     }
   };
 
@@ -675,6 +697,22 @@ export const EnvironmentsPage: React.FC = () => {
         >
           查看日志
         </Button>,
+        <Popconfirm
+          key="restart"
+          title={`确认重启 Pod [${record.name}]？`}
+          description="将触发 Kubernetes 销毁当前 Pod 实例并重新调度拉起新实例。"
+          onConfirm={() => handleRestartPod(record)}
+          okText="重启"
+          cancelText="取消"
+        >
+          <Button
+            type="link"
+            danger
+            icon={<ReloadOutlined />}
+          >
+            重启 Pod
+          </Button>
+        </Popconfirm>,
         ...(currentEnvObj?.share_env_is_base || currentEnvObj?.istio_grayscale_is_base
           ? [
               <Button

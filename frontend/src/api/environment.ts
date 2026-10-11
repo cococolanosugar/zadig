@@ -754,6 +754,27 @@ export const environmentApi = {
       {}
     );
   },
+  /**
+   * 重启/删除指定 Pod 实例（Kubernetes 将销毁该 Pod 并拉起新实例）
+   * DELETE /api/aslan/environment/kube/:env/pods/:podName
+   * (pkg/microservice/aslan/core/environment/handler/kube.go:97)
+   */
+  async restartPod(args: {
+    envName: string;
+    podName: string;
+    projectName: string;
+    production?: boolean;
+  }): Promise<void> {
+    const { envName, podName, projectName, production } = args;
+    const params = new URLSearchParams({
+      envName,
+      projectName,
+      production: String(!!production),
+    });
+    return http.delete<void>(
+      `/api/aslan/environment/kube/${encodeURIComponent(envName)}/pods/${encodeURIComponent(podName)}?${params.toString()}`
+    );
+  },
 };
 
 export interface EnvSvcRevision {
