@@ -21,6 +21,7 @@ import {
   Row,
   Col,
   Divider,
+  Popconfirm,
 } from 'antd';
 import {
   HistoryOutlined,
@@ -37,6 +38,7 @@ import {
   FileTextOutlined,
   RocketOutlined,
   DeleteOutlined,
+  RedoOutlined,
 } from '@ant-design/icons';
 import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
@@ -247,6 +249,21 @@ export const DeliveryPage: React.FC = () => {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '下载 Chart 失败';
       feedback.message.error({ content: msg, key: 'downloadChart' });
+    }
+  };
+
+  const handleRetryDelivery = async (record: ReleaseVersionItem) => {
+    if (!record.id || !record.product_name) return;
+    try {
+      await http.post(
+        `/api/aslan/delivery/releases/retry?projectName=${encodeURIComponent(record.product_name)}&id=${encodeURIComponent(record.id)}`,
+        {}
+      );
+      feedback.message.success(`已下发版本 [${record.version}] 的重新交付与构建调度任务！`);
+      fetchData();
+    } catch (err: unknown) {
+      const msg = (err as Error)?.message || '重试交付失败，请检查网络或权限';
+      feedback.message.error(msg);
     }
   };
 
@@ -507,7 +524,10 @@ export const DeliveryPage: React.FC = () => {
         if (status === 'success') {
           return <Badge status="success" text="已发布" />;
         }
-        return <Badge status="processing" text="已就绪" />;
+        if (status === 'failed' || status === 'error') {
+          return <Badge status="error" text="交付失败" />;
+        }
+        return <Badge status="processing" text={status || '已就绪'} />;
       },
     },
     {
@@ -535,12 +555,27 @@ export const DeliveryPage: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 180,
+      width: 250,
       render: (_, record) => (
         <Space size={0}>
           <Button type="link" size="small" onClick={() => handleShowServiceImages(record)}>
             镜像清单
           </Button>
+          <Popconfirm
+            title="确定重新触发版本交付？"
+            description="将重新执行版本镜像打包与分发调度流水线。"
+            onConfirm={() => handleRetryDelivery(record)}
+            okText="重试"
+            cancelText="取消"
+          >
+            <Button
+              type="link"
+              size="small"
+              icon={<RedoOutlined />}
+            >
+              重试交付
+            </Button>
+          </Popconfirm>
           {(record.type === 'helm' || (record.services && record.services.some((s) => s.chart_name))) && (
             <Button
               type="link"
