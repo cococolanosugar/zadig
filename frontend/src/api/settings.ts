@@ -311,6 +311,14 @@ export const settingsApi = {
     return http.post('/api/aslan/system/registry/namespaces', payload);
   },
 
+  async updateRegistry(id: string, payload: Partial<RegistryItem>): Promise<unknown> {
+    return http.put(`/api/aslan/system/registry/namespaces/${id}`, payload);
+  },
+
+  async validateRegistry(payload: Partial<RegistryItem>): Promise<unknown> {
+    return http.post('/api/aslan/system/registry/validate', payload);
+  },
+
   async deleteRegistry(id: string): Promise<unknown> {
     return http.delete(`/api/aslan/system/registry/namespaces/${id}`);
   },
