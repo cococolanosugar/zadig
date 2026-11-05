@@ -1,0 +1,218 @@
+apiVersion: gateway.solo.io/v1
+kind: VirtualService
+metadata:
+  name: zadig
+spec:
+  virtualHost:
+    domains:
+      - "*"
+    routes:
+      - matchers:
+          - prefix: /api/v1/callback
+          - prefix: /api/v1/users
+          - prefix: /api/v1/user-group
+          - prefix: /api/v1/login
+          - prefix: /api/v1/login-enabled
+          - prefix: /api/v1/captcha
+          - prefix: /api/v1/logout
+          - prefix: /api/v1/signup
+          - prefix: /api/v1/retrieve
+          - prefix: /api/v1/reset
+          - prefix: /api/v1/policy
+          - prefix: /openapi/users
+          - prefix: /openapi/user-groups
+          - prefix: /openapi/policy
+        routeAction:
+          single:
+            kube:
+              ref:
+                name: user
+                namespace: {{ .Release.Namespace }}
+              port: 80
+      - matchers:
+          - prefix: /api/debug/pprof
+        options:
+          timeout: 3600s
+          prefixRewrite: /debug/pprof
+        routeAction:
+          single:
+            kube:
+              ref:
+                name: aslan
+                namespace: {{ .Release.Namespace }}
+              port: 8888
+      - matchers:
+          - prefix: /api/plutus-enterprise
+        options:
+          timeout: 3600s
+        routeAction:
+          single:
+            kube:
+              port: 28000
+              ref:
+                name: plutus-enterprise
+                namespace: {{ .Release.Namespace }}
+      - matchers:
+          - prefix: /plutus-vendor
+        delegateAction:
+          selector:
+            labels:
+              routing.zadig.io/delegate: vendor-portal
+            namespaces:
+              - {{ .Release.Namespace }}
+      - matchers:
+          - prefix: /api/plutus
+        delegateAction:
+          selector:
+            labels:
+              routing.zadig.io/delegate: plutus-vendor-plutus
+            namespaces:
+              - {{ .Release.Namespace }}
+      - matchers:
+          - prefix: /api/dc
+        delegateAction:
+          selector:
+            labels:
+              routing.zadig.io/delegate: plutus-vendor-dc
+            namespaces:
+              - {{ .Release.Namespace }}
+      - matchers:
+          - prefix: /dex
+        routeAction:
+          single:
+            kube:
+              ref:
+                name: {{ .Values.dex.fullnameOverride }}
+                namespace: {{ .Release.Namespace }}
+              port: 5556
+        options:
+          timeout: 30s
+      - matchers:
+          - prefix: /api/directory/codehosts/callback
+        routeAction:
+          single:
+            kube:
+              ref:
+                name: aslan
+                namespace: {{ .Release.Namespace }}
+              port: 25000
+        options:
+          prefixRewrite: /api/v1/codehosts/callback
+          timeout: 3600s
+      - matchers:
+          - prefix: /api/directory
+        routeAction:
+          single:
+            kube:
+              ref:
+                name: aslan
+                namespace: {{ .Release.Namespace }}
+              port: 25000
+        options:
+          prefixRewrite: /public-api/v1
+      - matchers:
+          - prefix: /api/aslan
+        routeAction:
+          single:
+            kube:
+              ref:
+                name: aslan
+                namespace: {{ .Release.Namespace }}
+              port: 25000
+        options:
+          # set a big value to avoid sudden disconnection of the sse apis
+          timeout: 3600s
+          prefixRewrite: /api
+      - matchers:
+          - prefix: /api/plugin/plugin
+        options:
+          prefixRewrite: /api/plugin
+          {{- include "zadig.plugin.cors" . | nindent 10 }}
+        routeAction:
+          single:
+            kube:
+              port: 25000
+              ref:
+                name: aslan
+                namespace: {{ .Release.Namespace }}
+      - matchers:
+          - prefix: /api/plugin/aslan
+        options:
+          prefixRewrite: /api
+          {{- include "zadig.plugin.cors" . | nindent 10 }}
+        routeAction:
+          single:
+            kube:
+              port: 25000
+              ref:
+                name: aslan
+                namespace: {{ .Release.Namespace }}
+      - matchers:
+          - regex: ^/api/plugin/v1/(users|user-group)(.*)
+        options:
+          regexRewrite:
+            pattern:
+              regex: ^/api/plugin/v1/(users|user-group)(.*)
+            substitution: /api/v1/\1\2
+          {{- include "zadig.plugin.cors" . | nindent 10 }}
+        routeAction:
+          single:
+            kube:
+              port: 80
+              ref:
+                name: user
+                namespace: {{ .Release.Namespace }}
+      - matchers:
+          - prefix: /api/plugin/v1/policy
+        options:
+          prefixRewrite: /api/v1/policy
+          {{- include "zadig.plugin.cors" . | nindent 10 }}
+        routeAction:
+          single:
+            kube:
+              port: 80
+              ref:
+                name: user
+                namespace: {{ .Release.Namespace }}
+      - matchers:
+          - prefix: /api/plugin/v1
+        options:
+          prefixRewrite: /api/v1
+          {{- include "zadig.plugin.cors" . | nindent 10 }}
+        routeAction:
+          single:
+            kube:
+              port: 25000
+              ref:
+                name: aslan
+                namespace: {{ .Release.Namespace }}
+      - matchers:
+          - prefix: /api/podexec
+          - prefix: /api/hub
+          - prefix: /api/callback
+          - prefix: /api/v1/connectors
+          - prefix: /api/v1/emails
+          - prefix: /api/v1/jira
+          - prefix: /api/v1/codehosts
+          - prefix: /api/v1/features
+          - prefix: /api/v1/picket
+          - prefix: /openapi
+        routeAction:
+          single:
+            kube:
+              ref:
+                name: aslan
+                namespace: {{ .Release.Namespace }}
+              port: 25000
+      - matchers:
+          - prefix: /
+        routeAction:
+          single:
+            kube:
+              ref:
+                name: zadig-portal
+                namespace: {{ .Release.Namespace }}
+              port: 80
+    options:
+      extauth:
+        customAuth: {}

@@ -1,0 +1,5 @@
+Zadig has been installed successfully.
+
+Login: {{- include "zadig.endpoint" . | indent 2 }}
+
+Add wechat ID "likeartist007": get FREE Zadig Tech Support, and Join our online community.

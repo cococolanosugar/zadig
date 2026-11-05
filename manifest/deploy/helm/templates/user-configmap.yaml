@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-config
+  labels:
+    {{- include "zadig.microservice.user.labels" . | nindent 4 }}
+data:
+  ADDRESS: {{ default "http" .Values.protocol }}://{{- include "zadig.endpoint" . }}
+  ISSUER_URL: {{ .Values.dex.config.issuer }}
+  CLIENT_ID: {{ (first .Values.dex.config.staticClients).id }}
+  CLIENT_SECRET: {{ (first .Values.dex.config.staticClients).secret }}
+  REDIRECT_URI: {{ (first (first .Values.dex.config.staticClients).redirectURIs) }}
+  MYSQL_USER: {{ .Values.connections.mysql.auth.user }}
+  MYSQL_PASSWORD: {{ .Values.connections.mysql.auth.password | quote }}
+  MYSQL_HOST: {{ .Values.connections.mysql.host }}
+  MYSQL_USER_DB: {{ .Values.connections.mysql.db.user }}
+  MYSQL_DEX_DB: {{ .Values.connections.mysql.db.dex }}
+  SCOPES: "openid,profile,email,offline_access,groups,federated:id"
+  TOKEN_EXPIRES_AT: "1440"
+  LOG_LEVEL: {{ .Values.logLevel }}
+
+  # --------------------------------------------------------------------------------------
+  # mongo
+  # --------------------------------------------------------------------------------------
+  MONGODB_CONNECTION_STRING: {{ .Values.connections.mongodb.connectionString }}
+  ASLAN_DB: {{ default "zadig" .Values.connections.mongodb.db }}
+  IS_DOCUMENT_DB: {{ default false .Values.connections.mongodb.isDocumentDB | quote }}
+
+  # --------------------------------------------------------------------------------------
+  # redis
+  # --------------------------------------------------------------------------------------
+  REDIS_HOST: {{ .Values.connections.redis.host }}
+  REDIS_PORT: {{ .Values.connections.redis.port | quote }}
+  REDIS_USERNAME: {{ .Values.connections.redis.user | quote }}
+  REDIS_PASSWORD: {{ .Values.connections.redis.password | quote }}
+  REDIS_USER_TOKEN_DB: {{ .Values.connections.redis.db.token | quote }}
+  REDIS_COMMON_CACHE_DB: {{ .Values.connections.redis.db.cache | quote }}

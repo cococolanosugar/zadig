@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: user
+  labels:
+    {{- include "zadig.microservice.user.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: {{ template "zadig.microservice.user.port" . }}
+      targetPort: {{ template "zadig.microservice.user.port" . }}
+      name: http
+    - protocol: TCP
+      port: {{ template "zadig.microservice.user.grpcport" . }}
+      targetPort: {{ template "zadig.microservice.user.grpcport" . }}
+      name: grpc
+  selector:
+    {{- include "zadig.microservice.user.selectorLabels" . | nindent 4 }}
+
+---
+apiVersion: gloo.solo.io/v1
+kind: Upstream
+metadata:
+  name: auth-server
+  labels:
+    {{- include "zadig.microservice.user.labels" . | nindent 4 }}
+spec:
+  discoveryMetadata: {}
+  kube:
+    selector:
+      {{- include "zadig.microservice.user.selectorLabels" . | nindent 6 }}
+    serviceName: user
+    serviceNamespace: {{ .Release.Namespace }}
+    servicePort: {{ template "zadig.microservice.user.grpcport" . }}
+  useHttp2: true

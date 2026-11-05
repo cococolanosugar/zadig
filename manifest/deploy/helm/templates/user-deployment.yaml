@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user
+  labels:
+    {{- include "zadig.microservice.user.labels" . | nindent 4 }}
+{{- if .Values.additionalLabels }}
+{{ toYaml .Values.additionalLabels | trimSuffix "\n" | indent 4 }}
+{{- end }}
+{{- if .Values.additionalAnnotations }}
+  annotations:
+{{ toYaml .Values.additionalAnnotations | trimSuffix "\n" | indent 4 }}
+{{- end }}
+spec:
+  replicas: {{ .Values.microservice.user.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "zadig.microservice.user.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zadig.microservice.user.selectorLabels" . | nindent 8 }}
+{{- if .Values.podLabels }}
+{{ toYaml .Values.podLabels | indent 8 }}
+{{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/user-configmap.yaml") . | sha256sum }}
+{{- if .Values.podAnnotations }}
+{{ toYaml .Values.podAnnotations | trimSuffix "\n" | indent 8 }}
+{{- end }}
+    spec:
+      serviceAccountName: {{ include "zadig.serviceAccountName" .}}
+      containers:
+        - image: {{ .Values.global.image.registry }}/{{ .Values.microservice.user.image.repository }}:{{ .Values.microservice.user.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy | default "Always" }}
+          name: user
+          env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: zadig-aes-key
+                  key: aesKey
+            - name: BE_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: BE_POD_IP
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: status.podIP
+            - name: BE_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          envFrom:
+            - configMapRef:
+                name: user-config
+          ports:
+            - protocol: TCP
+              containerPort: {{ template "zadig.microservice.user.port" . }}
+          resources:
+          {{- if .Values.microservice.user.resources }}
+          {{ toYaml .Values.microservice.user.resources | nindent 12 }}
+          {{- else }}
+          limits:
+            cpu: 1
+            memory: 1Gi
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          {{- end }}
+          volumeMounts:
+            - mountPath: /etc/encryption
+              name: aes-key
+              readOnly: true
+{{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+{{- end }}
+      volumes:
+        - name: aes-key
+          secret:
+            secretName: zadig-aes-key
+            items:
+              - key: aesKey
+                path: aes

@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hub-server
+  labels:
+    {{- include "zadig.microservice.hubServer.labels" . | nindent 4 }}
+{{- if .Values.additionalLabels }}
+{{ toYaml .Values.additionalLabels | trimSuffix "\n" | indent 4 }}
+{{- end }}
+{{- if .Values.additionalAnnotations }}
+  annotations:
+{{ toYaml .Values.additionalAnnotations | trimSuffix "\n" | indent 4 }}
+{{- end }}
+spec:
+  replicas: {{ .Values.microservice.hubServer.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "zadig.microservice.hubServer.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zadig.microservice.hubServer.selectorLabels" . | nindent 8 }}
+{{- if .Values.podLabels }}
+{{ toYaml .Values.podLabels | indent 8 }}
+{{- end }}
+{{- if .Values.podAnnotations }}
+      annotations:
+{{ toYaml .Values.podAnnotations | trimSuffix "\n" | indent 8 }}
+{{- end }}
+    spec:
+      serviceAccountName: {{ include "zadig.serviceAccountName" .}}
+      containers:
+        - image: {{ .Values.global.image.registry }}/{{ .Values.microservice.hubServer.image.repository }}:{{ .Values.microservice.hubServer.image.tag | default .Chart.AppVersion }}
+          name: hub-server
+          imagePullPolicy: {{ .Values.global.image.pullPolicy  | default "Always" }}
+          readinessProbe:
+            failureThreshold: 15
+            httpGet:
+              path: /health
+              port: 26000
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            successThreshold: 1
+            timeoutSeconds: 3
+          livenessProbe:
+            failureThreshold: 6
+            httpGet:
+              path: /health
+              port: 26000
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 3
+          env:
+            - name: MONGODB_CONNECTION_STRING
+              value: {{ .Values.connections.mongodb.connectionString }}
+            - name: ASLAN_DB
+              value: {{ default "zadig" .Values.connections.mongodb.db }}
+            - name: LOG_LEVEL
+              value: {{ .Values.logLevel }}
+            - name: REDIS_COMMON_CACHE_DB
+              value: {{ .Values.connections.redis.db.cache | quote }}
+            - name: REDIS_HOST
+              value: {{ .Values.connections.redis.host }}
+            - name: REDIS_PORT
+              value: {{ .Values.connections.redis.port | quote }}
+            - name: REDIS_USERNAME
+              value: {{ .Values.connections.redis.user | quote }}
+            - name: REDIS_PASSWORD
+              value: {{ .Values.connections.redis.password | quote }}
+            - name: BE_POD_IP
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: status.podIP
+            - name: BE_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+          ports:
+            - protocol: TCP
+              containerPort: {{ template "zadig.microservice.hubServer.port" . }}
+          resources:
+            limits:
+              cpu: {{ .Values.microservice.hubServer.resources.limits.cpu }}
+              memory: {{ .Values.microservice.hubServer.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.microservice.hubServer.resources.requests.cpu }}
+              memory: {{ .Values.microservice.hubServer.resources.requests.memory }}
+          volumeMounts:
+            - mountPath: /etc/encryption
+              name: aes-key
+              readOnly: true
+{{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+{{- end }}
+      volumes:
+        - name: aes-key
+          secret:
+            secretName: zadig-aes-key
+            items:
+              - key: aesKey
+                path: aes
