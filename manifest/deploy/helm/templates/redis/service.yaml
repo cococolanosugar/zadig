@@ -1,0 +1,16 @@
+{{- if .Values.tags.redis }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zadig.redis.name" . }}
+  labels:
+    {{- include "zadig.redis.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379
+  selector:
+    {{- include "zadig.redis.selectorLabels" . | nindent 8 }}
+{{- end }}

@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cron
+  labels:
+    {{- include "zadig.microservice.cron.labels" . | nindent 4 }}
+{{- if .Values.additionalLabels }}
+{{ toYaml .Values.additionalLabels | trimSuffix "\n" | indent 4 }}
+{{- end }}
+{{- if .Values.additionalAnnotations }}
+  annotations:
+{{ toYaml .Values.additionalAnnotations | trimSuffix "\n" | indent 4 }}
+{{- end }}
+spec:
+  replicas: {{ .Values.microservice.cron.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "zadig.microservice.cron.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zadig.microservice.cron.selectorLabels" . | nindent 8 }}
+{{- if .Values.podLabels }}
+{{ toYaml .Values.podLabels | indent 8 }}
+{{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/cron-configmap.yaml") . | sha256sum }}
+{{- if .Values.podAnnotations }}
+{{ toYaml .Values.podAnnotations | trimSuffix "\n" | indent 8 }}
+{{- end }}
+    spec:
+      containers:
+        - image: {{ .Values.global.image.registry }}/{{ .Values.microservice.cron.image.repository }}:{{ .Values.microservice.cron.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy | default "Always" }}
+          name: cron
+          envFrom:
+            - configMapRef:
+                name: cron-config
+          env:
+            - name: ROOT_TOKEN
+              value: {{ include "zadig.rootToken" . }}
+            - name: MONGODB_CONNECTION_STRING
+              value: {{ .Values.connections.mongodb.connectionString }}
+            - name: ASLAN_DB
+              value: {{ default "zadig" .Values.connections.mongodb.db }}
+            - name: LOG_LEVEL
+              value: {{ .Values.logLevel }}
+          resources:
+            limits:
+              cpu: {{ .Values.microservice.cron.resources.limits.cpu }}
+              memory: {{ .Values.microservice.cron.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.microservice.cron.resources.requests.cpu }}
+              memory: {{ .Values.microservice.cron.resources.requests.memory }}
+{{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+{{- end }}

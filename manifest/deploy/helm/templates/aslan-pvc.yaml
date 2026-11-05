@@ -1,0 +1,18 @@
+{{ $aslanreplicas := .Values.microservice.aslan.replicas | int }}
+{{- if and (gt $aslanreplicas 1) (not .Values.microservice.aslan.existingClaim ) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aslan-pvc
+  labels:
+    {{- include "zadig.microservice.aslan.selectorLabels" . | nindent 6 }}
+spec:
+  {{ if .Values.microservice.aslan.storageClass }}
+  storageClassName: {{ .Values.microservice.aslan.storageClass }}
+  {{- end }}
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ .Values.microservice.aslan.persistence.size | quote }}
+{{- end }}

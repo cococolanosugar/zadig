@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cron-config
+  labels:
+    {{- include "zadig.microservice.cron.labels" . | nindent 4 }}
+data:
+  # --------------------------------------------------------------------------------------
+  # logging
+  # level: 0(Debug), 1(Info), 2(Warn), 3(Error), 4(Panic), 5(Fatal)
+  # --------------------------------------------------------------------------------------
+  LOG_LEVEL: Info
+
+  REDIS_HOST: {{ .Values.connections.redis.host }}
+  REDIS_PORT: {{ .Values.connections.redis.port | quote }}
+  REDIS_USERNAME: {{ .Values.connections.redis.user | quote }}
+  REDIS_PASSWORD: {{ .Values.connections.redis.password | quote }}
+  REDIS_COMMON_CACHE_DB: {{ .Values.connections.redis.db.cache | quote }}
+
+  CHART_VERSION: {{ .Chart.AppVersion }}

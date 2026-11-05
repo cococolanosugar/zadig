@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: dind
+  labels:
+    {{- include "zadig.microservice.dind.labels" . | nindent 4 }}
+{{- if .Values.additionalLabels }}
+{{ toYaml .Values.additionalLabels | trimSuffix "\n" | indent 4 }}
+{{- end }}
+{{- if .Values.additionalAnnotations }}
+  annotations:
+{{ toYaml .Values.additionalAnnotations | trimSuffix "\n" | indent 4 }}
+{{- end }}
+spec:
+  serviceName: dind
+  replicas: {{ .Values.microservice.dind.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "zadig.microservice.dind.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zadig.microservice.dind.selectorLabels" . | nindent 8 }}
+{{- if .Values.podLabels }}
+{{ toYaml .Values.podLabels | indent 8 }}
+{{- end }}
+{{- if .Values.podAnnotations }}
+      annotations:
+{{ toYaml .Values.podAnnotations | trimSuffix "\n" | indent 8 }}
+{{- end }}
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+{{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+{{- end }}
+      containers:
+        - name: dind
+          image: {{ .Values.global.image.registry }}/{{ .Values.microservice.dind.image.repository }}:{{ .Values.microservice.dind.image.tag }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy | default "Always" }}
+          args:
+          - --mtu=1376
+          - --host=unix:///var/run/docker.sock
+          - --host=tcp://0.0.0.0:2376
+          - --tlsverify
+          - --tlscacert=/etc/zadig/dind/tls/ca.pem
+          - --tlscert=/etc/zadig/dind/tls/server-cert.pem
+          - --tlskey=/etc/zadig/dind/tls/server-key.pem
+          {{- if default false .Values.dockerUseMirror }}
+          - --registry-mirror=https://dockerhub.azk8s.cn
+          {{- end }}
+          {{- if .Values.insecureRegistry }}
+          - --insecure-registry={{ .Values.insecureRegistry }}
+          {{- end }}
+          securityContext:
+            privileged: true
+          ports:
+            - protocol: TCP
+              containerPort: 2376
+          resources:
+            limits:
+              cpu: {{ .Values.microservice.dind.resources.limits.cpu }}
+              memory: {{ .Values.microservice.dind.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.microservice.dind.resources.requests.cpu }}
+              memory: {{ .Values.microservice.dind.resources.requests.memory }}
+          volumeMounts:
+          - name: dind-tls-certs
+            mountPath: /etc/zadig/dind/tls
+            readOnly: true
+        {{- if .Values.koderover }}
+          - name: docker-storage-dind
+            mountPath: /var/lib/docker
+        {{- end }}
+      volumes:
+        - name: dind-tls-certs
+          secret:
+            secretName: dind-tls-certs
+            items:
+              - key: ca.pem
+                path: ca.pem
+              - key: server-cert.pem
+                path: server-cert.pem
+              - key: server-key.pem
+                path: server-key.pem
+  {{- if .Values.koderover }}
+  volumeClaimTemplates:
+  - metadata:
+      name: docker-storage-dind
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.storageClassName }}
+      resources:
+        requests:
+          storage: 100Gi
+  {{- end }}
+
+
+

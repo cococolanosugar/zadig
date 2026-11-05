@@ -1,0 +1,128 @@
+{{ $aslanreplicas := .Values.microservice.aslan.replicas | int }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aslan
+  labels:
+    {{- include "zadig.microservice.aslan.labels" . | nindent 4 }}
+{{- if .Values.additionalLabels }}
+{{ toYaml .Values.additionalLabels | trimSuffix "\n" | indent 4 }}
+{{- end }}
+{{- if .Values.additionalAnnotations }}
+  annotations:
+{{ toYaml .Values.additionalAnnotations | trimSuffix "\n" | indent 4 }}
+{{- end }}
+spec:
+  replicas: {{ .Values.microservice.aslan.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "zadig.microservice.aslan.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        {{- include "zadig.microservice.aslan.selectorLabels" . | nindent 8 }}
+{{- if .Values.podLabels }}
+{{ toYaml .Values.podLabels | indent 8 }}
+{{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/aslan-configmap.yaml") . | sha256sum }}
+{{- if .Values.podAnnotations }}
+{{ toYaml .Values.podAnnotations | trimSuffix "\n" | indent 8 }}
+{{- end }}
+    spec:
+      serviceAccountName: {{ include "zadig.serviceAccountName" .}}
+      containers:
+        - image: {{ .Values.global.image.registry }}/{{ .Values.microservice.aslan.image.repository }}:{{ .Values.microservice.aslan.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy | default "Always" }}
+          name: aslan
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: {{ template "zadig.microservice.aslan.port" . }}
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: {{ template "zadig.microservice.aslan.port" . }}
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 15
+          envFrom:
+            - configMapRef:
+                name: aslan-config
+          env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: zadig-aes-key
+                  key: aesKey
+            - name: BE_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: BE_POD_IP
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: status.podIP
+            - name: BE_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - protocol: TCP
+              containerPort: {{ template "zadig.microservice.aslan.port" . }}
+          resources:
+            limits:
+              cpu: {{ .Values.microservice.aslan.resources.limits.cpu }}
+              memory: {{ .Values.microservice.aslan.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.microservice.aslan.resources.requests.cpu }}
+              memory: {{ .Values.microservice.aslan.resources.requests.memory }}
+          volumeMounts:
+            - mountPath: /etc/encryption
+              name: aes-key
+              readOnly: true
+            - mountPath: /config
+              name: policy-config
+              readOnly: true
+            {{- if gt $aslanreplicas 1 }}
+            - mountPath: /app/data
+              name: aslan-data
+            {{- end }}
+{{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+{{- end }}
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: aes-key
+          secret:
+            secretName: zadig-aes-key
+            items:
+              - key: aesKey
+                path: aes
+        - name: policy-config
+          configMap:
+            name: policy-config
+        {{- if gt $aslanreplicas 1 }}
+        - name: aslan-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.microservice.aslan.existingClaim | default "aslan-pvc" }}
+        {{- end }}
+
