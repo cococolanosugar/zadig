@@ -80,5 +80,4 @@ debug/zadig-agent
 .agents/
 .omp/
 
-zadig-ee-portal/
 doc/

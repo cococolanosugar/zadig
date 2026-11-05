@@ -1,0 +1,9 @@
+{
+    "NODE_ENV": "production",
+    "VERSION": "5.0.0-RELEASE.3-1020",
+    "BUILD_TIME": "1792720283",
+    "TAG": "",
+    "COMMIT_ID": "92d17fd5b85cd580e1102404ea3e248c0788fae9",
+    "BRANCH": "release-5.0.0",
+    "PR": ""
+}
