@@ -44,6 +44,9 @@ zadig/
 │   └── vite.config.ts             # Vite 配置 (含开发代理至 http://192.168.31.174:8380)
 │
 ├── openspec/                      # 变更管理与规范定义 (OpenSpec 规划工作区)
+├── manifest/                      # 系统部署与编排声明
+│   └── deploy/
+│       └── helm/                  # Zadig 官方 Helm Chart (v5.0.0, 包含 values.yaml 与 templates)
 ├── zadig-portal/                  # 【历史参考】早期 Vue 2.6 前端源码 (仅作字段与数据模型参考，禁止修改)
 ├── .mcp.json                      # 本地 MCP 服务声明 (antd, codegraph, gitnexus, chrome-devtools)
 ├── mise.toml                      # 全栈开发工具链与版本锁 (Go, Node, pnpm, @ant-design/cli 等)
@@ -150,3 +153,42 @@ zadig/
 
 1. 所有新建的 TypeScript、React JSX、JSON、YAML、SQL 与 Markdown 文件必须且仅能以 **UTF-8 无 BOM (UTF-8 without BOM)** 格式保存。
 2. 严禁在 Windows PowerShell 环境中使用管道符（如 `Get-Content | ...`）直接传递 SQL 或配置文件，防止默认 ANSI/GBK 转码造成中文字符不可逆乱码。
+
+---
+
+## 7. 官方 Helm Chart 资源与部署编排规范 (Helm Chart & Manifests)
+
+项目在 `manifest/deploy/helm/` 维护了 KodeRover 官方发布的 Zadig 核心部署 Helm Chart（当前版本为 **v5.0.0**），用于环境编排、values 参数比对及微服务配置真理源对账。
+
+### 7.1 Chart 仓库元数据
+* **官方 Chart 仓库地址**：`https://koderover.tencentcloudcr.com/chartrepo/chart`
+* **Helm Repo 别名**：`koderover-chart`
+* **当前版本目标**：`koderover-chart/zadig`（Chart Version: `5.0.0`，App Version: `5.0.0`）
+* **本地平铺路径**：`manifest/deploy/helm/`（注：去除中间层 `zadig/` 目录，使 `Chart.yaml` 与 `values.yaml` 直接平铺在 `manifest/deploy/helm/` 根下）
+
+### 7.2 获取与同步命令流水线
+```bash
+# 1. 添加官方 Helm 仓库并更新索引
+helm repo add koderover-chart https://koderover.tencentcloudcr.com/chartrepo/chart --force-update
+helm repo update koderover-chart
+
+# 2. 检索可用版本
+helm search repo koderover-chart/zadig --version 5.0.0
+
+# 3. 拉取指定版本 Chart 包
+helm pull koderover-chart/zadig --version 5.0.0
+
+# 4. 解压至 manifest/deploy/helm 并平铺文件
+tar -xzf zadig-5.0.0.tgz -C manifest/deploy/helm
+# 移动 zadig/* 至 helm/ 根层并移除临时目录与压缩包
+Get-ChildItem -Path "manifest/deploy/helm/zadig" | Move-Item -Destination "manifest/deploy/helm" -Force
+Remove-Item "manifest/deploy/helm/zadig" -Force -Recurse
+Remove-Item "zadig-5.0.0.tgz" -Force
+```
+
+### 7.3 核心资产结构
+* `manifest/deploy/helm/Chart.yaml`：Chart 元信息及声明；
+* `manifest/deploy/helm/values.yaml`：Zadig 5.0.0 各微服务（aslan、user、cron、hub-server、dind、mongodb、mysql、redis 等）全量参数默认值；
+* `manifest/deploy/helm/templates/`：Kubernetes 编排清单模板；
+* `manifest/deploy/helm/charts/`：子依赖 Chart（dex, gloo, minio）。
+
