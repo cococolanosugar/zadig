@@ -53,6 +53,7 @@ import {
   MenuOutlined,
   FolderOutlined,
   FileOutlined,
+  TagOutlined,
 } from '@ant-design/icons';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -127,6 +128,14 @@ interface OperationLogItem {
   created_at: number;
 }
 
+export interface LabelSettingItem {
+  id?: string;
+  key: string;
+  desc?: string;
+  update_time?: number;
+  update_by?: string;
+}
+
 export const SystemConfigPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const location = useLocation();
@@ -141,6 +150,7 @@ export const SystemConfigPage: React.FC = () => {
     if (path.endsWith('/announcement')) return 'announcement';
     if (path.endsWith('/auditlog')) return 'auditlog';
     if (path.endsWith('/aiCodeReview')) return 'aiCodeReview';
+    if (path.endsWith('/labels')) return 'labels';
     return searchParams.get('tab') || 'mail';
   };
 
@@ -232,6 +242,14 @@ export const SystemConfigPage: React.FC = () => {
   const [navEditModalOpen, setNavEditModalOpen] = useState(false);
   const [navForm] = Form.useForm();
   const [navPreviewOpen, setNavPreviewOpen] = useState(false);
+
+  // Label setting states
+  const [labels, setLabels] = useState<LabelSettingItem[]>([]);
+  const [loadingLabels, setLoadingLabels] = useState(false);
+  const [labelModalVisible, setLabelModalVisible] = useState(false);
+  const [editingLabel, setEditingLabel] = useState<LabelSettingItem | null>(null);
+  const [labelForm] = Form.useForm();
+  const [savingLabel, setSavingLabel] = useState(false);
 
   const loadTabData = useCallback(async (tab: string) => {
     setLoading(true);
@@ -422,6 +440,16 @@ export const SystemConfigPage: React.FC = () => {
           setNavigationItems(res.items || []);
         } catch {
           // ignore
+        }
+      } else if (tab === 'labels') {
+        setLoadingLabels(true);
+        try {
+          const res = await http.get<LabelSettingItem[]>('/api/aslan/system/labels', { skipErrorHandler: true });
+          setLabels(Array.isArray(res) ? res : []);
+        } catch {
+          // ignore
+        } finally {
+          setLoadingLabels(false);
         }
       }
     } catch {
@@ -1053,6 +1081,53 @@ export const SystemConfigPage: React.FC = () => {
     }
   };
 
+  const handleOpenCreateLabel = () => {
+    setEditingLabel(null);
+    labelForm.resetFields();
+    setLabelModalVisible(true);
+  };
+
+  const handleOpenEditLabel = (item: LabelSettingItem) => {
+    setEditingLabel(item);
+    labelForm.setFieldsValue({
+      key: item.key,
+      desc: item.desc,
+    });
+    setLabelModalVisible(true);
+  };
+
+  const handleSaveLabel = async () => {
+    try {
+      const values = await labelForm.validateFields();
+      setSavingLabel(true);
+      if (editingLabel?.id) {
+        await http.put(`/api/aslan/system/labels/${editingLabel.id}`, values);
+        feedback.message.success('更新标签配置成功');
+      } else {
+        await http.post('/api/aslan/system/labels', values);
+        feedback.message.success('创建标签配置成功');
+      }
+      setLabelModalVisible(false);
+      loadTabData('labels');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '保存标签失败';
+      feedback.message.error(msg);
+    } finally {
+      setSavingLabel(false);
+    }
+  };
+
+  const handleDeleteLabel = async (item: LabelSettingItem) => {
+    if (!item.id) return;
+    try {
+      await http.delete(`/api/aslan/system/labels/${item.id}`);
+      feedback.message.success('删除标签配置成功');
+      loadTabData('labels');
+    } catch {
+      feedback.message.error('删除标签失败');
+    }
+  };
+
   const tabItems = [
     {
       key: 'mail',
@@ -1179,6 +1254,14 @@ export const SystemConfigPage: React.FC = () => {
       label: (
         <span>
           <RobotOutlined /> AI 代码审查
+        </span>
+      ),
+    },
+    {
+      key: 'labels',
+      label: (
+        <span>
+          <TagOutlined /> 标签管理
         </span>
       ),
     },
@@ -2777,6 +2860,102 @@ export const SystemConfigPage: React.FC = () => {
                 保存 AI 审查配置
               </Button>
             </Form>
+          </div>
+        ) : activeTab === 'labels' ? (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <Text strong style={{ fontSize: 15 }}>全局服务标签管理</Text>
+                <div style={{ color: '#8c8c8c', fontSize: 13, marginTop: 4 }}>
+                  维护平台可用的服务/系统元数据标签键，可用于微服务分组标记、构建筛选以及部署策略匹配
+                </div>
+              </div>
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreateLabel}>
+                新建标签
+              </Button>
+            </div>
+            <Table
+              loading={loadingLabels}
+              dataSource={labels}
+              rowKey={(r) => r.id || r.key}
+              pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 个标签` }}
+              columns={[
+                {
+                  title: '标签键 (Key)',
+                  dataIndex: 'key',
+                  key: 'key',
+                  render: (k: string) => <Tag color="blue" style={{ fontSize: 13, padding: '2px 8px' }}>{k}</Tag>,
+                },
+                {
+                  title: '描述信息',
+                  dataIndex: 'desc',
+                  key: 'desc',
+                  render: (d: string) => d || <Text type="secondary">-</Text>,
+                },
+                {
+                  title: '更新人',
+                  dataIndex: 'update_by',
+                  key: 'update_by',
+                  width: 140,
+                  render: (u: string) => u || '-',
+                },
+                {
+                  title: '更新时间',
+                  dataIndex: 'update_time',
+                  key: 'update_time',
+                  width: 180,
+                  render: (t: number) => (t ? dayjs.unix(t).format('YYYY-MM-DD HH:mm:ss') : '-'),
+                },
+                {
+                  title: '操作',
+                  key: 'action',
+                  width: 130,
+                  render: (_, record: LabelSettingItem) => (
+                    <Space orientation="horizontal" size={8}>
+                      <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleOpenEditLabel(record)}>
+                        编辑
+                      </Button>
+                      <Popconfirm
+                        title="删除标签"
+                        description={`确定删除标签「${record.key}」吗？`}
+                        onConfirm={() => handleDeleteLabel(record)}
+                        okText="删除"
+                        cancelText="取消"
+                        okButtonProps={{ danger: true }}
+                      >
+                        <Button type="link" danger size="small" icon={<DeleteOutlined />}>
+                          删除
+                        </Button>
+                      </Popconfirm>
+                    </Space>
+                  ),
+                },
+              ]}
+            />
+            <Modal
+              title={editingLabel ? '编辑服务标签' : '新建服务标签'}
+              open={labelModalVisible}
+              onCancel={() => setLabelModalVisible(false)}
+              onOk={handleSaveLabel}
+              confirmLoading={savingLabel}
+            >
+              <Form form={labelForm} layout="vertical" style={{ marginTop: 16 }}>
+                <Form.Item
+                  name="key"
+                  label="标签键 (Key)"
+                  rules={[
+                    { required: true, message: '请输入标签键' },
+                    { pattern: /^[a-zA-Z0-9_\-\.]+$/, message: '标签键仅支持字母、数字、点、下划线及连字符' },
+                  ]}
+                  extra="用于标识服务的全局标签键名，例如 tier, env-type, team"
+                >
+                  <Input placeholder="例如: tier, business-unit" disabled={Boolean(editingLabel?.id)} />
+                </Form.Item>
+                <Form.Item name="desc" label="描述信息">
+                  <Input.TextArea rows={3} placeholder="请输入标签的用途说明" />
+                </Form.Item>
+              </Form>
+            </Modal>
           </div>
         ) : (
           <Table

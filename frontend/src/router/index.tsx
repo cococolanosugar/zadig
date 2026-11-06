@@ -39,6 +39,7 @@ import ScannersPage from '../pages/Projects/Scanners';
 import ProjectWizardPage from '../pages/Projects/Wizard';
 import VarsGroupPage from '../pages/Projects/VarsGroup';
 import ProjectHostsPage from '../pages/Projects/Hosts';
+import ProjectAgentsPage from '../pages/Projects/Agents';
 import SystemIntegrationPage from '../pages/Settings/Integration';
 import InstallationSignUpPage from '../pages/Installation/SignUp';
 import InstallationVersionPage from '../pages/Installation/Version';
@@ -150,6 +151,9 @@ export const AppRouter: React.FC = () => {
             <Route path="secrets" element={<KeyVaultPage />} />
             <Route path="rbac" element={<ProjectRBACPage />} />
             <Route path="hosts" element={<ProjectHostsPage />} />
+            <Route path="agents" element={<ProjectAgentsPage />} />
+            <Route path="agents/:agentId/config" element={<ProjectAgentsPage />} />
+            <Route path="agents/*" element={<ProjectAgentsPage />} />
             <Route path="integration" element={<SystemIntegrationPage />} />
             <Route path="integration/:category" element={<SystemIntegrationPage />} />
           </Route>
@@ -240,6 +244,7 @@ export const AppRouter: React.FC = () => {
           <Route path="system/plugins" element={<SystemConfigPage />} />
           <Route path="system/secrets" element={<KeyVaultPage />} />
           <Route path="system/aiCodeReview" element={<SystemConfigPage />} />
+          <Route path="system/labels" element={<SystemConfigPage />} />
           <Route path="system/announcement" element={<SystemConfigPage />} />
           <Route path="system/auditlog" element={<SystemConfigPage />} />
           <Route path="system/integration" element={<SystemIntegrationPage />} />

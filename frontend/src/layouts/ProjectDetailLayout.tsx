@@ -21,6 +21,7 @@ import {
   DownOutlined,
   HddOutlined,
   SlidersOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import { useProjectStore } from '../stores/project';
 import { CollaborationDrawer } from '../pages/Projects/CollaborationDrawer';
@@ -156,6 +157,13 @@ export const ProjectDetailLayout: React.FC = () => {
         </span>
       ),
     },
+    agents: {
+      label: (
+        <span>
+          <RobotOutlined /> 智能体管理
+        </span>
+      ),
+    },
   };
 
   const isConfigTab = Object.keys(configTabs).includes(currentTab);
@@ -186,6 +194,12 @@ export const ProjectDetailLayout: React.FC = () => {
       icon: <HddOutlined />,
       label: '主机管理',
       onClick: () => navigate(`/v1/projects/detail/${projectName}/hosts`),
+    },
+    {
+      key: 'agents',
+      icon: <RobotOutlined />,
+      label: '智能体管理',
+      onClick: () => navigate(`/v1/projects/detail/${projectName}/agents`),
     },
     {
       key: 'collaboration',

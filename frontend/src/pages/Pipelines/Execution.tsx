@@ -33,6 +33,8 @@ import {
   BugOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
+  FileTextOutlined,
+  ExportOutlined,
 } from '@ant-design/icons';
 import { workflowApi, type WorkflowTaskExecution } from '../../api/workflow';
 import { useProjectStore } from '../../stores/project';
@@ -167,6 +169,7 @@ export const PipelineExecutionPage: React.FC = () => {
   const [enablingDebug, setEnablingDebug] = useState(false);
   const [stoppingDebug, setStoppingDebug] = useState(false);
   const [debugModalOpen, setDebugModalOpen] = useState(false);
+  const [htmlReportVisible, setHtmlReportVisible] = useState(false);
 
   // 当前选中 job 的执行状态与错误策略（用于 job 级操作判定）
   const selectedJobInfo = useMemo(() => {
@@ -649,6 +652,15 @@ export const PipelineExecutionPage: React.FC = () => {
             <Button size="small" onClick={loadJobEvents} disabled={!selectedJob}>
               查看事件
             </Button>
+            {selectedJob && (
+              <Button
+                size="small"
+                icon={<FileTextOutlined />}
+                onClick={() => setHtmlReportVisible(true)}
+              >
+                HTML 测试报告
+              </Button>
+            )}
             {selectedJobInfo && (
               <Popover
                 trigger="click"
@@ -844,6 +856,47 @@ export const PipelineExecutionPage: React.FC = () => {
           onSuccess={loadTask}
         />
       )}
+
+      {/* HTML Test Report Modal */}
+      <Modal
+        title={
+          <Space orientation="horizontal" size={8}>
+            <FileTextOutlined style={{ color: '#0066ff' }} />
+            <span>HTML 测试报告 - {selectedJob}</span>
+            <Tag color="blue">{effWorkflowName}</Tag>
+            <Tag>#{effTaskId}</Tag>
+          </Space>
+        }
+        open={htmlReportVisible}
+        onCancel={() => setHtmlReportVisible(false)}
+        width="90vw"
+        style={{ top: 20 }}
+        styles={{ body: { padding: 0, height: '76vh' } }}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Button
+              icon={<ExportOutlined />}
+              onClick={() => {
+                window.open(
+                  `/api/aslan/testing/report/html/workflowv4/${encodeURIComponent(activeProject)}/${encodeURIComponent(effWorkflowName || '')}/${encodeURIComponent(selectedJob)}/${encodeURIComponent(effTaskId || '')}/`,
+                  '_blank'
+                );
+              }}
+            >
+              新窗口全屏打开
+            </Button>
+            <Button type="primary" onClick={() => setHtmlReportVisible(false)}>
+              关闭
+            </Button>
+          </div>
+        }
+      >
+        <iframe
+          src={`/api/aslan/testing/report/html/workflowv4/${encodeURIComponent(activeProject)}/${encodeURIComponent(effWorkflowName || '')}/${encodeURIComponent(selectedJob)}/${encodeURIComponent(effTaskId || '')}/`}
+          title="Workflow HTML Test Report"
+          style={{ width: '100%', height: '100%', border: 'none' }}
+        />
+      </Modal>
     </div>
   );
 };

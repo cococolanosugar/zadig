@@ -291,6 +291,27 @@ export const SystemIntegrationPage: React.FC = () => {
           } : undefined,
         }, { skipErrorHandler: true });
         feedback.message.success('配置中心服务连通性验证成功！');
+      } else if (currentCategory.key === 'scanner') {
+        await http.post(
+          '/api/aslan/system/sonar/validate',
+          {
+            server_address: values.url,
+            token: values.token,
+          },
+          { skipErrorHandler: true }
+        );
+        feedback.message.success('SonarQube 代码扫描服务连通性握手验证成功！');
+      } else if (currentCategory.key === 'ci') {
+        await http.post(
+          '/api/aslan/system/jenkins/user/connection',
+          {
+            url: values.url,
+            username: values.username,
+            password: values.password,
+          },
+          { skipErrorHandler: true }
+        );
+        feedback.message.success('Jenkins CI 服务连通性握手验证成功！');
       } else {
         const url = await buildListUrl(currentCategory);
         await http.get(url, { skipErrorHandler: true });
