@@ -155,6 +155,28 @@ export const projectApi = {
       params: { projectName },
     });
   },
+
+  /**
+   * 项目专属代码源集成配置获取与管理
+   * GET /api/aslan/project/integration/:projectName/codehosts
+   */
+  async getProjectCodeProviders(projectName: string, encryptedKey?: string): Promise<any[]> {
+    const query = encryptedKey ? `?encryptedKey=${encodeURIComponent(encryptedKey)}` : '';
+    const res = await http.get<any>(`/api/aslan/project/integration/${encodeURIComponent(projectName)}/codehosts${query}`);
+    return Array.isArray(res) ? res : [];
+  },
+
+  async createProjectCodeProvider(projectName: string, payload: any): Promise<any> {
+    return http.post(`/api/aslan/project/integration/${encodeURIComponent(projectName)}/codehosts`, payload);
+  },
+
+  async updateProjectCodeProvider(projectName: string, id: string | number, payload: any): Promise<any> {
+    return http.patch(`/api/aslan/project/integration/${encodeURIComponent(projectName)}/codehosts/${id}`, payload);
+  },
+
+  async deleteProjectCodeProvider(projectName: string, id: string | number): Promise<any> {
+    return http.delete(`/api/aslan/project/integration/${encodeURIComponent(projectName)}/codehosts/${id}`);
+  },
 };
 
 export interface CustomRule {

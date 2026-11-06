@@ -716,6 +716,72 @@ export const serviceApi = {
     );
     return Array.isArray(res) ? res : [];
   },
+
+  /**
+   * 服务级标签元数据：GET /api/aslan/service/labels
+   * 后端: pkg/microservice/aslan/core/service/handler/service.go:1317 (ListServiceLabels)
+   */
+  async getServiceLabels(serviceName: string, projectKey: string, production = false): Promise<Array<{ id: string; key: string; value: string }>> {
+    const res = await http.get<{ labels?: Array<{ id: string; key: string; value: string }> } | Array<{ id: string; key: string; value: string }>>(
+      `/api/aslan/service/labels?project_key=${encodeURIComponent(projectKey)}&service_name=${encodeURIComponent(serviceName)}&production=${production}`
+    );
+    if (Array.isArray(res)) return res;
+    if (res && 'labels' in res && Array.isArray(res.labels)) return res.labels;
+    return [];
+  },
+
+  /**
+   * 服务级标签元数据创建：POST /api/aslan/service/labels
+   * 后端: pkg/microservice/aslan/core/service/handler/service.go:1052 (AddServiceLabel)
+   */
+  createServiceLabel(payload: { project_key: string; service_name: string; key: string; value: string; production?: boolean }) {
+    return http.post<{ id?: string; message?: string }>('/api/aslan/service/labels', payload);
+  },
+
+  /**
+   * 服务级标签修改：PUT /api/aslan/service/labels/:id
+   */
+  updateServiceLabel(id: string, payload: { key: string; value: string }) {
+    return http.put<{ message?: string }>(`/api/aslan/service/labels/${encodeURIComponent(id)}`, payload);
+  },
+
+  /**
+   * 服务级标签删除：DELETE /api/aslan/service/labels/:id
+   */
+  deleteServiceLabel(id: string) {
+    return http.delete<{ message?: string }>(`/api/aslan/service/labels/${encodeURIComponent(id)}`);
+  },
+
+  /**
+   * 主机服务/物理机部署配置获取
+   * GET /api/aslan/build/deploy/:serviceName?projectName=
+   */
+  getVmServiceDeploy(serviceName: string, projectName: string) {
+    return http.get<any>(
+      `/api/aslan/build/deploy/${encodeURIComponent(serviceName)}?projectName=${encodeURIComponent(projectName)}`
+    );
+  },
+
+  /**
+   * 主机服务/物理机部署配置保存与更新
+   * POST / PUT /api/aslan/build/deploy?projectName=
+   */
+  saveVmServiceDeploy(projectName: string, payload: any, isUpdate = false) {
+    if (isUpdate) {
+      return http.put<any>(`/api/aslan/build/deploy?projectName=${encodeURIComponent(projectName)}`, payload);
+    }
+    return http.post<any>(`/api/aslan/build/deploy?projectName=${encodeURIComponent(projectName)}`, payload);
+  },
+
+  /**
+   * 主机服务部署组件模块信息查询
+   * GET /api/aslan/build/deploy/serviceModule?projectName=&serviceName=
+   */
+  getServiceModuleDeploy(serviceName: string, projectName: string) {
+    return http.get<any>(
+      `/api/aslan/build/deploy/serviceModule?projectName=${encodeURIComponent(projectName)}&serviceName=${encodeURIComponent(serviceName)}`
+    );
+  },
 };
 
 export default serviceApi;

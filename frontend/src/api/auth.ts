@@ -185,6 +185,43 @@ export const authApi = {
   async updatePersonalUser(uid: string, args: UpdatePersonalUserArgs): Promise<{ message: string }> {
     return http.put<{ message: string }>(`/api/v1/users/${encodeURIComponent(uid)}/personal`, args);
   },
+
+  /**
+   * 用户注册
+   * POST /api/v1/signup
+   * (pkg/microservice/user/core/handler/user/user.go:88)
+   */
+  async userSignUp(payload: { name: string; account: string; password?: string; email: string; phone?: string }): Promise<any> {
+    return http.post('/api/v1/signup', payload);
+  },
+
+  /**
+   * 获取验证码
+   * GET /api/v1/captcha?account=
+   * (pkg/microservice/user/core/handler/user/user.go:94)
+   */
+  async getCaptcha(account?: string): Promise<{ id: string; image: string }> {
+    const query = account ? `?account=${encodeURIComponent(account)}` : '';
+    return http.get(`/api/v1/captcha${query}`);
+  },
+
+  /**
+   * 找回密码验证码发送
+   * GET /api/v1/retrieve?account=
+   * (pkg/microservice/user/core/handler/user/user.go:100)
+   */
+  async retrievePassword(account: string): Promise<{ message: string }> {
+    return http.get(`/api/v1/retrieve?account=${encodeURIComponent(account)}`);
+  },
+
+  /**
+   * 密码重置
+   * POST /api/v1/reset
+   * (pkg/microservice/user/core/handler/user/user.go:106)
+   */
+  async resetPassword(payload: { account: string; code: string; password: string }): Promise<{ message: string }> {
+    return http.post('/api/v1/reset', payload);
+  },
 };
 
 export interface PersonalUserInfo {

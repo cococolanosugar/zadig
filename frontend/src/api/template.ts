@@ -152,6 +152,60 @@ export const templateApi = {
       return [];
     }
   },
+
+  /**
+   * K8s YAML 模板变量提取
+   * POST /api/aslan/template/yaml/extractVariable
+   */
+  async extractYamlVariables(payload: { content: string }): Promise<Array<{ key: string; value: string }>> {
+    const res = await http.post<any>('/api/aslan/template/yaml/extractVariable', payload);
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * K8s YAML 模板变量合法性校验
+   * POST /api/aslan/template/yaml/validateVariable
+   */
+  async validateYamlVariable(payload: { variable_yaml: string }): Promise<{ message?: string }> {
+    return http.post('/api/aslan/template/yaml/validateVariable', payload);
+  },
+
+  /**
+   * Dockerfile 模板语法校验
+   * POST /api/aslan/template/dockerfile/validation
+   */
+  async validateDockerfile(payload: { content: string }): Promise<{ message?: string; status?: string }> {
+    return http.post('/api/aslan/template/dockerfile/validation', payload);
+  },
+
+  /**
+   * Helm Chart 模板文件内容获取
+   * GET /api/aslan/template/charts/:name/files?fileName=&filePath=
+   */
+  async getChartTemplateFiles(chartName: string, fileName: string, filePath: string): Promise<{ content?: string }> {
+    return http.get(`/api/aslan/template/charts/${encodeURIComponent(chartName)}/files?fileName=${encodeURIComponent(fileName)}&filePath=${encodeURIComponent(filePath)}`);
+  },
+
+  /**
+   * Helm Chart 模板变量获取与更新
+   * GET / PUT /api/aslan/template/charts/:name/variables
+   */
+  async getChartTemplateVariables(chartName: string): Promise<any> {
+    return http.get(`/api/aslan/template/charts/${encodeURIComponent(chartName)}/variables`);
+  },
+
+  async saveChartTemplateVariables(chartName: string, payload: any): Promise<any> {
+    return http.put(`/api/aslan/template/charts/${encodeURIComponent(chartName)}/variables`, payload);
+  },
+
+  /**
+   * Helm Chart 模板服务引用列表获取
+   * GET /api/aslan/template/charts/:name/reference
+   */
+  async getChartTemplateReference(chartName: string): Promise<Array<{ service_name: string; project_name: string }>> {
+    const res = await http.get<any>(`/api/aslan/template/charts/${encodeURIComponent(chartName)}/reference`);
+    return Array.isArray(res) ? res : [];
+  },
 };
 
 export default templateApi;

@@ -35,6 +35,10 @@ import {
   PlayCircleOutlined,
   FileTextOutlined,
   ExportOutlined,
+  BarChartOutlined,
+  FolderOpenOutlined,
+  FileOutlined,
+  FolderOutlined,
 } from '@ant-design/icons';
 import { workflowApi, type WorkflowTaskExecution } from '../../api/workflow';
 import { useProjectStore } from '../../stores/project';
@@ -170,6 +174,41 @@ export const PipelineExecutionPage: React.FC = () => {
   const [stoppingDebug, setStoppingDebug] = useState(false);
   const [debugModalOpen, setDebugModalOpen] = useState(false);
   const [htmlReportVisible, setHtmlReportVisible] = useState(false);
+  const [junitReportVisible, setJunitReportVisible] = useState(false);
+  const [junitData, setJunitData] = useState<any>(null);
+  const [loadingJunit, setLoadingJunit] = useState(false);
+
+  const [workspaceFilesVisible, setWorkspaceFilesVisible] = useState(false);
+  const [workspaceFiles, setWorkspaceFiles] = useState<Array<{ name: string; dir: boolean; size: number }>>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+
+  const loadJunitReport = async () => {
+    if (!effWorkflowName || !effTaskId || !selectedJob) return;
+    setJunitReportVisible(true);
+    setLoadingJunit(true);
+    try {
+      const data = await workflowApi.getTestJunitReport(effWorkflowName, effTaskId, selectedJob, activeProject);
+      setJunitData(data);
+    } catch {
+      setJunitData(null);
+    } finally {
+      setLoadingJunit(false);
+    }
+  };
+
+  const loadWorkspaceFiles = async () => {
+    if (!effWorkflowName || !effTaskId || !selectedJob) return;
+    setWorkspaceFilesVisible(true);
+    setLoadingFiles(true);
+    try {
+      const files = await workflowApi.getTestWorkspaceFiles(effWorkflowName, effTaskId, selectedJob, activeProject);
+      setWorkspaceFiles(Array.isArray(files) ? files : []);
+    } catch {
+      setWorkspaceFiles([]);
+    } finally {
+      setLoadingFiles(false);
+    }
+  };
 
   // 当前选中 job 的执行状态与错误策略（用于 job 级操作判定）
   const selectedJobInfo = useMemo(() => {
@@ -653,13 +692,29 @@ export const PipelineExecutionPage: React.FC = () => {
               查看事件
             </Button>
             {selectedJob && (
-              <Button
-                size="small"
-                icon={<FileTextOutlined />}
-                onClick={() => setHtmlReportVisible(true)}
-              >
-                HTML 测试报告
-              </Button>
+              <>
+                <Button
+                  size="small"
+                  icon={<FileTextOutlined />}
+                  onClick={() => setHtmlReportVisible(true)}
+                >
+                  HTML 报告
+                </Button>
+                <Button
+                  size="small"
+                  icon={<BarChartOutlined />}
+                  onClick={loadJunitReport}
+                >
+                  JUnit 详情
+                </Button>
+                <Button
+                  size="small"
+                  icon={<FolderOpenOutlined />}
+                  onClick={loadWorkspaceFiles}
+                >
+                  测试产物
+                </Button>
+              </>
             )}
             {selectedJobInfo && (
               <Popover
@@ -896,6 +951,105 @@ export const PipelineExecutionPage: React.FC = () => {
           title="Workflow HTML Test Report"
           style={{ width: '100%', height: '100%', border: 'none' }}
         />
+      </Modal>
+
+      {/* JUnit XML / JSON Test Details Modal */}
+      <Modal
+        title={
+          <Space orientation="horizontal" size={8}>
+            <BarChartOutlined style={{ color: '#52c41a' }} />
+            <span>JUnit 测试详情 - {selectedJob}</span>
+          </Space>
+        }
+        open={junitReportVisible}
+        onCancel={() => setJunitReportVisible(false)}
+        width={780}
+        footer={[
+          <Button key="close" type="primary" onClick={() => setJunitReportVisible(false)}>
+            关闭
+          </Button>,
+        ]}
+      >
+        <Spin spinning={loadingJunit}>
+          {junitData ? (
+            <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+              <pre
+                style={{
+                  background: 'var(--ant-color-fill-quaternary, #f5f5f5)',
+                  padding: 16,
+                  borderRadius: 6,
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  margin: 0,
+                }}
+              >
+                {typeof junitData === 'string' ? junitData : JSON.stringify(junitData, null, 2)}
+              </pre>
+            </div>
+          ) : (
+            <Empty description="暂无 JUnit 测试报告数据或当前步骤未产生 XML 报告" />
+          )}
+        </Spin>
+      </Modal>
+
+      {/* Workspace Test Artifacts Browser Modal */}
+      <Modal
+        title={
+          <Space orientation="horizontal" size={8}>
+            <FolderOpenOutlined style={{ color: '#faad14' }} />
+            <span>测试产物与工作空间文件 - {selectedJob}</span>
+          </Space>
+        }
+        open={workspaceFilesVisible}
+        onCancel={() => setWorkspaceFilesVisible(false)}
+        width={720}
+        footer={[
+          <Button key="close" type="primary" onClick={() => setWorkspaceFilesVisible(false)}>
+            关闭
+          </Button>,
+        ]}
+      >
+        <Spin spinning={loadingFiles}>
+          {workspaceFiles.length > 0 ? (
+            <div
+              style={{
+                maxHeight: '60vh',
+                overflowY: 'auto',
+                border: '1px solid #f0f0f0',
+                borderRadius: 8,
+                padding: '8px 12px',
+              }}
+            >
+              {workspaceFiles.map((item, idx) => (
+                <div
+                  key={`${item.name}-${idx}`}
+                  style={{
+                    padding: '8px 4px',
+                    borderBottom: idx < workspaceFiles.length - 1 ? '1px solid #f5f5f5' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Space orientation="horizontal" size={10}>
+                    {item.dir ? (
+                      <FolderOutlined style={{ color: '#faad14' }} />
+                    ) : (
+                      <FileOutlined style={{ color: '#1677ff' }} />
+                    )}
+                    <Text strong>{item.name}</Text>
+                    {!item.dir && (
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        ({(item.size / 1024).toFixed(1)} KB)
+                      </Text>
+                    )}
+                  </Space>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Empty description="工作空间中未检索到测试产物或文件" />
+          )}
+        </Spin>
       </Modal>
     </div>
   );

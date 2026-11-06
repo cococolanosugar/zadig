@@ -651,6 +651,21 @@ export const settingsApi = {
     return http.post('/api/aslan/system/project_management/validate', payload);
   },
 
+  async getMeegoProjects(id: string, projectName: string): Promise<any[]> {
+    const res = await http.get<any[]>(`/api/aslan/system/meego/${encodeURIComponent(id)}/projects?projectName=${encodeURIComponent(projectName)}`);
+    return Array.isArray(res) ? res : [];
+  },
+
+  async getPingCodeProjects(id: string, projectName: string): Promise<any[]> {
+    const res = await http.get<any[]>(`/api/aslan/system/pingcode/${encodeURIComponent(id)}/projects?projectName=${encodeURIComponent(projectName)}`);
+    return Array.isArray(res) ? res : [];
+  },
+
+  async getTapdProjects(id: string, projectName: string): Promise<any[]> {
+    const res = await http.get<any[]>(`/api/aslan/system/tapd/${encodeURIComponent(id)}/projects?projectName=${encodeURIComponent(projectName)}`);
+    return Array.isArray(res) ? res : [];
+  },
+
   // --- Configuration Management (Apollo, Nacos) ---
   async getConfigurations(): Promise<ConfigurationManagementItem[]> {
     try {

@@ -926,6 +926,170 @@ export const workflowApi = {
       customFields
     );
   },
+
+  /**
+   * 获取可触发的工作流列表清单
+   * GET /api/aslan/workflow/v4/trigger?projectName=
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:73)
+   */
+  getAvailableTriggerWorkflows(projectName?: string) {
+    const query = projectName ? `?projectName=${encodeURIComponent(projectName)}` : '';
+    return http.get<Array<{
+      workflow_name: string;
+      project_name?: string;
+      params?: Array<{ name: string; type?: string; value?: string; default_value?: string; desc?: string }>;
+    }>>(`/api/aslan/workflow/v4/trigger${query}`);
+  },
+
+  /**
+   * 获取指定 Jenkins 任务的动态构建参数配置
+   * GET /api/aslan/workflow/v4/jenkins/:jenkinsId/:jobName
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:78)
+   */
+  getJenkinsJobParams(jenkinsId: string, jobName: string) {
+    return http.get<Array<{
+      name: string;
+      type: string;
+      desc?: string;
+      default_value?: unknown;
+      choices?: string[];
+    }>>(`/api/aslan/workflow/v4/jenkins/${encodeURIComponent(jenkinsId)}/${encodeURIComponent(jobName)}`);
+  },
+
+  /**
+   * 提交工作流任务的人工审批动作 (Approve / Reject)
+   * POST /api/aslan/workflow/v4/check/:workflowName/:taskId
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:154)
+   */
+  checkWorkflowApproval(
+    workflowName: string,
+    taskId: number | string,
+    payload: {
+      stage_name: string;
+      approve: boolean;
+      comment?: string;
+    }
+  ) {
+    return http.post<{ message: string }>(
+      `/api/aslan/workflow/v4/check/${encodeURIComponent(workflowName)}/${taskId}`,
+      payload
+    );
+  },
+
+  /**
+   * 获取工作流 V4 测试任务 JUnit XML 格式测试报告
+   * GET /api/aslan/testing/itreport/workflowv4/:workflowName/id/:taskId/job/:jobName?projectName=
+   * (pkg/microservice/aslan/core/stat/handler/router.go)
+   */
+  getTestJunitReport(workflowName: string, taskId: number | string, jobName: string, projectName: string) {
+    return http.get<any>(
+      `/api/aslan/testing/itreport/workflowv4/${encodeURIComponent(workflowName)}/id/${taskId}/job/${encodeURIComponent(jobName)}?projectName=${encodeURIComponent(projectName)}`
+    );
+  },
+
+  /**
+   * 获取工作流 V4 测试任务工作空间产物与文件列表
+   * GET /api/aslan/testing/workspace/workflowv4/:workflowName/taskId/:taskId/job/:jobName?projectName=
+   * (pkg/microservice/aslan/core/stat/handler/router.go)
+   */
+  getTestWorkspaceFiles(workflowName: string, taskId: number | string, jobName: string, projectName: string) {
+    return http.get<Array<{
+      name: string;
+      dir: boolean;
+      size: number;
+    }>>(
+      `/api/aslan/testing/workspace/workflowv4/${encodeURIComponent(workflowName)}/taskId/${taskId}/job/${encodeURIComponent(jobName)}?projectName=${encodeURIComponent(projectName)}`
+    );
+  },
+
+  /**
+   * 获取全局发布工作流清单
+   * GET /api/aslan/workflow/v4/global?keyword=
+   */
+  getGlobalReleaseWorkflows(keyword?: string) {
+    const query = keyword ? `?keyword=${encodeURIComponent(keyword)}` : '';
+    return http.get<any[]>(`/api/aslan/workflow/v4/global${query}`);
+  },
+
+  /**
+   * 获取工作流 Jira Webhook 触发配置列表
+   * GET /api/aslan/workflow/v4/jirahook/:workflowName
+   */
+  getJiraHooks(workflowName: string) {
+    return http.get<any[]>(`/api/aslan/workflow/v4/jirahook/${encodeURIComponent(workflowName)}`);
+  },
+
+  /**
+   * 新增工作流 Jira Webhook 触发配置
+   * POST /api/aslan/workflow/v4/jirahook/
+   */
+  addJiraHook(payload: any) {
+    return http.post<any>('/api/aslan/workflow/v4/jirahook/', payload);
+  },
+
+  /**
+   * 更新工作流 Jira Webhook 触发配置
+   * PUT /api/aslan/workflow/v4/jirahook/:workflowName
+   */
+  updateJiraHook(workflowName: string, payload: any) {
+    return http.put<any>(`/api/aslan/workflow/v4/jirahook/${encodeURIComponent(workflowName)}`, payload);
+  },
+
+  /**
+   * 删除工作流 Jira Webhook 触发配置
+   * DELETE /api/aslan/workflow/v4/jirahook/:workflowName/:hookName
+   */
+  deleteJiraHook(workflowName: string, hookName: string) {
+    return http.delete(`/api/aslan/workflow/v4/jirahook/${encodeURIComponent(workflowName)}/${encodeURIComponent(hookName)}`);
+  },
+
+  /**
+   * 获取工作流 Jira Webhook 预设模板
+   * GET /api/aslan/workflow/v4/jirahook/preset?workflowName=
+   */
+  getJiraHookPreset(workflowName: string) {
+    return http.get<any>(`/api/aslan/workflow/v4/jirahook/preset?workflowName=${encodeURIComponent(workflowName)}`);
+  },
+
+  /**
+   * 获取工作流飞书/Meego Webhook 触发配置列表
+   * GET /api/aslan/workflow/v4/meegohook/:workflowName
+   */
+  getLarkHooks(workflowName: string) {
+    return http.get<any[]>(`/api/aslan/workflow/v4/meegohook/${encodeURIComponent(workflowName)}`);
+  },
+
+  /**
+   * 新增工作流飞书/Meego Webhook 触发配置
+   * POST /api/aslan/workflow/v4/meegohook/
+   */
+  addLarkHook(payload: any) {
+    return http.post<any>('/api/aslan/workflow/v4/meegohook/', payload);
+  },
+
+  /**
+   * 更新工作流飞书/Meego Webhook 触发配置
+   * PUT /api/aslan/workflow/v4/meegohook/:workflowName
+   */
+  updateLarkHook(workflowName: string, payload: any) {
+    return http.put<any>(`/api/aslan/workflow/v4/meegohook/${encodeURIComponent(workflowName)}`, payload);
+  },
+
+  /**
+   * 删除工作流飞书/Meego Webhook 触发配置
+   * DELETE /api/aslan/workflow/v4/meegohook/:workflowName/:hookName
+   */
+  deleteLarkHook(workflowName: string, hookName: string) {
+    return http.delete(`/api/aslan/workflow/v4/meegohook/${encodeURIComponent(workflowName)}/${encodeURIComponent(hookName)}`);
+  },
+
+  /**
+   * 获取工作流飞书/Meego Webhook 预设模板
+   * GET /api/aslan/workflow/v4/meegohook/preset?workflowName=
+   */
+  getLarkHookPreset(workflowName: string) {
+    return http.get<any>(`/api/aslan/workflow/v4/meegohook/preset?workflowName=${encodeURIComponent(workflowName)}`);
+  },
 };
 
 export interface HelmDeployJobMergeImageParams {

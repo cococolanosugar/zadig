@@ -4,6 +4,7 @@ import {
   Form,
   Input,
   Select,
+  AutoComplete,
   Button,
   Space,
   Typography,
@@ -56,6 +57,7 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
   const [validatingSQL, setValidatingSQL] = useState(false);
   const [jenkinsTools, setJenkinsTools] = useState<Array<{ label: string; value: string }>>([]);
   const [jenkinsJobs, setJenkinsJobs] = useState<Array<{ label: string; value: string }>>([]);
+  const [triggerableWorkflows, setTriggerableWorkflows] = useState<Array<{ label: string; value: string }>>([]);
   const [loadingJenkinsJobs, setLoadingJenkinsJobs] = useState(false);
   const [loadingJenkinsArgs, setLoadingJenkinsArgs] = useState(false);
 
@@ -274,6 +276,21 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
           );
         })
         .catch(() => setUserOptions([]));
+    }
+
+    // 触发工作流列表
+    if (job.type === 'workflow-trigger') {
+      workflowApi
+        .getAvailableTriggerWorkflows(projectName)
+        .then((wfs) => {
+          setTriggerableWorkflows(
+            wfs.map((w) => ({
+              label: w.workflow_name,
+              value: w.workflow_name,
+            }))
+          );
+        })
+        .catch(() => setTriggerableWorkflows([]));
     }
     // 环境列表
     if (
@@ -1960,9 +1977,12 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
                               {...restField}
                               name={[name, 'workflow_name']}
                               label="工作流标识"
-                              rules={[{ required: true, message: '请输入工作流标识' }]}
+                              rules={[{ required: true, message: '请输入或选择工作流标识' }]}
                             >
-                              <Input placeholder="例如: deploy-sub-service" />
+                              <AutoComplete
+                                placeholder="选择或输入下游工作流标识"
+                                options={triggerableWorkflows}
+                              />
                             </Form.Item>
                           </Col>
                           <Col span={8}>
