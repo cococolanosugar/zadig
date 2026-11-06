@@ -19,6 +19,7 @@ import {
   Empty,
   Alert,
   Popconfirm,
+  Tooltip,
 } from 'antd';
 import {
   ClusterOutlined,
@@ -42,6 +43,8 @@ import {
   ApartmentOutlined,
   BugOutlined,
   ReloadOutlined,
+  StarOutlined,
+  StarFilled,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
@@ -80,6 +83,7 @@ interface EnvironmentItem {
   production?: boolean;
   update_time?: number;
   source?: string;
+  is_favorite?: boolean;
   // ShareEnv (自测模式 / 基准环境)
   share_env_enable?: boolean;
   share_env_is_base?: boolean;
@@ -334,7 +338,8 @@ export const EnvironmentsPage: React.FC = () => {
       const res = await http.get<EnvironmentItem[] | { data: EnvironmentItem[] }>(
         `/api/aslan/environment/environments?projectName=${activeProject}`
       );
-      const list = Array.isArray(res) ? res : ('data' in res && Array.isArray(res.data) ? res.data : []);
+      const rawList = Array.isArray(res) ? res : ('data' in res && Array.isArray(res.data) ? res.data : []);
+      const list = [...rawList].sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0));
       setEnvironments(list);
       if (deepLinkMode) {
         // 深链模式：环境名来自 ?envName=，不在路径段上；缺失时落到默认环境或安全列表态
@@ -358,6 +363,32 @@ export const EnvironmentsPage: React.FC = () => {
   useEffect(() => {
     loadEnvironments();
   }, [loadEnvironments]);
+
+  const toggleFavorite = async () => {
+    if (!activeProject || !currentEnv) return;
+    const isFav = Boolean(currentEnvObj?.is_favorite);
+    try {
+      if (isFav) {
+        await http.delete(
+          `/api/aslan/system/favorite/environment/${encodeURIComponent(currentEnv)}?projectName=${encodeURIComponent(activeProject)}`
+        );
+        feedback.message.success(`已取消收藏环境 ${currentEnv}`);
+      } else {
+        await http.post(
+          `/api/aslan/system/favorite/environment/${encodeURIComponent(currentEnv)}?projectName=${encodeURIComponent(activeProject)}`
+        );
+        feedback.message.success(`已收藏环境 ${currentEnv}`);
+      }
+      setEnvironments((prev) =>
+        prev
+          .map((e) => (e.name === currentEnv ? { ...e, is_favorite: !isFav } : e))
+          .sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0))
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '收藏状态更新失败';
+      feedback.message.error(msg);
+    }
+  };
 
   const loadWorkloadPods = useCallback(async () => {
     if (!activeProject || !currentEnv) return;
@@ -765,11 +796,32 @@ export const EnvironmentsPage: React.FC = () => {
                       else if (e.istio_grayscale_base_env) extraTag = ` [灰度: ${e.istio_grayscale_base_env}]`;
 
                       return {
-                        label: (e.alias ? `${e.alias} (${e.name})` : `${e.name} (${e.status || 'Running'})`) + extraTag,
+                        label: (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {e.is_favorite && <StarFilled style={{ color: '#faad14', fontSize: 12 }} />}
+                            {(e.alias ? `${e.alias} (${e.name})` : `${e.name} (${e.status || 'Running'})`) + extraTag}
+                          </span>
+                        ),
                         value: e.name,
                       };
                     })}
                   />
+                  <Tooltip title={currentEnvObj?.is_favorite ? '取消收藏环境' : '收藏环境 (置顶显示)'}>
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={
+                        currentEnvObj?.is_favorite ? (
+                          <StarFilled style={{ color: '#faad14', fontSize: 16 }} />
+                        ) : (
+                          <StarOutlined style={{ color: '#8c8c8c', fontSize: 16 }} />
+                        )
+                      }
+                      onClick={toggleFavorite}
+                      disabled={!currentEnv}
+                      style={{ padding: '0 4px' }}
+                    />
+                  </Tooltip>
                   {currentEnvObj?.production ? (
                     <Tag color="gold">生产</Tag>
                   ) : (
