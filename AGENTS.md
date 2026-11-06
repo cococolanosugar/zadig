@@ -192,3 +192,54 @@ Remove-Item "zadig-5.0.0.tgz" -Force
 * `manifest/deploy/helm/templates/`：Kubernetes 编排清单模板；
 * `manifest/deploy/helm/charts/`：子依赖 Chart（dex, gloo, minio）。
 
+---
+
+## 8. 官方前端构建产物获取与逆向真理源对账规范 (Official Portal Artifacts & Alignment)
+
+项目根目录下的 `zadig-ee-portal/` 目录为前端重构与逆向审计的**唯一静态真理源**。该目录必须与官方发布镜像中的构建产物保持 1:1 字节级完全对齐，严禁人工直接修改，只能通过官方 Docker 镜像拉取并导出覆盖。
+
+### 8.1 镜像元数据与定位规则
+* **镜像来源契约**：根据 `manifest/deploy/helm/values.yaml` 中声明的 `global.image.registry` 与 `frontend.image` 组合确定：
+  * **Registry**：`koderover.tencentcloudcr.com/koderover-public`
+  * **Repository**：`zadig-portal`
+  * **Tag**：`5.0.0-RELEASE.3-1020`
+  * **完整镜像名**：`koderover.tencentcloudcr.com/koderover-public/zadig-portal:5.0.0-RELEASE.3-1020`
+* **容器文档根目录**：镜像内 Nginx 配置挂载路径为 `/zadig-ee-portal/`（包含 `index.html`、`static/`、`workers/`），版本信息记录于 `/zadig-ee-portal/static/version.json`。
+
+### 8.2 获取、同步与纯净化流水线
+在升级或重新获取产物前，**必须先清空本地历史目录**，以彻底避免历史旧版本 Chunk 与新版本 Chunk 混杂形成孤儿文件。
+
+```bash
+# 1. 确保 Docker 守护进程运行并拉取最新官方镜像
+docker pull koderover.tencentcloudcr.com/koderover-public/zadig-portal:5.0.0-RELEASE.3-1020
+
+# 2. 清理本地 zadig-ee-portal 历史残留文件（防止新老 Chunk 混淆）
+# PowerShell:
+if (Test-Path "zadig-ee-portal") {
+    Get-ChildItem -Path "zadig-ee-portal" -Recurse | Remove-Item -Force -Recurse
+} else {
+    New-Item -ItemType Directory -Path "zadig-ee-portal" -Force
+}
+
+# 3. 创建临时无挂载容器并拷贝构建产物
+docker rm -f temp_zadig_portal 2>$null
+docker create --name temp_zadig_portal koderover.tencentcloudcr.com/koderover-public/zadig-portal:5.0.0-RELEASE.3-1020
+docker cp temp_zadig_portal:/zadig-ee-portal/. zadig-ee-portal/
+
+# 4. 彻底销毁临时容器
+docker rm -f temp_zadig_portal
+
+# 5. 核验版本信息元数据
+cat zadig-ee-portal/static/version.json
+```
+
+### 8.3 产物验收与一致性比对标准
+导出完成后，必须进行完整性核验：
+1. **文件与 Chunk 数量对账**：
+   * 静态资源总文件数精确为 **382** 个（包含 111 个 JS Chunk 及其 `.gz` 压缩包、77 个 CSS 样式文件、78 个字体/矢量图标）；
+2. **版本元数据对齐**：
+   * `static/version.json` 的 `COMMIT_ID` 与官方发布标签 Commit 完全一致（当前基准为 `92d17fd5b85cd580e1102404ea3e248c0788fae9`）；
+3. **SHA-256 零差异验收**：
+   * 若需校验本地目录与镜像产物一致性，可通过临时容器导出至独立临时目录，遍历所有 382 个文件进行 SHA-256 哈希比对，必须达到 0 缺失、0 冗余、0 mismatch。
+
+
