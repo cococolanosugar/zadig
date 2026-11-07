@@ -1106,9 +1106,12 @@ export const SystemConfigPage: React.FC = () => {
       setImageModalVisible(false);
       imageForm.resetFields();
       loadTabData('imgs');
-    } catch {
-      feedback.message.success('基础镜像已录入');
-      setImageModalVisible(false);
+    } catch (err: unknown) {
+      // R10 任务一: 失败绝不可伪造成功
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '基础镜像添加失败，请检查镜像名称与网络配置';
+      feedback.message.error(msg);
     }
   };
 
@@ -1117,8 +1120,12 @@ export const SystemConfigPage: React.FC = () => {
       await http.delete(`/api/aslan/system/basicImages/${id}`);
       feedback.message.success('基础镜像已删除');
       loadTabData('imgs');
-    } catch {
-      // Handled
+    } catch (err: unknown) {
+      // R10 任务一: 消除静默吞错
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '基础镜像删除失败';
+      feedback.message.error(msg);
     }
   };
 

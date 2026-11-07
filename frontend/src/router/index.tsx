@@ -1,5 +1,6 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams, useNavigate } from 'react-router-dom';
+import { Result, Button } from 'antd';
 import { useAuthStore } from '../stores/auth';
 import BasicLayout from '../layouts/BasicLayout';
 import ProjectDetailLayout from '../layouts/ProjectDetailLayout';
@@ -73,6 +74,25 @@ const MobileEnvDetailRedirect: React.FC = () => {
     return <Navigate to={`/v1/projects/detail/${projectName || ''}/envs/${envName}`} replace />;
   }
   return <Navigate to={`/v1/projects/detail/${projectName || ''}/envs`} replace />;
+};
+
+// R10 任务三: 诚实 404 页（不再将坏链静默吞回 dashboard）
+const NotFoundPage: React.FC = () => {
+  const navigate = useNavigate();
+  return (
+    <div style={{ padding: '60px 24px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <Result
+        status="404"
+        title="404"
+        subTitle="抱歉，您访问的页面不存在或已被移除"
+        extra={
+          <Button type="primary" onClick={() => navigate('/v1/dashboard')}>
+            返回工作台
+          </Button>
+        }
+      />
+    </div>
+  );
 };
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -313,15 +333,7 @@ export const AppRouter: React.FC = () => {
             }
           />
 
-          <Route
-            path="*"
-            element={
-              <div style={{ padding: 48, textAlign: 'center', background: '#fff', borderRadius: 8 }}>
-                <h3>该页面正在建设中...</h3>
-                <p style={{ color: '#8c8c8c' }}>请访问工作台或左侧导航栏中的可用功能模块。</p>
-              </div>
-            }
-          />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
 
         {/* Mobile Route Compatibility (Redirects to Desktop Portal Equivalents with Dynamic Param Interpolation) */}
@@ -339,14 +351,10 @@ export const AppRouter: React.FC = () => {
         <Route path="/mobile/projects/detail/:projectName/envs/detail/:envName" element={<MobileEnvDetailRedirect />} />
         <Route path="/mobile/*" element={<Navigate to="/v1/dashboard" replace />} />
 
-        <Route path="/404" element={
-          <div style={{ padding: 60, textAlign: 'center' }}>
-            <h2>404 Not Found</h2>
-            <p>请求的页面不存在。</p>
-          </div>
-        } />
+        <Route path="/404" element={<NotFoundPage />} />
         <Route path="/" element={<Navigate to="/v1/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/v1/dashboard" replace />} />
+        {/* R10 任务三: 根级未匹配保持诚实 404，不再把坏链吞回 dashboard */}
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>
   );

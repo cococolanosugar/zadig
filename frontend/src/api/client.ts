@@ -81,6 +81,25 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // R10 任务二: 403 权限受限提示（独立于通用错误通道，使用 notification 呈现）
+    if (status === 403) {
+      if (!error.config?.skipErrorHandler) {
+        feedback.notification.warning({
+          message: '权限受限 (403)',
+          description: '您当前的角色或权限不足以执行此操作，请联系系统管理员或项目管理员。',
+        });
+      }
+      return Promise.reject(error);
+    }
+
+    // R10 任务二: 网络断开/离线保护（ERR_NETWORK 或浏览器离线）
+    if (error.code === 'ERR_NETWORK' || (typeof window !== 'undefined' && !window.navigator.onLine)) {
+      if (!error.config?.skipErrorHandler) {
+        feedback.message.error('网络连接异常，请检查网络设置或后端微服务连接状态');
+      }
+      return Promise.reject(error);
+    }
+
     // Extract descriptive error message
     let errorMessage = error.message || '网络请求错误，请稍后重试';
     if (responseData) {

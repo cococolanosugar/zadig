@@ -278,7 +278,6 @@ export const DeliveryPage: React.FC = () => {
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [creatingRelease, setCreatingRelease] = useState(false);
   const [form] = Form.useForm();
-
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -345,32 +344,19 @@ export const DeliveryPage: React.FC = () => {
   // 批量发布到环境状态
   const [batchDeployModalOpen, setBatchDeployModalOpen] = useState(false);
   const [batchDeployEnv, setBatchDeployEnv] = useState<string>('');
-  const [batchDeploying, setBatchDeploying] = useState<boolean>(false);
   const [targetEnvs, setTargetEnvs] = useState<Array<{ label: string; value: string }>>([]);
 
-  const handleBatchDeploy = async () => {
+  const handleBatchDeploy = () => {
     if (!batchDeployEnv || !versionDetail) {
       feedback.message.warning('请选择目标部署环境');
       return;
     }
-    setBatchDeploying(true);
-    try {
-      await http.post(
-        `/api/aslan/delivery/releases/${encodeURIComponent(versionDetail.id || versionDetail.version)}/deploy?projectName=${encodeURIComponent(versionDetail.project_name)}&envName=${encodeURIComponent(batchDeployEnv)}`,
-        {},
-        { skipErrorHandler: true }
-      );
-      feedback.message.success(`已向环境 [${batchDeployEnv}] 成功下发版本 [${versionDetail.version}] 批量交付任务！`);
-      setBatchDeployModalOpen(false);
-    } catch (err: unknown) {
-      // R4-A3: 失败绝不可伪造成功提示
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        || (err instanceof Error ? err.message : '')
-        || '批量部署任务下发失败，请确认目标环境配置';
-      feedback.message.error(msg);
-    } finally {
-      setBatchDeploying(false);
-    }
+    // R10 任务四: 后端 aslan 未提供 /delivery/releases/:id/deploy 路由，
+    // 不再发起必然 404 的请求，改为明确引导用户经工作流/发布计划编排下发
+    feedback.message.info(
+      `交付版本 [${versionDetail.version}] 已就绪，请在「工作流」或「发布计划」中选定该版本编排下发到环境 [${batchDeployEnv}]。`
+    );
+    setBatchDeployModalOpen(false);
   };
 
   const handleCreateRelease = async () => {
@@ -1171,8 +1157,7 @@ export const DeliveryPage: React.FC = () => {
         open={batchDeployModalOpen}
         onOk={handleBatchDeploy}
         onCancel={() => setBatchDeployModalOpen(false)}
-        confirmLoading={batchDeploying}
-        okText="立即批量部署"
+        okText="确定"
         cancelText="取消"
         width={500}
       >
