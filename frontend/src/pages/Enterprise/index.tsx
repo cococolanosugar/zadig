@@ -41,6 +41,19 @@ export const EnterprisePage: React.FC = () => {
   const [themeForm] = Form.useForm();
   const [langForm] = Form.useForm();
   const [savingLang, setSavingLang] = useState(false);
+  const [themeInitialValues, setThemeInitialValues] = useState<Record<string, any>>({
+    theme_type: 'zadig',
+    theme_color: '#0066ff',
+    theme_background_color: '#f5f7fa',
+    theme_border_color: '#ebeef5',
+    font_gray: '#1f2d3d',
+    font_light_gray: '#8c8c8c',
+  });
+  const [langInitialValues, setLangInitialValues] = useState<Record<string, any>>({
+    defaultLang: 'zh-cn',
+    allowUserSwitch: true,
+    fallbackLang: 'zh-cn',
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -55,18 +68,22 @@ export const EnterprisePage: React.FC = () => {
         setTheme(thm);
         const tType = thm.theme_type || 'zadig';
         setThemeType(tType);
-        themeForm.setFieldsValue({
+        const nextThemeValues = {
           theme_type: tType,
           theme_color: thm.custom_theme?.theme_color || '#0066ff',
           theme_background_color: thm.custom_theme?.theme_background_color || '#f5f7fa',
           theme_border_color: thm.custom_theme?.theme_border_color || '#ebeef5',
           font_gray: thm.custom_theme?.font_gray || '#1f2d3d',
           font_light_gray: thm.custom_theme?.font_light_gray || '#8c8c8c',
-        });
+        };
+        setThemeInitialValues(nextThemeValues);
         const langVal = sysLang?.toLowerCase().includes('en') ? 'en' : 'zh-cn';
-        langForm.setFieldsValue({
+        const nextLangValues = {
           defaultLang: langVal,
-        });
+          allowUserSwitch: true,
+          fallbackLang: 'zh-cn',
+        };
+        setLangInitialValues(nextLangValues);
         localStorage.setItem('zadig_lang', langVal);
       } catch {
         // Handled
@@ -75,7 +92,15 @@ export const EnterprisePage: React.FC = () => {
       }
     };
     fetchData();
-  }, [themeForm, langForm]);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'theme') {
+      themeForm.setFieldsValue(themeInitialValues);
+    } else if (activeTab === 'language') {
+      langForm.setFieldsValue(langInitialValues);
+    }
+  }, [activeTab, themeInitialValues, langInitialValues, themeForm, langForm]);
 
   const handleSaveTheme = async () => {
     setSavingTheme(true);
@@ -252,7 +277,7 @@ export const EnterprisePage: React.FC = () => {
           </div>
         ) : activeTab === 'theme' ? (
           <div style={{ maxWidth: 720 }}>
-            <Form form={themeForm} layout="vertical">
+            <Form form={themeForm} layout="vertical" initialValues={themeInitialValues}>
               <Form.Item name="theme_type" label="主题类型">
                 <Select
                   options={[
@@ -325,11 +350,7 @@ export const EnterprisePage: React.FC = () => {
             <Form
               form={langForm}
               layout="vertical"
-              initialValues={{
-                defaultLang: 'zh-cn',
-                allowUserSwitch: true,
-                fallbackLang: 'zh-cn',
-              }}
+              initialValues={langInitialValues}
             >
               <Form.Item name="defaultLang" label="平台默认语言">
                 <Select
