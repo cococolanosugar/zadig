@@ -38,6 +38,7 @@ import {
   BarChartOutlined,
   FolderOpenOutlined,
   FileOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import { workflowApi, type WorkflowTaskExecution } from '../../api/workflow';
 import { useProjectStore } from '../../stores/project';
@@ -188,8 +189,9 @@ export const PipelineExecutionPage: React.FC = () => {
     try {
       const data = await workflowApi.getTestJunitReport(effWorkflowName, effTaskId, selectedJob, activeProject);
       setJunitData(data);
-    } catch {
+    } catch (err: unknown) {
       setJunitData(null);
+      feedback.message.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message || (err instanceof Error ? err.message : '') || '加载测试报告失败');
     } finally {
       setLoadingJunit(false);
     }
@@ -202,8 +204,9 @@ export const PipelineExecutionPage: React.FC = () => {
     try {
       const res = await workflowApi.getTestWorkspaceFiles(effWorkflowName, effTaskId, selectedJob, activeProject);
       setWorkspaceFiles(res.file_names || []);
-    } catch {
+    } catch (err: unknown) {
       setWorkspaceFiles([]);
+      feedback.message.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message || (err instanceof Error ? err.message : '') || '加载产物文件列表失败');
     } finally {
       setLoadingFiles(false);
     }
@@ -217,6 +220,41 @@ export const PipelineExecutionPage: React.FC = () => {
     }
     return null;
   }, [task, selectedJob]);
+
+  // R2-A2/A3：产物下载（Blob -> ObjectURL -> 浏览器下载）
+  const triggerBlobDownload = (res: unknown, fileName: string) => {
+    const blob = new Blob([res as BlobPart], { type: 'application/octet-stream' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadArtifact = async (fileName?: string) => {
+    if (!effWorkflowName || !effTaskId || !selectedJob) return;
+    try {
+      const res = await workflowApi.downloadArtifactFile(effWorkflowName, effTaskId, selectedJob);
+      triggerBlobDownload(res, fileName || `${selectedJob}-artifact.tar.gz`);
+      feedback.message.success('产物下载已开始');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '产物下载失败';
+      feedback.message.error(msg);
+    }
+  };
+
+  const handleDownloadBuildArtifact = async () => {
+    if (!effWorkflowName || !effTaskId || !selectedJob) return;
+    try {
+      const res = await workflowApi.downloadBuildJobArtifactFile(effWorkflowName, effTaskId, selectedJob);
+      triggerBlobDownload(res, `${selectedJob}-build-artifact.tar.gz`);
+      feedback.message.success('构建产物下载已开始');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '构建产物下载失败';
+      feedback.message.error(msg);
+    }
+  };
 
   const canEnableDebug = useMemo(() => {
     return ['waiting', 'running', 'wait_for_approval', 'pause'].includes(task?.status || '');
@@ -547,10 +585,9 @@ export const PipelineExecutionPage: React.FC = () => {
                 </Popconfirm>
               )}
               {task?.status === 'failed' && (
-                <Button
-                  icon={<SyncOutlined />}
-                  loading={retrying}
-                  onClick={async () => {
+                <Popconfirm
+                  title="确定从失败节点重新重试该任务吗？"
+                  onConfirm={async () => {
                     if (!effWorkflowName || !effTaskId) return;
                     setRetrying(true);
                     try {
@@ -564,9 +601,13 @@ export const PipelineExecutionPage: React.FC = () => {
                       setRetrying(false);
                     }
                   }}
+                  okText="确定"
+                  cancelText="取消"
                 >
-                  重试失败任务
-                </Button>
+                  <Button icon={<SyncOutlined />} loading={retrying}>
+                    重试失败任务
+                  </Button>
+                </Popconfirm>
               )}
               {(task?.status === 'passed' || task?.status === 'failed') && (
                 <Popconfirm
@@ -607,7 +648,8 @@ export const PipelineExecutionPage: React.FC = () => {
       </Card>
 
       {/* Approval Required Action */}
-      {pendingApproval && task?.status === 'waiting' && (
+      {/* 后端审批态为 wait_for_approval (config.StatusWaitingApprove)，waiting/running 为兼容历史轮询窗口 */}
+      {pendingApproval && (task?.status === 'wait_for_approval' || task?.status === 'waiting' || task?.status === 'running') && (
         <Card variant="borderless" style={{ borderRadius: 8, border: '1px solid #faad14' }}>
           <Alert
             title="该任务包含等待审批的节点"
@@ -716,6 +758,16 @@ export const PipelineExecutionPage: React.FC = () => {
                 >
                   测试产物
                 </Button>
+                {/* 构建类型 Job 支持产物包下载 (router.go:151 /build) */}
+                {selectedJobInfo?.type?.includes('build') && (
+                  <Button
+                    size="small"
+                    icon={<DownloadOutlined />}
+                    onClick={handleDownloadBuildArtifact}
+                  >
+                    构建产物
+                  </Button>
+                )}
               </>
             )}
             {selectedJobInfo && (
@@ -1030,12 +1082,21 @@ export const PipelineExecutionPage: React.FC = () => {
                     borderBottom: idx < workspaceFiles.length - 1 ? '1px solid #f5f5f5' : 'none',
                     display: 'flex',
                     alignItems: 'center',
+                    justifyContent: 'space-between',
                   }}
                 >
                   <Space orientation="horizontal" size={10}>
                     <FileOutlined style={{ color: '#1677ff' }} />
                     <Text strong>{fileName}</Text>
                   </Space>
+                  <Button
+                    size="small"
+                    type="link"
+                    icon={<DownloadOutlined />}
+                    onClick={() => handleDownloadArtifact(fileName)}
+                  >
+                    下载
+                  </Button>
                 </div>
               ))}
             </div>

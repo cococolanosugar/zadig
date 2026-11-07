@@ -262,7 +262,8 @@ export interface WorkflowTaskExecution {
   workflow_name: string;
   workflow_display_name?: string;
   project_name: string;
-  status: 'passed' | 'running' | 'failed' | 'waiting' | 'cancelled';
+  // wait_for_approval: 后端真实审批态 (config.StatusWaitingApprove)；pause: 手动执行挂起
+  status: 'passed' | 'running' | 'failed' | 'waiting' | 'cancelled' | 'wait_for_approval' | 'pause' | 'timeout';
   creator: string;
   create_time: number;
   start_time?: number;
@@ -1129,14 +1130,26 @@ export const workflowApi = {
   },
 
   /**
-   * 设置工作流断点暂停/继续控制
-   * POST /api/aslan/workflow/v4/workflowtask/breakpoint/:workflowName/:jobName/task/:taskId/:position
-   * (pkg/microservice/aslan/core/workflow/handler/router.go:143)
+   * 下载工作流任务产物 (通用)
+   * GET /api/aslan/workflow/v4/workflowtask/workflow/:workflowName/taskId/:taskId/job/:jobName
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:150)
    */
-  setWorkflowBreakpoint(workflowName: string, jobName: string, taskId: number | string, position: 'before' | 'after', projectName?: string) {
-    const query = projectName ? `?projectName=${encodeURIComponent(projectName)}` : '';
-    return http.post(
-      `/api/aslan/workflow/v4/workflowtask/breakpoint/${encodeURIComponent(workflowName)}/${encodeURIComponent(jobName)}/task/${taskId}/${position}${query}`
+  async downloadArtifactFile(workflowName: string, taskId: number | string, jobName: string) {
+    return http.get(
+      `/api/aslan/workflow/v4/workflowtask/workflow/${encodeURIComponent(workflowName)}/taskId/${taskId}/job/${encodeURIComponent(jobName)}`,
+      { responseType: 'blob' }
+    );
+  },
+
+  /**
+   * 下载工作流构建 Job 产物包
+   * GET /api/aslan/workflow/v4/workflowtask/workflow/:workflowName/taskId/:taskId/job/:jobName/build
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:151)
+   */
+  async downloadBuildJobArtifactFile(workflowName: string, taskId: number | string, jobName: string) {
+    return http.get(
+      `/api/aslan/workflow/v4/workflowtask/workflow/${encodeURIComponent(workflowName)}/taskId/${taskId}/job/${encodeURIComponent(jobName)}/build`,
+      { responseType: 'blob' }
     );
   },
 };

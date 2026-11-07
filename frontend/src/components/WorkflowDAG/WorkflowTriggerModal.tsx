@@ -154,10 +154,17 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
       onClose();
 
       const taskId = res?.task_id || 1;
-      navigate(`/v1/pipelines/${workflowName}/task/${taskId}`);
+      // R2-A8: 优先项目深链，保持项目上下文；无项目上下文时回落全局执行页
+      const targetUrl = projectName
+        ? `/projects/detail/${projectName}/pipelines/custom/${workflowName}/task/${taskId}`
+        : `/v1/pipelines/${workflowName}/task/${taskId}`;
+      navigate(targetUrl);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      if (msg) feedback.message.error(`触发失败: ${msg}`);
+      // R2-A9: 错误兜底 — 无 message 时也给出明确失败提示，不再静默
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '触发失败，请稍后重试';
+      feedback.message.error(`触发失败: ${msg}`);
     } finally {
       setLoading(false);
     }
