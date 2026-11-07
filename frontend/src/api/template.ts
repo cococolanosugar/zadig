@@ -71,86 +71,59 @@ export interface ScannerTemplateItem {
 export const templateApi = {
   /**
    * Get workflow templates (contains 20+ enterprise built-in templates)
+   * 注意：列表接口不再吞错 — 异常向上抛出，由调用方展示错误态与重试（对齐 P1-05 错误通道修复）
    */
   async getWorkflowTemplates(): Promise<WorkflowTemplateResponse> {
-    try {
-      const res = await http.get<WorkflowTemplateResponse>('/api/aslan/template/workflow');
-      return res || { workflow_templates: [] };
-    } catch {
-      return { workflow_templates: [] };
-    }
+    const res = await http.get<WorkflowTemplateResponse>('/api/aslan/template/workflow');
+    return res || { workflow_templates: [] };
   },
 
   /**
    * Get Kubernetes YAML templates
    */
   async getYamlTemplates(): Promise<{ system_variables?: unknown[]; yaml_template?: YamlTemplateItem[]; total?: number }> {
-    try {
-      const res = await http.get<{ system_variables?: unknown[]; yaml_template?: YamlTemplateItem[]; total?: number }>('/api/aslan/template/yaml');
-      return res || { yaml_template: [], total: 0 };
-    } catch {
-      return { yaml_template: [], total: 0 };
-    }
+    const res = await http.get<{ system_variables?: unknown[]; yaml_template?: YamlTemplateItem[]; total?: number }>('/api/aslan/template/yaml');
+    return res || { yaml_template: [], total: 0 };
   },
 
   /**
    * Get Dockerfile templates
    */
   async getDockerfileTemplates(): Promise<{ dockerfile_template?: DockerfileTemplateItem[]; total?: number }> {
-    try {
-      const res = await http.get<{ dockerfile_template?: DockerfileTemplateItem[]; total?: number }>('/api/aslan/template/dockerfile');
-      return res || { dockerfile_template: [], total: 0 };
-    } catch {
-      return { dockerfile_template: [], total: 0 };
-    }
+    const res = await http.get<{ dockerfile_template?: DockerfileTemplateItem[]; total?: number }>('/api/aslan/template/dockerfile');
+    return res || { dockerfile_template: [], total: 0 };
   },
 
   /**
    * Get Helm Chart templates
    */
   async getChartTemplates(): Promise<{ chartTemplates?: ChartTemplateItem[] }> {
-    try {
-      const res = await http.get<{ chartTemplates?: ChartTemplateItem[] }>('/api/aslan/template/charts');
-      return res || { chartTemplates: [] };
-    } catch {
-      return { chartTemplates: [] };
-    }
+    const res = await http.get<{ chartTemplates?: ChartTemplateItem[] }>('/api/aslan/template/charts');
+    return res || { chartTemplates: [] };
   },
 
   /**
    * Get Build templates
    */
   async getBuildTemplates(): Promise<{ build_templates?: BuildTemplateItem[] }> {
-    try {
-      const res = await http.get<{ build_templates?: BuildTemplateItem[] }>('/api/aslan/template/build');
-      return res || { build_templates: [] };
-    } catch {
-      return { build_templates: [] };
-    }
+    const res = await http.get<{ build_templates?: BuildTemplateItem[] }>('/api/aslan/template/build');
+    return res || { build_templates: [] };
   },
 
   /**
    * Get Scanner templates
    */
   async getScannerTemplates(): Promise<{ scanning_templates?: ScannerTemplateItem[] }> {
-    try {
-      const res = await http.get<{ scanning_templates?: ScannerTemplateItem[] }>('/api/aslan/template/scanning');
-      return res || { scanning_templates: [] };
-    } catch {
-      return { scanning_templates: [] };
-    }
+    const res = await http.get<{ scanning_templates?: ScannerTemplateItem[] }>('/api/aslan/template/scanning');
+    return res || { scanning_templates: [] };
   },
 
   /**
    * Get Release Plan templates
    */
   async getReleasePlanTemplates(): Promise<Array<{ id: string; name: string; description?: string; update_time?: number }>> {
-    try {
-      const res = await http.get<Array<{ id: string; name: string; description?: string; update_time?: number }>>('/api/aslan/template/release_plan');
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<Array<{ id: string; name: string; description?: string; update_time?: number }>>('/api/aslan/template/release_plan');
+    return Array.isArray(res) ? res : [];
   },
 
   /**
@@ -213,6 +186,48 @@ export default templateApi;
 // ---------- 模板 CRUD（对齐 templatestore 路由契约） ----------
 // YAML 模板：POST/PUT /template/yaml body {name, content, variable_yaml?}; DELETE /template/yaml/:id
 // Dockerfile 模板：POST/PUT /template/dockerfile body {name, content}; DELETE /template/dockerfile/:id
+// Chart 模板：POST/PUT /template/charts body {name, codeHostID, owner, namespace?, repo, path, branch}; DELETE /template/charts/:name
+//   （pkg/microservice/aslan/core/templatestore/handler/router.go:44-49, chart.go addChartArgs + fs.DownloadFromSourceArgs）
+// Build 模板：POST/PUT /template/build body = BuildTemplate{name, scripts, timeout, pre_build}; DELETE /template/build/:id
+//   （router.go:81-86；后端 AddBuildTemplate 解引用 PreBuild，payload 必须携带 pre_build）
+// Scanning 模板：POST/PUT /template/scanning body = ScanningTemplate{name, scanner_type, enable_scanner, ...}; DELETE /template/scanning/:id
+//   （router.go:102-106）
+export interface ChartTemplatePayload {
+  name: string;
+  codeHostID: number;
+  owner: string;
+  namespace?: string;
+  repo: string;
+  path: string;
+  branch: string;
+  repoLink?: string;
+}
+
+export interface BuildTemplatePayload {
+  name: string;
+  scripts: string;
+  timeout: number;
+  script_type?: string;
+  // 后端 AddBuildTemplate 无判空直接解引用 PreBuild（service/build.go:47），必须携带资源请求
+  pre_build: {
+    res_req: string;
+    res_req_spec?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface ScanningTemplatePayload {
+  name: string;
+  scanner_type: string;
+  enable_scanner: boolean;
+  parameter?: string;
+  scripts?: string;
+  sonar_id?: string;
+  image_id?: string;
+  [key: string]: unknown;
+}
+
 export const templateCrudApi = {
   async createYamlTemplate(payload: { name: string; content: string; variable_yaml?: string }): Promise<unknown> {
     return http.post('/api/aslan/template/yaml', payload, { skipErrorHandler: true });
@@ -231,5 +246,47 @@ export const templateCrudApi = {
   },
   async deleteDockerfileTemplate(id: string): Promise<unknown> {
     return http.delete(`/api/aslan/template/dockerfile/${id}`, { skipErrorHandler: true });
+  },
+
+  // ---------- Helm Chart 模板（router.go:40-49） ----------
+  async getChartTemplate(name: string): Promise<ChartTemplatePayload & { id?: string }> {
+    return http.get(`/api/aslan/template/charts/${encodeURIComponent(name)}`, { skipErrorHandler: true });
+  },
+  async createChartTemplate(payload: ChartTemplatePayload): Promise<unknown> {
+    return http.post('/api/aslan/template/charts', payload, { skipErrorHandler: true });
+  },
+  async updateChartTemplate(name: string, payload: ChartTemplatePayload): Promise<unknown> {
+    return http.put(`/api/aslan/template/charts/${encodeURIComponent(name)}`, payload, { skipErrorHandler: true });
+  },
+  async deleteChartTemplate(name: string): Promise<unknown> {
+    return http.delete(`/api/aslan/template/charts/${encodeURIComponent(name)}`, { skipErrorHandler: true });
+  },
+
+  // ---------- 构建模板（router.go:81-87） ----------
+  async getBuildTemplate(id: string): Promise<BuildTemplatePayload & { id?: string }> {
+    return http.get(`/api/aslan/template/build/${id}`, { skipErrorHandler: true });
+  },
+  async createBuildTemplate(payload: BuildTemplatePayload): Promise<unknown> {
+    return http.post('/api/aslan/template/build', payload, { skipErrorHandler: true });
+  },
+  async updateBuildTemplate(id: string, payload: BuildTemplatePayload): Promise<unknown> {
+    return http.put(`/api/aslan/template/build/${id}`, payload, { skipErrorHandler: true });
+  },
+  async deleteBuildTemplate(id: string): Promise<unknown> {
+    return http.delete(`/api/aslan/template/build/${id}`, { skipErrorHandler: true });
+  },
+
+  // ---------- 代码扫描模板（router.go:100-106） ----------
+  async getScanningTemplate(id: string): Promise<ScanningTemplatePayload & { id?: string }> {
+    return http.get(`/api/aslan/template/scanning/${id}`, { skipErrorHandler: true });
+  },
+  async createScanningTemplate(payload: ScanningTemplatePayload): Promise<unknown> {
+    return http.post('/api/aslan/template/scanning', payload, { skipErrorHandler: true });
+  },
+  async updateScanningTemplate(id: string, payload: ScanningTemplatePayload): Promise<unknown> {
+    return http.put(`/api/aslan/template/scanning/${id}`, payload, { skipErrorHandler: true });
+  },
+  async deleteScanningTemplate(id: string): Promise<unknown> {
+    return http.delete(`/api/aslan/template/scanning/${id}`, { skipErrorHandler: true });
   },
 };

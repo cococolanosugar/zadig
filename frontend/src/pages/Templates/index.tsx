@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Tabs, Table, Tag, Typography, Button, Space, Input, Row, Col, Spin, Empty, Badge, Drawer, Tooltip, Modal, Form, Popconfirm } from 'antd';
+import { Card, Tabs, Table, Tag, Typography, Button, Space, Input, Row, Col, Spin, Empty, Badge, Drawer, Tooltip, Modal, Form, Popconfirm, Alert, Select, InputNumber, Switch } from 'antd';
 import {
   AppstoreOutlined,
   BranchesOutlined,
@@ -10,6 +10,7 @@ import {
   SearchOutlined,
   PlusOutlined,
   RocketOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import templateApi, {
@@ -22,6 +23,7 @@ import templateApi, {
   type ScannerTemplateItem,
   templateCrudApi,
 } from '../../api/template';
+import { settingsApi } from '../../api/settings';
 import { feedback } from '../../utils/feedback';
 
 const { Title, Text, Paragraph } = Typography;
@@ -49,32 +51,135 @@ export const TemplateCenterPage: React.FC = () => {
   };
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
+  // 页面级错误通道：列表接口失败时展示错误与重试，不再以空数据误导（P1-05）
+  const [listError, setListError] = useState<string | null>(null);
   // 模板内容查看抽屉（对齐旧版「查看内容」）
   const [viewing, setViewing] = useState<{ title: string; content: string; variables?: Array<{ key: string; value?: string }> } | null>(null);
   const [viewingWorkflow, setViewingWorkflow] = useState<WorkflowTemplateItem | null>(null);
 
-  // 模板新建/编辑（YAML 与 Dockerfile 模板为内容型，可完整 CRUD；Chart/构建/扫描模板由各自模块维护）
+  // 模板新建/编辑：YAML/Dockerfile 内容型 + Chart 仓库源 + Build 脚本 + Scanning 配置（P1-02 写能力）
   const [editing, setEditing] = useState<
     | { kind: 'yaml'; id?: string; name: string; content: string }
     | { kind: 'dockerfile'; id?: string; name: string; content: string }
+    | { kind: 'chart'; id?: string; name: string }
+    | { kind: 'build'; id?: string; name: string }
+    | { kind: 'scanning'; id?: string; name: string }
     | null
   >(null);
   const [editingForm] = Form.useForm();
   const [editingSaving, setEditingSaving] = useState(false);
+  // Chart 模板编辑需代码源下拉（settingsApi.getCodeHosts）
+  const [codehostOptions, setCodehostOptions] = useState<Array<{ label: string; value: number }>>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const openCreateTemplate = () => {
-    const kind = activeTab === 'dockerfiles' ? 'dockerfile' : activeTab === 'k8s-yamls' ? 'yaml' : null;
+    const kindByTab: Record<string, 'yaml' | 'dockerfile' | 'chart' | 'build' | 'scanning'> = {
+      'k8s-yamls': 'yaml',
+      dockerfiles: 'dockerfile',
+      charts: 'chart',
+      builds: 'build',
+      scanners: 'scanning',
+    };
+    const kind = kindByTab[activeTab];
     if (!kind) {
-      feedback.message.info('该类模板由对应功能模块内创建（服务/构建/扫描配置保存后自动收录）');
+      feedback.message.info('该类模板由对应功能模块内创建（工作流/发布计划配置保存后自动收录）');
       return;
     }
-    setEditing({ kind, name: '', content: '' });
-    editingForm.setFieldsValue({ name: '', content: '' });
+    if (kind === 'build') {
+      editingForm.setFieldsValue({ name: '', scripts: '', timeout: 600 });
+    } else if (kind === 'scanning') {
+      editingForm.setFieldsValue({ name: '', scanner_type: 'sonar', enable_scanner: true, parameter: '', scripts: '' });
+    } else if (kind === 'chart') {
+      editingForm.setFieldsValue({ name: '', codeHostID: undefined, owner: '', namespace: '', repo: '', branch: '', path: '' });
+    } else {
+      editingForm.setFieldsValue({ name: '', content: '' });
+    }
+    setEditing({ kind, name: '' } as NonNullable<typeof editing>);
   };
 
-  const openEditTemplate = (kind: 'yaml' | 'dockerfile', id: string, name: string, content: string) => {
-    setEditing({ kind, id, name, content });
-    editingForm.setFieldsValue({ name, content });
+  const openEditTemplate = async (kind: 'yaml' | 'dockerfile' | 'chart' | 'build' | 'scanning', id: string | undefined, name: string, content?: string) => {
+    setEditing({ kind, id, name } as NonNullable<typeof editing>);
+    if (kind === 'yaml' || kind === 'dockerfile') {
+      editingForm.setFieldsValue({ name, content: content || '' });
+      return;
+    }
+    // Chart/Build/Scanning：先拉取详情回填（GET /template/charts/:name | /build/:id | /scanning/:id）
+    setDetailLoading(true);
+    try {
+      if (kind === 'chart' && name) {
+        const detail = await templateCrudApi.getChartTemplate(name);
+        editingForm.setFieldsValue({
+          name: detail.name || name,
+          codeHostID: (detail as { codeHostID?: number }).codeHostID,
+          owner: detail.owner || '',
+          namespace: detail.namespace || '',
+          repo: detail.repo || '',
+          branch: detail.branch || '',
+          path: detail.path || '',
+        });
+      } else if (kind === 'build' && id) {
+        const detail = await templateCrudApi.getBuildTemplate(id);
+        editingForm.setFieldsValue({
+          name: detail.name || name,
+          scripts: detail.scripts || '',
+          timeout: detail.timeout || 600,
+        });
+      } else if (kind === 'scanning' && id) {
+        const detail = await templateCrudApi.getScanningTemplate(id);
+        editingForm.setFieldsValue({
+          name: detail.name || name,
+          scanner_type: detail.scanner_type || 'sonar',
+          enable_scanner: detail.enable_scanner !== false,
+          parameter: detail.parameter || '',
+          scripts: detail.scripts || '',
+        });
+      }
+    } catch {
+      feedback.message.error('模板详情获取失败，请重试');
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  // Chart 模板编辑需要代码源下拉：首次打开时懒加载（/api/v1/codehosts）
+  useEffect(() => {
+    if (editing?.kind !== 'chart' || codehostOptions.length > 0) return;
+    settingsApi
+      .getCodeHosts()
+      .then((hosts) => {
+        setCodehostOptions(
+          (hosts || []).map((h) => ({ label: `${h.alias || h.name || h.type} (${h.address})`, value: h.id }))
+        );
+      })
+      .catch(() => {
+        feedback.message.warning('代码源列表获取失败，请先在「系统集成 → 代码源」中确认配置');
+      });
+  }, [editing?.kind, codehostOptions.length]);
+
+  // 刷新当前 tab 的模板列表（保存/删除后复用）
+  const reloadActiveTabList = async () => {
+    try {
+      if (activeTab === 'k8s-yamls') {
+        const res = await templateApi.getYamlTemplates();
+        setYamlTemplates(res.yaml_template || []);
+      } else if (activeTab === 'dockerfiles') {
+        const res = await templateApi.getDockerfileTemplates();
+        setDockerfileTemplates(res.dockerfile_template || []);
+      } else if (activeTab === 'charts') {
+        const res = await templateApi.getChartTemplates();
+        setChartTemplates(res.chartTemplates || []);
+      } else if (activeTab === 'builds') {
+        const res = await templateApi.getBuildTemplates();
+        setBuildTemplates(res.build_templates || []);
+      } else if (activeTab === 'scanners') {
+        const res = await templateApi.getScannerTemplates();
+        setScannerTemplates(res.scanning_templates || []);
+      } else if (activeTab === 'releasePlan') {
+        setReleasePlanTemplates(await templateApi.getReleasePlanTemplates());
+      }
+    } catch (err: unknown) {
+      setListError(err instanceof Error ? err.message : '模板列表加载失败');
+    }
   };
 
   const handleSaveEditing = async () => {
@@ -88,21 +193,71 @@ export const TemplateCenterPage: React.FC = () => {
         } else {
           await templateCrudApi.createYamlTemplate({ name: values.name, content: values.content });
         }
-      } else if (editing.id) {
-        await templateCrudApi.updateDockerfileTemplate(editing.id, { name: values.name, content: values.content });
-      } else {
-        await templateCrudApi.createDockerfileTemplate({ name: values.name, content: values.content });
+        feedback.message.success('模板已保存（保存时自动提取变量）');
+      } else if (editing.kind === 'dockerfile') {
+        if (editing.id) {
+          await templateCrudApi.updateDockerfileTemplate(editing.id, { name: values.name, content: values.content });
+        } else {
+          await templateCrudApi.createDockerfileTemplate({ name: values.name, content: values.content });
+        }
+        feedback.message.success('Dockerfile 模板已保存');
+      } else if (editing.kind === 'chart') {
+        const payload = {
+          name: values.name,
+          codeHostID: Number(values.codeHostID),
+          owner: values.owner,
+          namespace: values.namespace || values.owner,
+          repo: values.repo,
+          branch: values.branch,
+          path: values.path,
+        };
+        if (editing.id || editing.name) {
+          await templateCrudApi.updateChartTemplate(editing.name, payload);
+        } else {
+          await templateCrudApi.createChartTemplate(payload);
+        }
+        feedback.message.success('Helm Chart 模板已保存（已从代码源同步）');
+      } else if (editing.kind === 'build') {
+        const payload = {
+          name: values.name,
+          script_type: 'shell',
+          scripts: values.scripts,
+          timeout: Number(values.timeout) || 600,
+          // 后端 AddBuildTemplate 直接解引用 PreBuild（service/build.go:47），固定携带低配资源请求
+          pre_build: { res_req: 'low', res_req_spec: {} },
+        };
+        if (editing.id) {
+          await templateCrudApi.updateBuildTemplate(editing.id, payload);
+        } else {
+          await templateCrudApi.createBuildTemplate(payload);
+        }
+        feedback.message.success('构建模板已保存');
+      } else if (editing.kind === 'scanning') {
+        const payload = {
+          name: values.name,
+          scanner_type: values.scanner_type || 'sonar',
+          enable_scanner: Boolean(values.enable_scanner),
+          parameter: values.parameter || '',
+          scripts: values.scripts || '',
+          installs: [],
+        };
+        if (editing.id) {
+          await templateCrudApi.updateScanningTemplate(editing.id, payload);
+        } else {
+          await templateCrudApi.createScanningTemplate(payload);
+        }
+        feedback.message.success('代码扫描模板已保存');
       }
-      feedback.message.success('模板已保存（保存时自动提取变量）');
       setEditing(null);
-      // 重新拉取当前 tab 列表
-      if (editing.kind === 'yaml') {
-        templateApi.getYamlTemplates().then((res) => setYamlTemplates(res.yaml_template || []));
-      } else {
-        templateApi.getDockerfileTemplates().then((res) => setDockerfileTemplates(res.dockerfile_template || []));
-      }
+      await reloadActiveTabList();
       return true;
-    } catch {
+    } catch (err: unknown) {
+      // 校验错误（validateFields reject）与接口错误均在此归集，接口错误由全局拦截器提示
+      const isValidate = err && typeof err === 'object' && 'errorFields' in (err as Record<string, unknown>);
+      if (!isValidate) {
+        const msg = err instanceof Error ? err.message : '';
+        if (msg) feedback.message.error(msg);
+      }
       return false;
     } finally {
       setEditingSaving(false);
@@ -114,8 +269,8 @@ export const TemplateCenterPage: React.FC = () => {
       await templateCrudApi.deleteYamlTemplate(id);
       feedback.message.success('模板已删除');
       setYamlTemplates((prev) => prev.filter((t) => t.id !== id));
-    } catch {
-      feedback.message.error('删除失败（可能仍被服务引用）');
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : '删除失败（可能仍被服务引用）');
     }
   };
 
@@ -124,8 +279,38 @@ export const TemplateCenterPage: React.FC = () => {
       await templateCrudApi.deleteDockerfileTemplate(id);
       feedback.message.success('模板已删除');
       setDockerfileTemplates((prev) => prev.filter((t) => t.id !== id));
-    } catch {
-      feedback.message.error('删除失败（可能仍被服务引用）');
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : '删除失败（可能仍被服务引用）');
+    }
+  };
+
+  const handleDeleteChartTemplate = async (name: string) => {
+    try {
+      await templateCrudApi.deleteChartTemplate(name);
+      feedback.message.success('Chart 模板已删除');
+      setChartTemplates((prev) => prev.filter((t) => t.name !== name));
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : '删除失败（可能仍被服务引用）');
+    }
+  };
+
+  const handleDeleteBuildTemplate = async (id: string) => {
+    try {
+      await templateCrudApi.deleteBuildTemplate(id);
+      feedback.message.success('构建模板已删除');
+      setBuildTemplates((prev) => prev.filter((t) => t.id !== id));
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : '删除失败（可能仍被服务引用）');
+    }
+  };
+
+  const handleDeleteScanningTemplate = async (id: string) => {
+    try {
+      await templateCrudApi.deleteScanningTemplate(id);
+      feedback.message.success('扫描模板已删除');
+      setScannerTemplates((prev) => prev.filter((t) => t.id !== id));
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : '删除失败（可能仍被服务引用）');
     }
   };
 
@@ -142,6 +327,7 @@ export const TemplateCenterPage: React.FC = () => {
   useEffect(() => {
     const fetchTemplates = async () => {
       setLoading(true);
+      setListError(null);
       try {
         const [wfRes, yamlRes] = await Promise.all([
           templateApi.getWorkflowTemplates(),
@@ -158,8 +344,8 @@ export const TemplateCenterPage: React.FC = () => {
         }
 
         setYamlTemplates(yamlRes.yaml_template || []);
-      } catch {
-        // Handled
+      } catch (err: unknown) {
+        setListError(err instanceof Error ? err.message : '模板列表加载失败');
       } finally {
         setLoading(false);
       }
@@ -170,17 +356,33 @@ export const TemplateCenterPage: React.FC = () => {
 
   // Lazily load the active tab's template list
   useEffect(() => {
-    if (activeTab === 'dockerfiles') {
-      templateApi.getDockerfileTemplates().then((res) => setDockerfileTemplates(res.dockerfile_template || []));
-    } else if (activeTab === 'charts') {
-      templateApi.getChartTemplates().then((res) => setChartTemplates(res.chartTemplates || []));
-    } else if (activeTab === 'builds') {
-      templateApi.getBuildTemplates().then((res) => setBuildTemplates(res.build_templates || []));
-    } else if (activeTab === 'scanners') {
-      templateApi.getScannerTemplates().then((res) => setScannerTemplates(res.scanning_templates || []));
-    } else if (activeTab === 'releasePlan') {
-      templateApi.getReleasePlanTemplates().then((res) => setReleasePlanTemplates(res));
-    }
+    if (!['dockerfiles', 'charts', 'builds', 'scanners', 'releasePlan'].includes(activeTab)) return;
+    setListError(null);
+    setLoading(true);
+    const run = async () => {
+      try {
+        if (activeTab === 'dockerfiles') {
+          const res = await templateApi.getDockerfileTemplates();
+          setDockerfileTemplates(res.dockerfile_template || []);
+        } else if (activeTab === 'charts') {
+          const res = await templateApi.getChartTemplates();
+          setChartTemplates(res.chartTemplates || []);
+        } else if (activeTab === 'builds') {
+          const res = await templateApi.getBuildTemplates();
+          setBuildTemplates(res.build_templates || []);
+        } else if (activeTab === 'scanners') {
+          const res = await templateApi.getScannerTemplates();
+          setScannerTemplates(res.scanning_templates || []);
+        } else if (activeTab === 'releasePlan') {
+          setReleasePlanTemplates(await templateApi.getReleasePlanTemplates());
+        }
+      } catch (err: unknown) {
+        setListError(err instanceof Error ? err.message : '模板列表加载失败');
+      } finally {
+        setLoading(false);
+      }
+    };
+    run();
   }, [activeTab]);
 
   const filteredWorkflows = workflowTemplates.filter((item) => {
@@ -285,7 +487,7 @@ export const TemplateCenterPage: React.FC = () => {
             allowClear
             style={{ width: 240, borderRadius: 4 }}
           />
-          <Tooltip title="YAML / Dockerfile 模板可直接新建；其余模板由对应功能模块维护">
+          <Tooltip title="YAML / Dockerfile / Helm Chart / 构建 / 扫描 模板均可在此新建；工作流与发布计划模板由对应功能模块维护">
             <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 4 }} onClick={openCreateTemplate}>
               新建模板
             </Button>
@@ -309,6 +511,19 @@ export const TemplateCenterPage: React.FC = () => {
         {loading ? (
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
             <Spin size="large" />
+          </div>
+        ) : listError ? (
+          <div style={{ textAlign: 'center', padding: '48px 0' }}>
+            <Alert
+              type="error"
+              showIcon
+              title="模板列表加载失败"
+              description={listError}
+              style={{ maxWidth: 520, margin: '0 auto 16px', textAlign: 'left' }}
+            />
+            <Button icon={<ReloadOutlined />} onClick={reloadActiveTabList}>
+              重试
+            </Button>
           </div>
         ) : activeTab === 'workflows' ? (
           <div>
@@ -508,6 +723,24 @@ export const TemplateCenterPage: React.FC = () => {
                 ellipsis: true,
                 render: (t) => <Text type="secondary">{String(t || '-')}</Text>,
               },
+              {
+                title: '操作',
+                key: 'action',
+                render: (_, r: ChartTemplateItem) => (
+                  <Space size={0}>
+                    {r.name && (
+                      <>
+                        <Button type="link" onClick={() => openEditTemplate('chart', undefined, r.name as string)}>
+                          编辑
+                        </Button>
+                        <Popconfirm title={`确定删除 Chart 模板 [${r.name}]？`} onConfirm={() => handleDeleteChartTemplate(r.name as string)}>
+                          <Button type="link" danger>删除</Button>
+                        </Popconfirm>
+                      </>
+                    )}
+                  </Space>
+                ),
+              },
             ]}
             locale={{
               emptyText: <Empty description="暂无 Helm Chart 模板，请先在资源配置中接入 Chart 仓库" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
@@ -543,6 +776,24 @@ export const TemplateCenterPage: React.FC = () => {
                 dataIndex: 'update_time',
                 key: 'update_time',
                 render: (t: number | undefined) => (t ? new Date(t * 1000).toLocaleString() : '-'),
+              },
+              {
+                title: '操作',
+                key: 'action',
+                render: (_, r: BuildTemplateItem) => (
+                  <Space size={0}>
+                    {r.id && (
+                      <>
+                        <Button type="link" onClick={() => openEditTemplate('build', r.id as string, r.name)}>
+                          编辑
+                        </Button>
+                        <Popconfirm title={`确定删除构建模板 [${r.name}]？`} onConfirm={() => handleDeleteBuildTemplate(r.id as string)}>
+                          <Button type="link" danger>删除</Button>
+                        </Popconfirm>
+                      </>
+                    )}
+                  </Space>
+                ),
               },
             ]}
             locale={{
@@ -584,6 +835,24 @@ export const TemplateCenterPage: React.FC = () => {
                 dataIndex: 'update_time',
                 key: 'update_time',
                 render: (t: number | undefined) => (t ? new Date(t * 1000).toLocaleString() : '-'),
+              },
+              {
+                title: '操作',
+                key: 'action',
+                render: (_, r: ScannerTemplateItem) => (
+                  <Space size={0}>
+                    {r.id && (
+                      <>
+                        <Button type="link" onClick={() => openEditTemplate('scanning', r.id as string, r.name)}>
+                          编辑
+                        </Button>
+                        <Popconfirm title={`确定删除扫描模板 [${r.name}]？`} onConfirm={() => handleDeleteScanningTemplate(r.id as string)}>
+                          <Button type="link" danger>删除</Button>
+                        </Popconfirm>
+                      </>
+                    )}
+                  </Space>
+                ),
               },
             ]}
             locale={{
@@ -627,16 +896,18 @@ export const TemplateCenterPage: React.FC = () => {
         )}
       </Card>
 
-      {/* 模板新建/编辑（YAML / Dockerfile） */}
+      {/* 模板新建/编辑（YAML / Dockerfile / Chart / 构建 / 扫描） */}
       <Modal
-        title={`${editing?.id ? '编辑' : '新建'}${editing?.kind === 'dockerfile' ? 'Dockerfile' : 'K8s YAML'}模板`}
+        title={`${editing?.id || (editing?.kind === 'chart' && editing?.name) ? '编辑' : '新建'}${
+          editing?.kind === 'dockerfile' ? 'Dockerfile' : editing?.kind === 'chart' ? 'Helm Chart' : editing?.kind === 'build' ? '构建' : editing?.kind === 'scanning' ? '代码扫描' : 'K8s YAML'
+        }模板`}
         open={!!editing}
         onCancel={() => setEditing(null)}
         onOk={handleSaveEditing}
         okText="保存"
         cancelText="取消"
         width={720}
-        confirmLoading={editingSaving}
+        confirmLoading={editingSaving || detailLoading}
         destroyOnHidden
       >
         <Form form={editingForm} layout="vertical">
@@ -645,23 +916,133 @@ export const TemplateCenterPage: React.FC = () => {
             label="模板名称"
             rules={[{ required: true, message: '请输入模板名称' }]}
           >
-            <Input placeholder="模板唯一标识" />
+            <Input placeholder="模板唯一标识" disabled={editing?.kind === 'chart' && !!editing?.name} />
           </Form.Item>
-          <Form.Item
-            name="content"
-            label={editing?.kind === 'dockerfile' ? 'Dockerfile 内容' : 'K8s YAML 内容（{{.变量}} 语法自动提取为模板变量）'}
-            rules={[{ required: true, message: '请输入模板内容' }]}
-          >
-            <Input.TextArea
-              rows={16}
-              style={{ fontFamily: 'monospace', fontSize: 13 }}
-              placeholder={
-                editing?.kind === 'dockerfile'
-                  ? 'FROM {{.base_image}}\n...'
-                  : 'apiVersion: apps/v1\nkind: Deployment\n...\nspec:\n  template:\n    spec:\n      containers:\n      - image: {{.image_name}}'
-              }
-            />
-          </Form.Item>
+
+          {/* K8s YAML / Dockerfile 内容型模板 */}
+          {editing?.kind === 'yaml' || editing?.kind === 'dockerfile' ? (
+            <Form.Item
+              name="content"
+              label={editing?.kind === 'dockerfile' ? 'Dockerfile 内容' : 'K8s YAML 内容（{{.变量}} 语法自动提取为模板变量）'}
+              rules={[{ required: true, message: '请输入模板内容' }]}
+            >
+              <Input.TextArea
+                rows={16}
+                style={{ fontFamily: 'monospace', fontSize: 13 }}
+                placeholder={
+                  editing?.kind === 'dockerfile'
+                    ? 'FROM {{.base_image}}\n...'
+                    : 'apiVersion: apps/v1\nkind: Deployment\n...\nspec:\n  template:\n    spec:\n      containers:\n      - image: {{.image_name}}'
+                }
+              />
+            </Form.Item>
+          ) : null}
+
+          {/* Helm Chart 模板：代码仓库源（对齐后端 addChartArgs = name + fs.DownloadFromSourceArgs） */}
+          {editing?.kind === 'chart' ? (
+            <>
+              <Form.Item
+                name="codeHostID"
+                label="代码源"
+                rules={[{ required: true, message: '请选择代码源' }]}
+              >
+                <Select
+                  placeholder="请选择代码源（可在系统集成-代码源中添加）"
+                  options={codehostOptions}
+                  showSearch={{ optionFilterProp: 'label' }}
+                />
+              </Form.Item>
+              <Row gutter={12}>
+                <Col span={8}>
+                  <Form.Item name="owner" label="仓库所有者 / 组织" rules={[{ required: true, message: '请输入所有者' }]}>
+                    <Input placeholder="如 koderover" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="namespace" label="命名空间（可选）">
+                    <Input placeholder="默认同所有者" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="repo" label="仓库名" rules={[{ required: true, message: '请输入仓库名' }]}>
+                    <Input placeholder="如 helm-charts" />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item name="branch" label="分支" rules={[{ required: true, message: '请输入分支' }]}>
+                    <Input placeholder="如 master" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="path" label="Chart 子目录（相对仓库根）" rules={[{ required: true, message: '请输入 Chart 所在路径' }]}>
+                    <Input placeholder="如 charts/my-chart" />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </>
+          ) : null}
+
+          {/* 构建模板：脚本（对齐后端 BuildTemplate{name, scripts, timeout, pre_build}） */}
+          {editing?.kind === 'build' ? (
+            <>
+              <Form.Item
+                name="scripts"
+                label="构建脚本"
+                rules={[{ required: true, message: '请输入构建脚本' }]}
+              >
+                <Input.TextArea
+                  rows={12}
+                  style={{ fontFamily: 'monospace', fontSize: 13 }}
+                  placeholder={'#!/bin/bash\necho "build steps..."'}
+                />
+              </Form.Item>
+              <Form.Item
+                name="timeout"
+                label="超时时间（分钟）"
+                rules={[{ required: true, message: '请输入超时时间' }]}
+                initialValue={600}
+              >
+                <InputNumber min={1} max={1440} style={{ width: 200 }} />
+              </Form.Item>
+              <Alert
+                type="info"
+                showIcon
+                title="保存后默认使用低配资源请求（可在构建模块中按需调整），创建成功后即可在构建配置中引用该模板。"
+                style={{ borderRadius: 6 }}
+              />
+            </>
+          ) : null}
+
+          {/* 代码扫描模板：扫描类型与脚本（对齐后端 ScanningTemplate） */}
+          {editing?.kind === 'scanning' ? (
+            <>
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item name="scanner_type" label="扫描工具类型" rules={[{ required: true, message: '请选择扫描类型' }]}>
+                    <Select
+                      options={[
+                        { label: 'SonarQube', value: 'sonar' },
+                        { label: '其他（自定义脚本）', value: 'other' },
+                      ]}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="enable_scanner" label="启用 Sonar 扫描器" valuePropName="checked">
+                    <Switch />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item name="parameter" label="Sonar 参数（scanner_type 为 sonar 时生效）">
+                <Input.TextArea rows={3} style={{ fontFamily: 'monospace', fontSize: 13 }} placeholder="sonar.projectKey=my-project" />
+              </Form.Item>
+              <Form.Item name="scripts" label="扫描脚本（自定义脚本扫描时使用）">
+                <Input.TextArea rows={8} style={{ fontFamily: 'monospace', fontSize: 13 }} placeholder="#!/bin/bash" />
+              </Form.Item>
+            </>
+          ) : null}
         </Form>
       </Modal>
 

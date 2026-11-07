@@ -22,6 +22,8 @@ import {
   Drawer,
   Popconfirm,
   Descriptions,
+  Row,
+  Col,
 } from 'antd';
 import {
   MailOutlined,
@@ -73,6 +75,7 @@ import systemConfigApi, {
 } from '../../../api/systemConfig';
 import emailApi from '../../../api/email';
 import settingsApi, { type ProxyConfig } from '../../../api/settings';
+import workflowApi from '../../../api/workflow';
 import { feedback } from '../../../utils/feedback';
 
 const { Title, Text } = Typography;
@@ -116,6 +119,20 @@ interface PluginItem {
   description?: string;
   enabled?: boolean;
   type?: string;
+}
+
+// 工作流插件仓库（models.PluginRepo：plugin_repo.go:23-35）
+interface PluginRepoItem {
+  id?: string;
+  repo_name?: string;
+  repo_url?: string;
+  repo_owner?: string;
+  repo_namespace?: string;
+  branch?: string;
+  codehost_id?: number;
+  update_time?: number;
+  plugin_templates?: unknown[];
+  [key: string]: unknown;
 }
 
 interface OperationLogItem {
@@ -194,6 +211,12 @@ export const SystemConfigPage: React.FC = () => {
   const [basicImages, setBasicImages] = useState<BasicImageItem[]>([]);
   const [packages, setPackages] = useState<InstallPackageItem[]>([]);
   const [plugins, setPlugins] = useState<PluginItem[]>([]);
+  // 工作流插件仓库（P0-04 社区能力：/api/aslan/workflow/plugin CRUD）
+  const [pluginRepos, setPluginRepos] = useState<PluginRepoItem[]>([]);
+  const [repoModalOpen, setRepoModalOpen] = useState(false);
+  const [repoForm] = Form.useForm();
+  const [repoSaving, setRepoSaving] = useState(false);
+  const [codehostOptions, setCodehostOptions] = useState<Array<{ label: string; value: number }>>([]);
   const [operationLogs, setOperationLogs] = useState<OperationLogItem[]>([]);
 
   // Modals
@@ -282,6 +305,13 @@ export const SystemConfigPage: React.FC = () => {
       } else if (tab === 'plugins') {
         const res = await http.get<PluginItem[]>('/api/aslan/system/plugin', { skipErrorHandler: true });
         setPlugins(Array.isArray(res) ? res : []);
+        // 工作流插件仓库（自定义 repo 列表，失败不阻塞 idp 插件主列表）
+        try {
+          const repos = await workflowApi.listPluginRepositories();
+          setPluginRepos(Array.isArray(repos) ? repos : []);
+        } catch {
+          setPluginRepos([]);
+        }
       } else if (tab === 'announcement') {
         const annRes = await http.get<AnnouncementItem[] | { announcements?: AnnouncementItem[] }>(
           '/api/aslan/system/announcement/all',
@@ -697,6 +727,80 @@ export const SystemConfigPage: React.FC = () => {
         } catch (err: unknown) {
           const msg =
             (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '删除外部链接失败';
+          feedback.message.error(msg);
+        }
+      },
+    });
+  };
+
+  // ---------- 工作流插件仓库（P0-04 社区能力） ----------
+  const reloadPluginRepos = async () => {
+    try {
+      const repos = await workflowApi.listPluginRepositories();
+      setPluginRepos(Array.isArray(repos) ? repos : []);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '插件仓库列表获取失败';
+      feedback.message.error(msg);
+    }
+  };
+
+  const handleOpenCreateRepo = async () => {
+    repoForm.resetFields();
+    setRepoModalOpen(true);
+    if (codehostOptions.length === 0) {
+      try {
+        const hosts = await settingsApi.getCodeHosts();
+        setCodehostOptions((hosts || []).map((h) => ({ label: `${h.alias || h.name || h.type} (${h.address})`, value: h.id })));
+      } catch {
+        feedback.message.warning('代码源列表获取失败，请确认「系统集成 → 代码源」配置');
+      }
+    }
+  };
+
+  const handleSaveRepo = async () => {
+    try {
+      const values = await repoForm.validateFields();
+      setRepoSaving(true);
+      // 后端 UpsertUserPluginRepository 强校验 codehost_id 并现场 git clone（service/workflow/plugin_repo.go）
+      await workflowApi.upsertUserPluginRepo({
+        codehost_id: Number(values.codehost_id),
+        repo_owner: values.repo_owner,
+        repo_namespace: values.repo_namespace || values.repo_owner,
+        repo_name: values.repo_name,
+        repo_url: values.repo_url,
+        branch: values.branch,
+      });
+      feedback.message.success('插件仓库已保存（后端已同步拉取插件清单）');
+      setRepoModalOpen(false);
+      await reloadPluginRepos();
+    } catch (err: unknown) {
+      const isValidate = err && typeof err === 'object' && 'errorFields' in (err as Record<string, unknown>);
+      if (!isValidate) {
+        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+          || (err instanceof Error ? err.message : '保存插件仓库失败');
+        feedback.message.error(msg);
+      }
+    } finally {
+      setRepoSaving(false);
+    }
+  };
+
+  const handleDeleteRepo = (repo: PluginRepoItem) => {
+    if (!repo.id) return;
+    const repoId = repo.id;
+    feedback.modal?.confirm({
+      title: `确认删除插件仓库 "${repo.repo_name || repoId}"？`,
+      content: '删除后该仓库提供的自定义工作流插件将不可用，操作不可恢复。',
+      okText: '确认删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await workflowApi.deletePluginRepo(repoId);
+          feedback.message.success('插件仓库已删除');
+          await reloadPluginRepos();
+        } catch (err: unknown) {
+          const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '删除插件仓库失败';
           feedback.message.error(msg);
         }
       },
@@ -1494,6 +1598,61 @@ export const SystemConfigPage: React.FC = () => {
                 emptyText: <Empty description="暂无插件接入" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
               }}
             />
+
+            {/* 工作流插件仓库（P0-04 社区能力：/api/aslan/workflow/plugin） */}
+            <Card
+              size="small"
+              variant="outlined"
+              style={{ marginTop: 24, borderRadius: 8 }}
+              styles={{ body: { padding: 16 } }}
+              title={
+                <Space orientation="horizontal" size={8}>
+                  <ApiOutlined />
+                  <Text strong>工作流插件仓库</Text>
+                  <Text type="secondary" style={{ fontSize: 12 }}>接入 Git 仓库中的自定义工作流插件，保存时后端自动拉取插件清单</Text>
+                </Space>
+              }
+              extra={
+                <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreateRepo}>
+                  添加插件仓库
+                </Button>
+              }
+            >
+              <Table
+                dataSource={pluginRepos}
+                rowKey={(r) => r.id || r.repo_name || String(Math.random())}
+                size="small"
+                columns={[
+                  { title: '仓库名称', dataIndex: 'repo_name', key: 'repo_name', render: (n) => <Text strong>{n || '-'}</Text> },
+                  { title: 'Git 地址', dataIndex: 'repo_url', key: 'repo_url', ellipsis: true, render: (u) => <Text code style={{ fontSize: 12 }}>{u || '-'}</Text> },
+                  { title: '所有者', dataIndex: 'repo_owner', key: 'repo_owner', render: (o) => o || '-' },
+                  { title: '分支', dataIndex: 'branch', key: 'branch', render: (b) => (b ? <Tag color="blue">{b}</Tag> : '-') },
+                  {
+                    title: '插件数',
+                    key: 'templates',
+                    render: (_, r: PluginRepoItem) => Array.isArray(r.plugin_templates) ? r.plugin_templates.length : 0,
+                  },
+                  {
+                    title: '更新时间',
+                    dataIndex: 'update_time',
+                    key: 'update_time',
+                    render: (t: number | undefined) => (t ? new Date(t * 1000).toLocaleString() : '-'),
+                  },
+                  {
+                    title: '操作',
+                    key: 'action',
+                    render: (_, r: PluginRepoItem) => (
+                      <Popconfirm title={`确定删除插件仓库 [${r.repo_name || r.id}]？`} onConfirm={() => handleDeleteRepo(r)}>
+                        <Button type="link" danger icon={<DeleteOutlined />}>删除</Button>
+                      </Popconfirm>
+                    ),
+                  },
+                ]}
+                locale={{
+                  emptyText: <Empty description="暂无自定义插件仓库" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+                }}
+              />
+            </Card>
           </div>
         ) : activeTab === 'announcement' ? (
           <div>
@@ -3186,6 +3345,54 @@ export const SystemConfigPage: React.FC = () => {
           {JSON.stringify(navigationItems, null, 2)}
         </pre>
       </Drawer>
+
+      {/* 添加工作流插件仓库 Modal（后端保存时现场 git clone，codehost 必选） */}
+      <Modal
+        title="添加插件仓库"
+        open={repoModalOpen}
+        onCancel={() => setRepoModalOpen(false)}
+        onOk={handleSaveRepo}
+        okText="保存并同步"
+        cancelText="取消"
+        confirmLoading={repoSaving}
+        width={560}
+        destroyOnHidden
+      >
+        <Alert
+          type="info"
+          showIcon
+          title="保存时后端将从代码源拉取该仓库并解析插件清单，请确保代码源凭据有效、仓库中包含工作流插件定义。"
+          style={{ marginBottom: 16, borderRadius: 6 }}
+        />
+        <Form form={repoForm} layout="vertical">
+          <Form.Item name="codehost_id" label="代码源" rules={[{ required: true, message: '请选择代码源' }]}>
+            <Select placeholder="请选择代码源" options={codehostOptions} showSearch={{ optionFilterProp: 'label' }} />
+          </Form.Item>
+          <Form.Item name="repo_url" label="Git Repo URL" rules={[{ required: true, message: '请输入仓库 Git 地址' }]}>
+            <Input placeholder="如 https://github.com/org/plugin-repo.git" />
+          </Form.Item>
+          <Row gutter={12}>
+            <Col span={8}>
+              <Form.Item name="repo_owner" label="仓库所有者" rules={[{ required: true, message: '请输入所有者' }]}>
+                <Input placeholder="如 koderover" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="repo_name" label="仓库名称" rules={[{ required: true, message: '请输入仓库名称' }]}>
+                <Input placeholder="如 zadig-plugins" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="branch" label="默认分支" rules={[{ required: true, message: '请输入分支' }]}>
+                <Input placeholder="如 main" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="repo_namespace" label="命名空间（可选，默认同所有者）">
+            <Input placeholder="组织或个人空间名" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

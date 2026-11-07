@@ -792,6 +792,108 @@ export const environmentApi = {
     if (args.valuesPath) q.set('valuesPath', args.valuesPath);
     return http.get(`/api/aslan/environment/rendersets/yamlContent?${q.toString()}`);
   },
+
+  // ---------- SAE 变更单（P0-02 专属交互；后端 handler/environment.go:3585-3830，需 SAE License 特性） ----------
+
+  /**
+   * SAE 环境列表（变更单抽屉选择环境）
+   * GET /api/aslan/environment/environments/sae?projectName=
+   */
+  async listSAEEnvs(projectName: string): Promise<EnvironmentItem[]> {
+    const res = await http.get<EnvironmentItem[]>(
+      `/api/aslan/environment/environments/sae?projectName=${encodeURIComponent(projectName)}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * SAE 环境下的应用列表（用于变更单抽屉选择 appID）
+   * GET /api/aslan/environment/environments/sae/app
+   */
+  async listSAEApps(opts: { projectName: string; envName?: string; production?: boolean; appName?: string; currentPage?: number; pageSize?: number }): Promise<SAEAppItem[]> {
+    const q = new URLSearchParams();
+    q.set('projectName', opts.projectName);
+    if (opts.envName) q.set('envName', opts.envName);
+    if (opts.production !== undefined) q.set('production', String(opts.production));
+    if (opts.appName) q.set('appName', opts.appName);
+    q.set('currentPage', String(opts.currentPage ?? 1));
+    q.set('pageSize', String(opts.pageSize ?? 50));
+    const res = await http.get<SAEAppItem[] | { apps?: SAEAppItem[] } | { change_order_list?: SAEAppItem[] } | { applications?: SAEAppItem[] }>(
+      `/api/aslan/environment/environments/sae/app?${q.toString()}`,
+      { skipErrorHandler: true }
+    );
+    // 阿里云透传结构防御性归一
+    if (Array.isArray(res)) return res;
+    const rec = (res || {}) as Record<string, unknown>;
+    for (const key of ['apps', 'application_list', 'applications', 'data']) {
+      const val = rec[key];
+      if (Array.isArray(val)) return val as SAEAppItem[];
+    }
+    return [];
+  },
+
+  /**
+   * SAE 变更单列表
+   * GET /api/aslan/environment/environments/sae/:envName/app/:appID/changeOrder
+   */
+  async listSAEChangeOrders(envName: string, appID: string, opts: SAEChangeOrderOptions = {}): Promise<SAEChangeOrderListResponse> {
+    const q = new URLSearchParams();
+    if (opts.projectName) q.set('projectName', opts.projectName);
+    if (opts.production !== undefined) q.set('production', String(opts.production));
+    q.set('page', String(opts.page ?? 1));
+    q.set('per_page', String(opts.per_page ?? 20));
+    const res = await http.get<SAEChangeOrderListResponse>(
+      `/api/aslan/environment/environments/sae/${encodeURIComponent(envName)}/app/${encodeURIComponent(appID)}/changeOrder?${q.toString()}`,
+      { skipErrorHandler: true }
+    );
+    return res || {};
+  },
+
+  /**
+   * SAE 变更单详情
+   * GET /api/aslan/environment/environments/sae/:envName/app/:appID/changeOrder/:orderID
+   */
+  async getSAEChangeOrderDetail(envName: string, appID: string, orderID: string, opts: SAEChangeOrderOptions = {}): Promise<SAEChangeOrderItem> {
+    const q = new URLSearchParams();
+    if (opts.projectName) q.set('projectName', opts.projectName);
+    if (opts.production !== undefined) q.set('production', String(opts.production));
+    const res = await http.get<SAEChangeOrderItem>(
+      `/api/aslan/environment/environments/sae/${encodeURIComponent(envName)}/app/${encodeURIComponent(appID)}/changeOrder/${encodeURIComponent(orderID)}?${q.toString()}`,
+      { skipErrorHandler: true }
+    );
+    return res || {};
+  },
+
+  /**
+   * 中止 SAE 变更单
+   * POST /api/aslan/environment/environments/sae/:envName/app/:appID/changeOrder/:orderID/abort
+   */
+  async abortSAEChangeOrder(envName: string, appID: string, orderID: string, opts: SAEChangeOrderOptions = {}): Promise<unknown> {
+    const q = new URLSearchParams();
+    if (opts.projectName) q.set('projectName', opts.projectName);
+    if (opts.production !== undefined) q.set('production', String(opts.production));
+    return http.post(
+      `/api/aslan/environment/environments/sae/${encodeURIComponent(envName)}/app/${encodeURIComponent(appID)}/changeOrder/${encodeURIComponent(orderID)}/abort?${q.toString()}`,
+      {},
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * 回滚 SAE 变更单
+   * POST /api/aslan/environment/environments/sae/:envName/app/:appID/changeOrder/:orderID/rollback
+   */
+  async rollbackSAEChangeOrder(envName: string, appID: string, orderID: string, opts: SAEChangeOrderOptions = {}): Promise<unknown> {
+    const q = new URLSearchParams();
+    if (opts.projectName) q.set('projectName', opts.projectName);
+    if (opts.production !== undefined) q.set('production', String(opts.production));
+    return http.post(
+      `/api/aslan/environment/environments/sae/${encodeURIComponent(envName)}/app/${encodeURIComponent(appID)}/changeOrder/${encodeURIComponent(orderID)}/rollback?${q.toString()}`,
+      {},
+      { skipErrorHandler: true }
+    );
+  },
 };
 
 export interface EnvSvcRevision {
@@ -1032,6 +1134,46 @@ export interface CanaryDeploymentServiceInfo {
     deployment_name: string;
     container_names: string[];
   };
+}
+
+// ---------- SAE（阿里云 Serverless AppEngine）变更单契约 ----------
+// 后端路由：pkg/microservice/aslan/core/environment/handler/router.go:232,237-245
+//   GET  /environments/sae/app?projectName=&envName=&production=          → ListSAEApps
+//   GET  /environments/sae/:name/app/:appID/changeOrder?projectName=&production=&page=&per_page=  → ListSAEChangeOrder
+//   GET  /environments/sae/:name/app/:appID/changeOrder/:orderID?projectName=                     → GetSAEChangeOrder
+//   POST /environments/sae/:name/app/:appID/changeOrder/:orderID/abort?projectName=&production=  → AbortSAEChangeOrder
+//   POST /environments/sae/:name/app/:appID/changeOrder/:orderID/rollback?projectName=&production= → RollbackSAEChangeOrder
+// 响应为阿里云 SAE OpenAPI 原样透传（converter.ConvertToSnakeCase），字段做防御性消费
+
+export interface SAEChangeOrderItem {
+  change_order_id?: string;
+  change_order_name?: string;
+  co_type?: string;
+  // 阿里云状态: 0 准备 / 1 执行中 / 2 成功 / 3 失败（其余按原值展示）
+  status?: number | string;
+  create_user_id?: string;
+  create_time?: number | string;
+  desc?: string;
+  [key: string]: unknown;
+}
+
+export interface SAEChangeOrderListResponse {
+  change_order_list?: SAEChangeOrderItem[];
+  total_count?: number;
+  [key: string]: unknown;
+}
+
+export interface SAEAppItem {
+  app_id?: string;
+  app_name?: string;
+  [key: string]: unknown;
+}
+
+export interface SAEChangeOrderOptions {
+  projectName?: string;
+  production?: boolean;
+  page?: number;
+  per_page?: number;
 }
 
 export interface EnvironmentItem {

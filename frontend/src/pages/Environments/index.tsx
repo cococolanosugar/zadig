@@ -66,6 +66,7 @@ import IstioGrayscaleDrawer from './IstioGrayscaleDrawer';
 import SleepCronModal from './SleepCronModal';
 import EnvRevisionDrawer from './EnvRevisionDrawer';
 import CollaborationTopologyDrawer from './CollaborationTopologyDrawer';
+import SAEChangeOrderDrawer from './SAEChangeOrderDrawer';
 import LogViewer from '../../components/Terminal/LogViewer';
 import http from '../../api/client';
 import environmentApi from '../../api/environment';
@@ -126,7 +127,7 @@ export const EnvironmentsPage: React.FC = () => {
   //  podDetail      → 环境页 Pod 区并按 ?podName= 打开该 Pod 实时日志（无参时提示选择 Pod）
   //  resourceDetail → 自动打开「资源视图」抽屉（EnvWorkloadsDrawer）
   //  externalConfig → 自动打开「配置管理」抽屉（EnvConfigDrawer）
-  // 真实环境名经 ?envName= 传入；无参数时落在安全列表态并明确提示
+  //  sae/changeOrder → 打开「SAE 变更单」抽屉（P0-02；真实环境名经 ?envName= 传入，抽屉内支持选择）
   const DEEP_LINK_MODES = ['podDetail', 'resourceDetail', 'externalConfig'];
   const deepLinkMode = DEEP_LINK_MODES.includes(routeEnvName || '')
     ? (routeEnvName as string)
@@ -139,6 +140,7 @@ export const EnvironmentsPage: React.FC = () => {
     : '';
   const deepLinkEnv = searchParams.get('envName') || '';
   const deepLinkPod = searchParams.get('podName') || '';
+  const isSAEChangeOrderRoute = location.pathname.includes('/sae/changeOrder');
 
   const [environments, setEnvironments] = useState<EnvironmentItem[]>([]);
   const [currentEnv, setCurrentEnv] = useState<string>(deepLinkMode ? '' : routeEnvName || '');
@@ -1325,6 +1327,14 @@ export const EnvironmentsPage: React.FC = () => {
           production={environments.find((e) => e.name === currentEnv)?.production ?? false}
         />
       )}
+
+      {/* SAE 变更单抽屉 (P0-02 专属交互；深链 /sae/changeOrder* 自动打开，?envName= 携带环境) */}
+      <SAEChangeOrderDrawer
+        open={isSAEChangeOrderRoute}
+        projectName={activeProject || undefined}
+        envName={deepLinkEnv || undefined}
+        onClose={() => navigate(activeProject ? `/v1/projects/detail/${activeProject}/envs` : '/v1/envs')}
+      />
 
       {/* 节点列表抽屉 (对齐旧版 kube GET /nodes 节点健康与 IP) */}
       <EnvNodesDrawer
