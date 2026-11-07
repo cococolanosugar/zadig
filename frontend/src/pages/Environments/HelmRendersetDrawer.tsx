@@ -25,6 +25,7 @@ import {
   CodeOutlined,
   GlobalOutlined,
   SettingOutlined,
+  SaveOutlined,
 } from '@ant-design/icons';
 import environmentApi, {
   type HelmRenderChartArg,
@@ -71,6 +72,7 @@ export const HelmRendersetDrawer: React.FC<HelmRendersetDrawerProps> = ({
   // Tab 2: Default Values
   const [defaultValLoading, setDefaultValLoading] = useState(false);
   const [defaultValuesYaml, setDefaultValuesYaml] = useState<string>('');
+  const [savingDefaultValues, setSavingDefaultValues] = useState(false);
 
   // Tab 3: Global Variables
   const [gvLoading, setGvLoading] = useState(false);
@@ -118,6 +120,22 @@ export const HelmRendersetDrawer: React.FC<HelmRendersetDrawerProps> = ({
       setDefaultValLoading(false);
     }
   }, [projectName, envName, production]);
+
+  // 保存环境基准默认配置 (R3-A3：PUT /environments/:name/helm/default-values)
+  const handleSaveDefaultValues = async () => {
+    if (!projectName || !envName) return;
+    setSavingDefaultValues(true);
+    try {
+      await environmentApi.updateHelmProductDefaultValues(projectName, envName, defaultValuesYaml, production);
+      message.success('环境默认配置已保存，后续部署/同步将以此为基准 Values');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '默认配置保存失败');
+      message.error(msg);
+    } finally {
+      setSavingDefaultValues(false);
+    }
+  };
 
   // 3. 加载全局变量 (Global Variables)
   const fetchGlobalVariables = useCallback(async () => {
@@ -390,15 +408,26 @@ export const HelmRendersetDrawer: React.FC<HelmRendersetDrawerProps> = ({
                   variant="borderless"
                   style={{ border: '1px solid #f0f0f0' }}
                   extra={
-                    <Button
-                      size="small"
-                      onClick={() => {
-                        navigator.clipboard.writeText(defaultValuesYaml);
-                        message.success('默认配置已复制');
-                      }}
-                    >
-                      复制配置
-                    </Button>
+                    <Space>
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          navigator.clipboard.writeText(defaultValuesYaml);
+                          message.success('默认配置已复制');
+                        }}
+                      >
+                        复制配置
+                      </Button>
+                      <Button
+                        type="primary"
+                        size="small"
+                        icon={<SaveOutlined />}
+                        loading={savingDefaultValues}
+                        onClick={handleSaveDefaultValues}
+                      >
+                        保存配置
+                      </Button>
+                    </Space>
                   }
                 >
                   {defaultValLoading ? (
@@ -412,7 +441,8 @@ export const HelmRendersetDrawer: React.FC<HelmRendersetDrawerProps> = ({
                         language="yaml"
                         theme="light"
                         value={defaultValuesYaml}
-                        options={{ readOnly: true, minimap: { enabled: false } }}
+                        onChange={(val) => setDefaultValuesYaml(val ?? '')}
+                        options={{ readOnly: false, minimap: { enabled: false } }}
                       />
                     </div>
                   )}

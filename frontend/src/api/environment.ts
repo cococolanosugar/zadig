@@ -405,23 +405,6 @@ export const environmentApi = {
   },
 
   /**
-   * Check if target cluster supports ephemeral debug containers (pods/ephemeralcontainers).
-   * GET /api/aslan/cluster/check/ephemeralcontainers?projectName=&envName=
-   * 后端: pkg/microservice/aslan/core/multicluster/handler/router.go:67
-   */
-  async checkEphemeralContainers(projectName: string, envName: string): Promise<boolean> {
-    try {
-      const res = await http.get<boolean>(
-        `/api/aslan/cluster/check/ephemeralcontainers?projectName=${encodeURIComponent(projectName)}&envName=${encodeURIComponent(envName)}`,
-        { skipErrorHandler: true }
-      );
-      return Boolean(res);
-    } catch {
-      return false;
-    }
-  },
-
-  /**
    * Check whether workloads have K8s Services.
    * GET /api/aslan/environment/environments/:name/check/workloads/k8services?projectName=&production=
    * pkg/microservice/aslan/core/environment/handler/router.go:190
@@ -776,21 +759,76 @@ export const environmentApi = {
     );
   },
 
+  // ---------- 环境运维闭环（R3 第 03 轮） ----------
+
   /**
-   * 获取 Helm 服务 Values YAML 内容预览
-   * GET /api/aslan/environment/rendersets/yamlContent?codehostID=&repoLink=&valuesPath=
-   * (pkg/microservice/aslan/core/environment/handler/router.go:260)
+   * 更新环境自动回收天数
+   * PUT /api/aslan/environment/environments/:name/envRecycle?projectName=&recycleDay=
+   * (pkg/microservice/aslan/core/environment/handler/router.go:149)
    */
-  getYamlContent(args: {
-    codehostID?: number | string;
-    repoLink?: string;
-    valuesPath: string;
-  }): Promise<{ content?: string; yaml_content?: string }> {
-    const q = new URLSearchParams();
-    if (args.codehostID) q.set('codehostID', String(args.codehostID));
-    if (args.repoLink) q.set('repoLink', args.repoLink);
-    if (args.valuesPath) q.set('valuesPath', args.valuesPath);
-    return http.get(`/api/aslan/environment/rendersets/yamlContent?${q.toString()}`);
+  async updateProductRecycleDay(projectName: string, envName: string, recycleDay: number) {
+    return http.put(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/envRecycle?projectName=${encodeURIComponent(projectName)}&recycleDay=${recycleDay}`,
+      {},
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * 同步环境资源配置到集群
+   * PUT /api/aslan/environment/envcfgs/:name/:type/:objectName/sync?projectName=&production=
+   * (pkg/microservice/aslan/core/environment/handler/router.go:51)
+   */
+  async syncEnvResource(projectName: string, envName: string, type: string, objectName: string, production?: boolean) {
+    const prodParam = production ? '&production=true' : '';
+    return http.put(
+      `/api/aslan/environment/envcfgs/${encodeURIComponent(envName)}/${encodeURIComponent(type)}/${encodeURIComponent(objectName)}/sync?projectName=${encodeURIComponent(projectName)}${prodParam}`,
+      {},
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * 更新 Helm 环境基准默认配置 (Default Values)
+   * PUT /api/aslan/environment/environments/:name/helm/default-values?projectName=&production=
+   * (pkg/microservice/aslan/core/environment/handler/router.go:154)
+   */
+  async updateHelmProductDefaultValues(projectName: string, envName: string, defaultValues: string, production?: boolean) {
+    const prodParam = production ? '&production=true' : '';
+    return http.put(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/helm/default-values?projectName=${encodeURIComponent(projectName)}${prodParam}`,
+      { defaultValues },
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * 调整服务工作负载副本数
+   * POST /api/aslan/environment/environments/:name/services/:serviceName/scaleNew?projectName=&type=&name=&number=
+   * (pkg/microservice/aslan/core/environment/handler/router.go:186)
+   */
+  async scaleNewService(projectName: string, envName: string, serviceName: string, workloadType: string, workloadName: string, replicas: number) {
+    return http.post(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/services/${encodeURIComponent(serviceName)}/scaleNew?projectName=${encodeURIComponent(projectName)}&type=${encodeURIComponent(workloadType)}&name=${encodeURIComponent(workloadName)}&number=${replicas}`,
+      {},
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * 重启指定工作负载
+   * POST /api/aslan/environment/environments/:name/services/:serviceName/restartNew?projectName=&type=&name=&production=
+   * (pkg/microservice/aslan/core/environment/handler/router.go:185)
+   */
+  async restartWorkload(projectName: string, envName: string, serviceName: string, workloadType?: string, workloadName?: string, production?: boolean) {
+    const wType = workloadType || 'Deployment';
+    const wName = workloadName || serviceName;
+    const prodParam = production ? '&production=true' : '';
+    return http.post(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}/services/${encodeURIComponent(serviceName)}/restartNew?projectName=${encodeURIComponent(projectName)}&type=${encodeURIComponent(wType)}&name=${encodeURIComponent(wName)}${prodParam}`,
+      {},
+      { skipErrorHandler: true }
+    );
   },
 
   // ---------- SAE 变更单（P0-02 专属交互；后端 handler/environment.go:3585-3830，需 SAE License 特性） ----------
@@ -1186,6 +1224,8 @@ export interface EnvironmentItem {
   production?: boolean;
   update_time?: number;
   source?: string;
+  // 自动回收天数（models.Product.RecycleDay，0 = 永不回收）
+  recycle_day?: number;
   // ShareEnv (自测模式 / 基准环境)
   share_env_enable?: boolean;
   share_env_is_base?: boolean;

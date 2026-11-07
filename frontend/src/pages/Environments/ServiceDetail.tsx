@@ -312,14 +312,14 @@ export const ServiceDetailPage: React.FC = () => {
     if (!envName || !projectName || !serviceName) return;
     setRestarting(true);
     try {
-      await http.post(
-        `/api/aslan/environment/environments/${envName}/services/${encodeURIComponent(serviceName)}/restart?projectName=${projectName}`
-      );
+      // R3-A5: 对齐后端 restartNew（RestartWorkload），指定 Deployment 工作负载类型
+      await environmentApi.restartWorkload(projectName, envName, serviceName, 'Deployment', serviceName);
       feedback.message.success(`服务 [${serviceName}] 已重启，资源将按最新配置同步`);
       fetchPods();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data
-        ?.description || (err as { message?: string })?.message || '重启失败';
+        ?.description || (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '重启失败');
       feedback.message.error(msg);
     } finally {
       setRestarting(false);

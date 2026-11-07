@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Drawer, Tabs, Table, Typography, Tag, Empty, Space, Button, Tooltip, Modal, Input, Popconfirm } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { ReloadOutlined, PlusOutlined, EditOutlined, DeleteOutlined, HistoryOutlined } from '@ant-design/icons';
+import { ReloadOutlined, PlusOutlined, EditOutlined, DeleteOutlined, HistoryOutlined, SyncOutlined } from '@ant-design/icons';
 import http from '../../api/client';
+import environmentApi from '../../api/environment';
 import { feedback } from '../../utils/feedback';
 import EnvConfigHistoryModal from './EnvConfigHistoryModal';
 
@@ -127,6 +128,24 @@ export const EnvConfigDrawer: React.FC<{
       yaml: currentYaml,
     });
     setHistoryModalOpen(true);
+  };
+
+  // 同步环境资源配置到集群（R3-A2：PUT /envcfgs/:name/:type/:objectName/sync）
+  const [syncingCfg, setSyncingCfg] = useState<string | null>(null);
+  const handleSyncCfg = async (objectName: string, tabType: ResourceTab) => {
+    if (!envName || !projectName) return;
+    setSyncingCfg(`${tabType}-${objectName}`);
+    try {
+      await environmentApi.syncEnvResource(projectName, envName, TAB_TYPE_MAP[tabType], objectName, production);
+      feedback.message.success(`配置 [${objectName}] 已同步到集群`);
+      loadResources();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '同步到集群失败');
+      feedback.message.error(msg);
+    } finally {
+      setSyncingCfg(null);
+    }
   };
 
   const openCfgCreate = () => {
@@ -255,6 +274,16 @@ export const EnvConfigDrawer: React.FC<{
           >
             历史
           </Button>
+          <Tooltip title="同步到集群">
+            <Button
+              type="link"
+              size="small"
+              icon={<SyncOutlined spin={syncingCfg === `configmap-${r.cm_name}`} />}
+              onClick={() => handleSyncCfg(r.cm_name, 'configmap')}
+            >
+              同步
+            </Button>
+          </Tooltip>
           <Button type="link" size="small" icon={<EditOutlined />} disabled={r.auto_sync === true} onClick={() => openCfgEdit(r.cm_name, r.yaml_data)}>
             编辑
           </Button>
@@ -290,6 +319,16 @@ export const EnvConfigDrawer: React.FC<{
           >
             历史
           </Button>
+          <Tooltip title="同步到集群">
+            <Button
+              type="link"
+              size="small"
+              icon={<SyncOutlined spin={syncingCfg === `secret-${r.secret_name}`} />}
+              onClick={() => handleSyncCfg(r.secret_name, 'secret')}
+            >
+              同步
+            </Button>
+          </Tooltip>
           <Popconfirm title={`确定删除 Secret [${r.secret_name}]？`} onConfirm={() => handleDeleteCfg(r.secret_name, 'secret')} okText="删除" cancelText="取消">
             <Button type="link" size="small" danger icon={<DeleteOutlined />}>
               删除
@@ -324,6 +363,16 @@ export const EnvConfigDrawer: React.FC<{
           >
             历史
           </Button>
+          <Tooltip title="同步到集群">
+            <Button
+              type="link"
+              size="small"
+              icon={<SyncOutlined spin={syncingCfg === `ingress-${r.ingress_name}`} />}
+              onClick={() => handleSyncCfg(r.ingress_name, 'ingress')}
+            >
+              同步
+            </Button>
+          </Tooltip>
           <Popconfirm title={`确定删除 Ingress [${r.ingress_name}]？`} onConfirm={() => handleDeleteCfg(r.ingress_name, 'ingress')} okText="删除" cancelText="取消">
             <Button type="link" size="small" danger icon={<DeleteOutlined />}>
               删除
@@ -358,6 +407,16 @@ export const EnvConfigDrawer: React.FC<{
           >
             历史
           </Button>
+          <Tooltip title="同步到集群">
+            <Button
+              type="link"
+              size="small"
+              icon={<SyncOutlined spin={syncingCfg === `pvc-${r.pvc_name}`} />}
+              onClick={() => handleSyncCfg(r.pvc_name, 'pvc')}
+            >
+              同步
+            </Button>
+          </Tooltip>
           <Popconfirm title={`确定删除 PVC [${r.pvc_name}]？`} onConfirm={() => handleDeleteCfg(r.pvc_name, 'pvc')} okText="删除" cancelText="取消">
             <Button type="link" size="small" danger icon={<DeleteOutlined />}>
               删除

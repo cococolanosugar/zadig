@@ -93,6 +93,8 @@ interface EnvironmentItem {
   istio_grayscale_enable?: boolean;
   istio_grayscale_is_base?: boolean;
   istio_grayscale_base_env?: string;
+  // 自动回收天数（models.Product.RecycleDay，0 = 永不回收；R3-A1）
+  recycle_day?: number;
 }
 
 // GET /api/aslan/environment/kube/pods — kube.ListPodsInfoRespone
@@ -158,8 +160,16 @@ export const EnvironmentsPage: React.FC = () => {
 
   // Scale modal state
   const [scaleModalVisible, setScaleModalVisible] = useState(false);
+
+  // 环境回收策略（R3-A1：PUT /environments/:name/envRecycle）
+  const [recycleModalOpen, setRecycleModalOpen] = useState(false);
+  const [recycleDay, setRecycleDay] = useState<number>(7);
+  const [recycleSaving, setRecycleSaving] = useState(false);
   const [replicas, setReplicas] = useState<number>(1);
   const [scaling, setScaling] = useState(false);
+  // 副本伸缩目标泛化（R3-A4：不再硬编码 Deployment 与 pods[0] 正则剥离）
+  const [scaleWorkloadType, setScaleWorkloadType] = useState<string>('Deployment');
+  const [scaleServiceName, setScaleServiceName] = useState<string>('');
 
   // Env config management drawer (configmaps/secrets/ingresses/pvcs)
   const [configDrawerOpen, setConfigDrawerOpen] = useState(false);
@@ -606,19 +616,52 @@ export const EnvironmentsPage: React.FC = () => {
 
   const handleScaleReplicas = async () => {
     if (!activeProject || !currentEnv) return;
+    if (!scaleServiceName) {
+      feedback.message.warning('请填写要伸缩的服务/工作负载名称');
+      return;
+    }
     setScaling(true);
     try {
-      const targetService = (pods[0]?.name || '').replace(/-[a-z0-9]+(-[a-z0-9]+)?$/, '') || pods[0]?.name || '';
-      await http.post(
-        `/api/aslan/environment/environments/${currentEnv}/services/${targetService}/scaleNew?projectName=${activeProject}&type=Deployment&name=${targetService}&number=${replicas}`
+      // R3-A4: 泛化调用封装接口，工作负载类型与名称由用户显式指定
+      await environmentApi.scaleNewService(
+        activeProject,
+        currentEnv,
+        scaleServiceName,
+        scaleWorkloadType,
+        scaleServiceName,
+        replicas
       );
-      feedback.message.success(`工作负载 [${targetService}] 副本数已调整为 ${replicas}`);
+      feedback.message.success(`工作负载 [${scaleServiceName}] 副本数已调整为 ${replicas}`);
       setScaleModalVisible(false);
       loadWorkloadPods();
-    } catch (err: any) {
-      feedback.message.error(err?.message || '调整工作负载副本数失败，请检查集群连接与权限');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '调整工作负载副本数失败，请检查集群连接与权限');
+      feedback.message.error(msg);
     } finally {
       setScaling(false);
+    }
+  };
+
+  // 环境回收策略保存（R3-A1）
+  const handleSaveRecycleDay = async () => {
+    if (!activeProject || !currentEnv) return;
+    setRecycleSaving(true);
+    try {
+      await environmentApi.updateProductRecycleDay(activeProject, currentEnv, recycleDay);
+      feedback.message.success(
+        recycleDay > 0
+          ? `环境 [${currentEnv}] 自动回收策略已更新为 ${recycleDay} 天`
+          : `环境 [${currentEnv}] 已设置为永不自动回收`
+      );
+      setRecycleModalOpen(false);
+      loadEnvironments();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '环境回收策略保存失败');
+      feedback.message.error(msg);
+    } finally {
+      setRecycleSaving(false);
     }
   };
 
@@ -865,7 +908,12 @@ export const EnvironmentsPage: React.FC = () => {
               </Button>
               <Button
                 icon={<ControlOutlined />}
-                onClick={() => setScaleModalVisible(true)}
+                onClick={() => {
+                  // 以首个 Pod 名推导预填（用户可改），不再作为静默硬编码
+                  const derived = (pods[0]?.name || '').replace(/-[a-z0-9]+(-[a-z0-9]+)?$/, '') || pods[0]?.name || '';
+                  setScaleServiceName(derived);
+                  setScaleModalVisible(true);
+                }}
                 disabled={!currentEnv}
               >
                 副本伸缩
@@ -963,6 +1011,17 @@ export const EnvironmentsPage: React.FC = () => {
                         setAliasModalOpen(true);
                       },
                       disabled: !currentEnv,
+                    },
+                    {
+                      key: 'recycle',
+                      icon: <HistoryOutlined />,
+                      label: '环境回收策略',
+                      disabled: !currentEnv,
+                      onClick: () => {
+                        const env = environments.find((e) => e.name === currentEnv);
+                        setRecycleDay(env?.recycle_day ?? 7);
+                        setRecycleModalOpen(true);
+                      },
                     },
                     {
                       key: 'revision',
@@ -1278,7 +1337,7 @@ export const EnvironmentsPage: React.FC = () => {
         />
       </Drawer>
 
-      {/* Scale Replicas Modal */}
+      {/* Scale Replicas Modal (R3-A4: 工作负载类型与服务名显式指定) */}
       <Modal
         title="调整服务工作负载副本数 (Replica Scale)"
         open={scaleModalVisible}
@@ -1289,6 +1348,23 @@ export const EnvironmentsPage: React.FC = () => {
         cancelText="取消"
       >
         <div style={{ padding: '16px 0' }}>
+          <Text style={{ display: 'block', marginBottom: 12 }}>工作负载类型:</Text>
+          <Select
+            style={{ width: '100%', marginBottom: 16 }}
+            value={scaleWorkloadType}
+            onChange={setScaleWorkloadType}
+            options={[
+              { label: 'Deployment', value: 'Deployment' },
+              { label: 'StatefulSet', value: 'StatefulSet' },
+            ]}
+          />
+          <Text style={{ display: 'block', marginBottom: 12 }}>服务 / 工作负载名称:</Text>
+          <Input
+            placeholder="例如: my-service（对应 Deployment/StatefulSet 名称）"
+            value={scaleServiceName}
+            onChange={(e) => setScaleServiceName(e.target.value)}
+            style={{ marginBottom: 16 }}
+          />
           <Text style={{ display: 'block', marginBottom: 12 }}>期望 Pod 实例数量:</Text>
           <InputNumber
             min={0}
@@ -1297,6 +1373,33 @@ export const EnvironmentsPage: React.FC = () => {
             onChange={(val) => setReplicas(val || 1)}
             style={{ width: '100%' }}
           />
+        </div>
+      </Modal>
+
+      {/* 环境回收策略 Modal (R3-A1) */}
+      <Modal
+        title="环境回收策略 (Auto Recycle)"
+        open={recycleModalOpen}
+        onOk={handleSaveRecycleDay}
+        onCancel={() => setRecycleModalOpen(false)}
+        confirmLoading={recycleSaving}
+        okText="保存策略"
+        cancelText="取消"
+      >
+        <div style={{ padding: '16px 0' }}>
+          <Text style={{ display: 'block', marginBottom: 12 }}>
+            环境 [ {currentEnv} ] 自动回收天数:
+          </Text>
+          <InputNumber
+            min={0}
+            max={365}
+            value={recycleDay}
+            onChange={(val) => setRecycleDay(val ?? 0)}
+            style={{ width: '100%' }}
+          />
+          <Text type="secondary" style={{ display: 'block', marginTop: 12, fontSize: 12 }}>
+            输入 0 表示永不自动回收；环境超过设定天数未活跃将被自动回收释放资源。
+          </Text>
         </div>
       </Modal>
       {/* Env Config Management Drawer (ConfigMap/Secret/Ingress/PVC) */}
