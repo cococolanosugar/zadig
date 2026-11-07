@@ -315,7 +315,8 @@ export const SystemIntegrationPage: React.FC = () => {
       } else {
         const url = await buildListUrl(currentCategory);
         await http.get(url, { skipErrorHandler: true });
-        feedback.message.success('连通性测试通过！服务响应状态正常');
+        // R11 任务七: 通用列表探活仅证明 Zadig 服务端接口可达，不代表第三方外部凭据已验证
+        feedback.message.success('系统集成服务接口可达');
       }
     } catch (err: any) {
       feedback.message.error(err?.response?.data?.description || err?.message || '连通性测试失败，请检查服务地址或凭据配置');

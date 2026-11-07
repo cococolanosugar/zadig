@@ -1,163 +1,65 @@
-import React, { useEffect, useState } from 'react';
-import { Card, Table, Typography, Button, Space, Tag, Empty, Spin, Tabs } from 'antd';
-import {
-  ShopOutlined,
-  PlusOutlined,
-  TeamOutlined,
-  HistoryOutlined,
-  DashboardOutlined,
-  FileTextOutlined,
-  UserAddOutlined,
-} from '@ant-design/icons';
-import http from '../../api/client';
+import React from 'react';
+import { Typography, Button, Space } from 'antd';
+import { RocketOutlined, ScheduleOutlined, BranchesOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 
 const { Title, Text } = Typography;
 
+/**
+ * 客户交付管理 (Plutus) — 社区版占位引导页
+ * R11 任务一: 后端 /api/plutus/* 系列接口属企业闭源实现（社区仓库仅提供 health/license/organization），
+ * 移除幻觉路由调用与无响应按钮/假版本号，改为规范 Result 引导容器。
+ */
 export const PlutusDeliveryPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('customer');
-  const [loading, setLoading] = useState(false);
-  const [products, setProducts] = useState<unknown[]>([]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const res = await http.get<unknown[]>('/api/plutus/products', { skipErrorHandler: true });
-        setProducts(Array.isArray(res) ? res : []);
-      } catch {
-        setProducts([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
-
-  const tabItems = [
-    {
-      key: 'customer',
-      label: (
-        <span>
-          <TeamOutlined /> 客户管理
-        </span>
-      ),
-    },
-    {
-      key: 'version',
-      label: (
-        <span>
-          <HistoryOutlined /> 版本管理
-        </span>
-      ),
-    },
-    {
-      key: 'board',
-      label: (
-        <span>
-          <DashboardOutlined /> 交付看板
-        </span>
-      ),
-    },
-    {
-      key: 'auditlog',
-      label: (
-        <span>
-          <FileTextOutlined /> 操作日志
-        </span>
-      ),
-    },
-  ];
+  const navigate = useNavigate();
 
   return (
     <div style={{ padding: '20px 24px', backgroundColor: '#f5f7fa', minHeight: 'calc(100vh - 110px)' }}>
+      <div style={{ marginBottom: 16 }}>
+        <Title level={4} style={{ margin: 0, fontWeight: 600, color: '#1f2d3d' }}>
+          端到端价值流交付中心 (Plutus) 规划中
+        </Title>
+        <Text type="secondary" style={{ fontSize: 13 }}>
+          面向私有化部署、多客户定制化分发的企业级交付管控能力，当前社区版本暂未开放该模块
+        </Text>
+      </div>
+
       <div
         style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 16,
-          flexWrap: 'wrap',
-          gap: 12,
+          background: '#fff',
+          borderRadius: 8,
+          border: '1px solid #ebeef5',
+          padding: '48px 24px',
         }}
       >
-        <div>
-          <Title level={4} style={{ margin: 0, fontWeight: 600, color: '#1f2d3d' }}>
-            客户交付管理 (Plutus)
+        <div style={{ maxWidth: 720, margin: '0 auto', textAlign: 'center' }}>
+          <RocketOutlined style={{ fontSize: 56, color: '#0066ff', marginBottom: 24 }} />
+          <Title level={4} style={{ marginBottom: 12 }}>
+            社区版已支持完整的端到端交付能力
           </Title>
-          <Text type="secondary" style={{ fontSize: 13 }}>
-            针对私有化部署、多客户定制化分发交付的企业级全流程管控平台
+          <Text type="secondary" style={{ display: 'block', marginBottom: 32, fontSize: 14 }}>
+            您可以通过工作流编排自动化构建、部署与测试交付，通过发布计划管理版本发布窗口与里程碑，
+            并在多环境中完成灰度与正式交付。
           </Text>
+          <Space size={16} wrap style={{ justifyContent: 'center' }}>
+            <Button
+              type="primary"
+              size="large"
+              icon={<BranchesOutlined />}
+              onClick={() => navigate('/v1/releaseWorkflow')}
+            >
+              前往工作流交付
+            </Button>
+            <Button
+              size="large"
+              icon={<ScheduleOutlined />}
+              onClick={() => navigate('/v1/releasePlan')}
+            >
+              前往发布计划
+            </Button>
+          </Space>
         </div>
-
-        <Space orientation="horizontal" size={12}>
-          <Button type="primary" icon={<UserAddOutlined />} style={{ borderRadius: 4 }}>
-            新建客户
-          </Button>
-          <Button icon={<PlusOutlined />} style={{ borderRadius: 4 }}>
-            新建交付项目
-          </Button>
-        </Space>
       </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <Tabs activeKey={activeTab} items={tabItems} onChange={(k) => setActiveTab(k)} />
-      </div>
-
-      <Card
-        variant="borderless"
-        style={{ borderRadius: 8, border: '1px solid #ebeef5' }}
-        styles={{ body: { padding: '16px 24px' } }}
-      >
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '60px 0' }}>
-            <Spin size="large" />
-          </div>
-        ) : (
-          <Table
-            dataSource={products}
-            columns={[
-              {
-                title: '交付项目名称',
-                dataIndex: 'name',
-                key: 'name',
-                render: (name) => (
-                  <Space orientation="horizontal">
-                    <ShopOutlined style={{ color: '#0066ff' }} />
-                    <Button type="link" style={{ padding: 0, fontWeight: 600 }}>
-                      {name || '-'}
-                    </Button>
-                  </Space>
-                ),
-              },
-              {
-                title: '关联客户数',
-                dataIndex: 'customer_count',
-                key: 'customer_count',
-                render: (count) => (
-                  <Space orientation="horizontal">
-                    <TeamOutlined />
-                    <span>{count || 0} 家</span>
-                  </Space>
-                ),
-              },
-              {
-                title: '发布版本',
-                dataIndex: 'version',
-                key: 'version',
-                render: (v) => <Tag color="blue">{v || 'v1.0.0'}</Tag>,
-              },
-              {
-                title: '操作',
-                key: 'action',
-                render: () => <Button type="link">交付控制台</Button>,
-              },
-            ]}
-            locale={{
-              emptyText: <Empty description="暂无客户交付项目，请点击新建" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
-            }}
-          />
-        )}
-      </Card>
     </div>
   );
 };

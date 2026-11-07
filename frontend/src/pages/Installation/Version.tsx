@@ -64,18 +64,15 @@ export const InstallationVersionPage: React.FC = () => {
       .catch(() => setLicenseInfo({}));
   }, []);
 
-  const handleActivateLicense = async (values: { license: string }) => {
+  const handleActivateLicense = async (_values: { license: string }) => {
+    // R11 任务二: 社区开源版后端不提供 POST /api/plutus-enterprise/license 路由，
+    // 不再调用必然 404 的端点，改为明确提示社区版权益状态并引导进入登录页
     setSubmitting(true);
-    setErrorMessage(null);
     try {
-      await installationApi.createLicense({ license: values.license.trim() });
-      feedback.message.success('企业许可证激活成功，系统已完成初始化！');
+      feedback.message.info(
+        '当前环境为 Zadig 社区开源版，已默认激活全部核心交付功能。若需企业级高级商业支持请咨询 KodeRover 官方。'
+      );
       navigate('/signin', { replace: true });
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { message?: string; description?: string } } })?.response?.data?.message ||
-        '许可证激活失败，请检查密钥是否有效';
-      setErrorMessage(msg);
     } finally {
       setSubmitting(false);
     }

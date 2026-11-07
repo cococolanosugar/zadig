@@ -1,8 +1,8 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { ProTable, ModalForm, ProFormText, ProFormTextArea, ProFormSwitch } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Button, Space, Popconfirm, Typography, Tag } from 'antd';
-import { PlusOutlined, DeleteOutlined, KeyOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, KeyOutlined, EditOutlined } from '@ant-design/icons';
 import http from '../../../api/client';
 import { feedback } from '../../../utils/feedback';
 
@@ -24,6 +24,35 @@ interface KeyVaultItem {
 
 export const KeyVaultPage: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
+  // R11 任务六: 编辑共享变量（PUT /api/aslan/system/keyvault/items/:id）
+  const [editingItem, setEditingItem] = useState<KeyVaultItem | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+
+  const handleUpdate = async (values: Record<string, unknown>) => {
+    if (!editingItem) return false;
+    try {
+      // 后端契约：PUT /items/:id，body 为 models.KeyVaultItem（key/group/value/description/is_sensitive/project_name）
+      await http.put(`/api/aslan/system/keyvault/items/${editingItem.id}`, {
+        group: editingItem.group || 'default',
+        key: editingItem.key,
+        value: values.value as string,
+        is_sensitive: Boolean(values.is_sensitive),
+        description: values.description || '',
+        project_name: editingItem.project_name || '',
+      });
+      feedback.message.success('凭据已成功更新');
+      setEditModalOpen(false);
+      setEditingItem(null);
+      actionRef.current?.reload();
+      return true;
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '更新共享变量失败，请检查网络与权限';
+      feedback.message.error(msg);
+      return false;
+    }
+  };
 
   const handleDelete = async (id: string) => {
     try {
@@ -124,6 +153,18 @@ export const KeyVaultPage: React.FC = () => {
       valueType: 'option',
       key: 'option',
       render: (_, record) => [
+        <Button
+          key="edit"
+          type="link"
+          size="small"
+          icon={<EditOutlined />}
+          onClick={() => {
+            setEditingItem(record);
+            setEditModalOpen(true);
+          }}
+        >
+          编辑
+        </Button>,
         <Popconfirm
           key="delete"
           title={`确定删除变量 [${record.group}/${record.key}]？`}
@@ -195,6 +236,28 @@ export const KeyVaultPage: React.FC = () => {
           </ModalForm>,
         ]}
       />
+
+      {/* R11 任务六: 编辑共享变量 Modal（PUT /keyvault/items/:id，仅值/描述/敏感标记可改，键与组保持唯一标识） */}
+      <ModalForm
+        key={`edit-kv-${editingItem?.id || 'none'}`}
+        title={`编辑共享变量: ${editingItem?.group || 'default'}/${editingItem?.key || ''}`}
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+        onFinish={handleUpdate}
+        width={560}
+        modalProps={{ destroyOnHidden: true }}
+        initialValues={{
+          value: editingItem?.value,
+          is_sensitive: editingItem?.is_sensitive || false,
+          description: editingItem?.description,
+        }}
+      >
+        <ProFormText name="group_display" label="变量组名称" disabled initialValue={editingItem?.group || 'default'} />
+        <ProFormText name="key_display" label="变量名 (Key)" disabled initialValue={editingItem?.key} />
+        <ProFormTextArea name="value" label="变量值" placeholder="变量值内容" />
+        <ProFormSwitch name="is_sensitive" label="敏感值（回显时脱敏）" />
+        <ProFormTextArea name="description" label="描述" placeholder="变量用途说明" />
+      </ModalForm>
     </div>
   );
 };

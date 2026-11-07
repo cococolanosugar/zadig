@@ -208,9 +208,17 @@ export const EnterprisePage: React.FC = () => {
             <Spin size="large" />
           </div>
         ) : activeTab === 'license' ? (() => {
-          const isLicenseActive = license.status?.toLowerCase() === 'active' || license.status?.toLowerCase() === 'valid';
-          const isExpired = license.expire_time ? (license.expire_time > 1e11 ? license.expire_time : license.expire_time * 1000) < Date.now() : false;
+          // R11 任务三: 真实契约映射 — status(normal/active/valid)/expire_at/type 由后端数据驱动
+          const normalizedStatus = String(license.status || '').toLowerCase();
+          const isLicenseActive = ['normal', 'active', 'valid'].includes(normalizedStatus);
+          const rawExpire = license.expire_at ?? license.expire_time;
+          const expireMs = rawExpire !== undefined && rawExpire !== null
+            ? (Number(rawExpire) > 1e11 ? Number(rawExpire) : Number(rawExpire) * 1000)
+            : undefined;
+          const isExpired = expireMs !== undefined && !Number.isNaN(expireMs) && expireMs < Date.now();
           const isEffective = isLicenseActive && !isExpired;
+          const licenseType = license.type || license.license_type;
+          const featureList = Array.isArray(license.features) ? license.features : [];
 
           return (
             <div style={{ maxWidth: 840 }}>
@@ -251,13 +259,13 @@ export const EnterprisePage: React.FC = () => {
                   {
                     key: 'company',
                     label: '授权公司 / 实体',
-                    children: license.company || 'KodeRover Community & Enterprise Evaluator',
+                    children: license.company || '-',
                   },
                   {
                     key: 'status',
                     label: '证书状态',
                     children: isEffective ? (
-                      <Tag color="success">有效授权 (Active)</Tag>
+                      <Tag color="success">正常生效</Tag>
                     ) : isExpired ? (
                       <Tag color="warning">已过期 (Expired)</Tag>
                     ) : (
@@ -265,11 +273,16 @@ export const EnterprisePage: React.FC = () => {
                     ),
                   },
                   {
+                    key: 'expire',
+                    label: '到期时间',
+                    children: expireMs !== undefined && !Number.isNaN(expireMs) ? new Date(expireMs).toLocaleString() : '-',
+                  },
+                  {
                     key: 'version',
                     label: '版本许可类型',
                     children: (
                       <Tag color={isEffective ? 'geekblue' : 'default'}>
-                        {license.license_type || (isEffective ? 'Zadig Enterprise Edition v5.0.0' : 'Zadig Community Edition')}
+                        {licenseType || 'Zadig Community Edition'}
                       </Tag>
                     ),
                   },
@@ -286,14 +299,14 @@ export const EnterprisePage: React.FC = () => {
                   {
                     key: 'features',
                     label: '支持企业特性',
-                    children: (
+                    children: featureList.length > 0 ? (
                       <Space orientation="horizontal" size={[4, 8]} wrap>
-                        <Tag color="blue">工作流 V4</Tag>
-                        <Tag color="blue">环境休眠/唤醒</Tag>
-                        <Tag color="blue">多集群编排</Tag>
-                        <Tag color="blue">交付物追溯</Tag>
-                        <Tag color="blue">AI 日志诊断</Tag>
+                        {featureList.map((f) => (
+                          <Tag key={f} color="blue">{f}</Tag>
+                        ))}
                       </Space>
+                    ) : (
+                      <Text type="secondary">-</Text>
                     ),
                   },
                 ]}

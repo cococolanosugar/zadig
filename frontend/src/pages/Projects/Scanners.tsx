@@ -1728,7 +1728,7 @@ export const ScannersPage: React.FC = () => {
             </Title>
             <Table
               dataSource={scanTasks}
-              rowKey={(r) => String(r.scan_id || r.id || Math.random())}
+              rowKey={(r, idx) => String(r.scan_id || r.id || `${r.creator || 'scan'}-${r.create_time || r.start_time || idx}`)}
               rowClassName={(record) => (routeTaskId && String(record.scan_id ?? record.id) === routeTaskId ? 'ant-table-row-selected' : '')}
               pagination={{ pageSize: 8, hideOnSinglePage: true }}
               size="small"

@@ -153,21 +153,18 @@ export const DashboardPage: React.FC = () => {
           const success = health?.success || 0;
           const failure = health?.failure || 0;
           const total = success + failure;
-          const successRate = total > 0 ? Number(((success / total) * 100).toFixed(1)) : 100;
+          // R11 任务四: 无数据时如实展示 0/-，不再回落 100% 或捏造指标
+          const successRate = total > 0 ? Number(((success / total) * 100).toFixed(1)) : null;
           data = {
             total_deploys: total,
             success_rate: successRate,
             failed_deploys: failure,
-            avg_duration_min: 4.2,
-            mttr_min: 11.5,
           };
         } catch {
           data = {
             total_deploys: 0,
-            success_rate: 100,
+            success_rate: null,
             failed_deploys: 0,
-            avg_duration_min: 0,
-            mttr_min: 0,
           };
         }
       } else if (card.type === 'service_rollback_ranking') {
@@ -308,51 +305,44 @@ export const DashboardPage: React.FC = () => {
   };
 
   const renderDeployStatistics = (stats: any) => {
+    // R11 任务四: 无数据时如实展示 0 次 / '-'，严禁捏造虚假效能数
     const s = stats || {
-      total_deploys: 128,
-      success_rate: 98.4,
-      failed_deploys: 2,
-      avg_duration_min: 4.2,
-      mttr_min: 11.5,
+      total_deploys: 0,
+      success_rate: null,
+      failed_deploys: 0,
     };
     return (
       <Row gutter={[24, 24]} align="middle" style={{ padding: '12px 0' }}>
-        <Col xs={24} sm={6}>
+        <Col xs={24} sm={8}>
           <Statistic
             title="总部署发布次数"
-            value={s.total_deploys}
+            value={s.total_deploys ?? 0}
             prefix={<RocketOutlined style={{ color: '#1677ff' }} />}
             suffix="次"
           />
         </Col>
-        <Col xs={24} sm={6}>
+        <Col xs={24} sm={8}>
           <Statistic
             title="发布成功率"
-            value={s.success_rate}
-            precision={1}
-            styles={{ content: { color: s.success_rate >= 95 ? '#52c41a' : '#faad14' } }}
+            value={s.success_rate ?? '-'}
+            precision={s.success_rate !== null && s.success_rate !== undefined ? 1 : undefined}
+            styles={{ content: { color: s.success_rate !== null && s.success_rate >= 95 ? '#52c41a' : '#8c8c8c' } }}
             prefix={<CheckCircleOutlined />}
-            suffix="%"
+            suffix={s.success_rate !== null && s.success_rate !== undefined ? '%' : ''}
           />
-          <Progress percent={s.success_rate} size="small" status={s.success_rate >= 95 ? 'normal' : 'exception'} />
+          <Progress
+            percent={s.success_rate !== null && s.success_rate !== undefined ? s.success_rate : 0}
+            size="small"
+            status={s.success_rate !== null && s.success_rate >= 95 ? 'normal' : s.success_rate !== null ? 'exception' : 'normal'}
+          />
         </Col>
-        <Col xs={24} sm={6}>
+        <Col xs={24} sm={8}>
           <Statistic
-            title="平均恢复时长 (MTTR)"
-            value={s.mttr_min}
-            precision={1}
-            styles={{ content: { color: '#fa8c16' } }}
+            title="失败部署次数"
+            value={s.failed_deploys ?? 0}
+            styles={{ content: { color: s.failed_deploys ? '#fa8c16' : '#52c41a' } }}
             prefix={<ClockCircleOutlined />}
-            suffix="分钟"
-          />
-        </Col>
-        <Col xs={24} sm={6}>
-          <Statistic
-            title="平均发布耗时"
-            value={s.avg_duration_min}
-            precision={1}
-            styles={{ content: { color: '#1677ff' } }}
-            suffix="分钟"
+            suffix="次"
           />
         </Col>
       </Row>

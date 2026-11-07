@@ -4,6 +4,9 @@ export interface EnterpriseLicenseInfo {
   status?: string;
   company?: string;
   license_type?: string;
+  // R11 任务三: 对齐后端实际返回字段（expire_at/type）
+  expire_at?: number | string;
+  type?: string;
   expire_time?: number;
   user_limit?: number;
   cluster_limit?: number;

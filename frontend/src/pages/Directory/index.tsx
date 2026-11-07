@@ -193,8 +193,9 @@ export const DirectoryPage: React.FC = () => {
       await http.delete(`/api/aslan/application/applications/${record.id}`);
       feedback.message.success(`应用 [${record.name}] 已删除`);
       loadApplications(page, pageSize, searchText.trim());
-    } catch {
-      // Handled
+    } catch (err: unknown) {
+      // R11 任务五: 消除静默吞错
+      feedback.message.error(err instanceof Error ? err.message : '删除应用目录失败');
     }
   };
 
