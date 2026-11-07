@@ -43,8 +43,8 @@ export const UserProfilePage: React.FC = () => {
     navigate(`/v1/profile/${key}`);
   };
 
-  // MCP Token state
-  const [apiToken, setApiToken] = useState<string>(userInfo?.token || userJwtToken || 'zadig_mcp_sec_live_token');
+  // MCP Token state（R8 任务1: 移除硬编码假 token，无真实令牌时展示空值并引导生成）
+  const [apiToken, setApiToken] = useState<string>(userInfo?.token || userJwtToken || '');
   const [rotatingToken, setRotatingToken] = useState<boolean>(false);
 
   // 基本信息 (Personal Info) 状态
@@ -178,11 +178,18 @@ export const UserProfilePage: React.FC = () => {
     setRotatingToken(true);
     try {
       const res = await http.post<{ token: string }>(`/api/v1/users/${userInfo.uid}/token`);
-      const newToken = res?.token || `zadig_token_${Date.now()}`;
-      setApiToken(newToken);
-      feedback.message.success('MCP 访问凭证 Token 已成功重新生成！');
-    } catch (err: any) {
-      feedback.message.error(err?.message || '重新生成 API Token 失败，请稍后重试');
+      // R8 任务1: 仅在后端真实返回 token 时才更新与提示，杜绝本地伪造令牌
+      if (res?.token) {
+        setApiToken(res.token);
+        feedback.message.success('MCP 访问凭证 Token 已成功重新生成！');
+      } else {
+        feedback.message.error('生成 API Token 失败：服务端未返回有效令牌');
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '重新生成 API Token 失败，请稍后重试';
+      feedback.message.error(msg);
     } finally {
       setRotatingToken(false);
     }

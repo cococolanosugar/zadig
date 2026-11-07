@@ -59,15 +59,12 @@ export const GroupMembersDrawer: React.FC<GroupMembersDrawerProps> = ({
       if (detail && Array.isArray(detail.uids)) {
         setMemberUids(detail.uids);
       } else {
-        // Fallback: 如果详情端点未返回 uids，使用默认全部用户（如果是 all-users）
-        if (group?.name === 'all-users') {
-          setMemberUids(users.map((u) => u.uid));
-        } else {
-          setMemberUids([]);
-        }
+        // R8 任务4: 详情未返回 uids 时保持真实空态，不再将全部用户假装为组成员
+        setMemberUids([]);
       }
     } catch {
-      // Handled
+      // R8 任务4: 移除静默吞错
+      feedback.message.error('加载用户组成员列表失败');
     } finally {
       setLoading(false);
     }

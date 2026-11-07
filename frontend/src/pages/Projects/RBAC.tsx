@@ -133,7 +133,11 @@ const RBACPage: React.FC = () => {
       bindingForm.resetFields();
       loadBindings();
       return true;
-    } catch {
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '添加角色绑定失败，请检查权限与目标角色';
+      feedback.message.error(msg);
       return false;
     }
   };
@@ -165,7 +169,11 @@ const RBACPage: React.FC = () => {
       roleForm.resetFields();
       loadRoles();
       return true;
-    } catch {
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '创建角色失败，请检查权限与参数';
+      feedback.message.error(msg);
       return false;
     }
   };

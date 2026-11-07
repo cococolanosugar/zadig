@@ -6,14 +6,16 @@ import {
   ProFormSelect,
 } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
-import { Button, Tag, Tabs, Space, Popconfirm, Typography } from 'antd';
+import { Button, Tag, Tabs, Space, Popconfirm, Typography, Form, Modal, Descriptions, Spin, Input } from 'antd';
 import {
   PlusOutlined,
   DeleteOutlined,
   UserOutlined,
   TeamOutlined,
   SafetyCertificateOutlined,
+  SafetyOutlined,
   EditOutlined,
+  KeyOutlined,
 } from '@ant-design/icons';
 import {
   settingsApi,
@@ -21,11 +23,12 @@ import {
   type UserGroupItem,
   type RoleItem,
 } from '../../../api/settings';
+import { rbacApi } from '../../../api/rbac';
 import { feedback } from '../../../utils/feedback';
 import { useAuthStore } from '../../../stores/auth';
 import { GroupMembersDrawer } from './GroupMembersDrawer';
 
-const { Text } = Typography;
+const { Text, Title } = Typography;
 
 export const UsersPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('users');
@@ -89,8 +92,11 @@ export const UsersPage: React.FC = () => {
       await settingsApi.deleteUser(uid);
       feedback.message.success('用户已成功删除');
       userActionRef.current?.reload();
-    } catch {
-      // Handled
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '删除用户失败，请检查权限';
+      feedback.message.error(msg);
     }
   };
 
@@ -106,8 +112,52 @@ export const UsersPage: React.FC = () => {
       feedback.message.success('用户创建成功！');
       userActionRef.current?.reload();
       return true;
-    } catch {
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '创建用户失败，请检查参数与权限';
+      feedback.message.error(msg);
       return false;
+    }
+  };
+
+  // R8 任务3: 管理端重置密码
+  const [resetPwdTarget, setResetPwdTarget] = useState<UserManagementItem | null>(null);
+  const [resetPwdForm] = Form.useForm();
+  const [resettingPwd, setResettingPwd] = useState(false);
+  const [resetPwdOpen, setResetPwdOpen] = useState(false);
+
+  const handleResetPassword = async () => {
+    if (!resetPwdTarget) return false;
+    try {
+      const values = await resetPwdForm.validateFields();
+      setResettingPwd(true);
+      await settingsApi.resetUserPassword(resetPwdTarget.uid, values.new_password);
+      feedback.message.success(`用户 [${resetPwdTarget.account}] 密码已重置`);
+      setResetPwdOpen(false);
+      resetPwdForm.resetFields();
+      return true;
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '重置密码失败（后端校验：密码需包含大小写字母与数字且不少于 8 位，非本人账号受服务端策略限制）';
+      feedback.message.error(msg);
+      return false;
+    } finally {
+      setResettingPwd(false);
+    }
+  };
+
+  // R8 任务3: 管理端重置 MFA（后端 DisableUserMFA 仅允许本人操作，他人调用将被拒绝并透出错误）
+  const handleResetMFA = async (record: UserManagementItem) => {
+    try {
+      await settingsApi.resetUserMFA(record.uid);
+      feedback.message.success(`用户 [${record.account}] 的 MFA 已重置`);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '重置 MFA 失败（服务端仅允许用户本人操作 MFA）';
+      feedback.message.error(msg);
     }
   };
 
@@ -148,7 +198,34 @@ export const UsersPage: React.FC = () => {
       title: '操作',
       valueType: 'option',
       key: 'option',
+      width: 240,
       render: (_, record) => [
+        <Button
+          key="reset-pwd"
+          type="link"
+          size="small"
+          icon={<KeyOutlined />}
+          onClick={() => {
+            setResetPwdTarget(record);
+            resetPwdForm.resetFields();
+            setResetPwdOpen(true);
+          }}
+        >
+          重置密码
+        </Button>,
+        <Popconfirm
+          key="reset-mfa"
+          title={`确定重置用户 [${record.account}] 的 MFA？`}
+          description="重置后该用户的 MFA 配置将被停用，需重新绑定。"
+          onConfirm={() => handleResetMFA(record)}
+          okText="重置 MFA"
+          cancelText="取消"
+          okButtonProps={{ danger: true }}
+        >
+          <Button type="link" size="small" danger icon={<SafetyOutlined />}>
+            重置 MFA
+          </Button>
+        </Popconfirm>,
         record.account !== currentAccount ? (
           <Popconfirm
             key="delete"
@@ -275,9 +352,35 @@ export const UsersPage: React.FC = () => {
     },
   ];
 
+  // R8 任务2: 系统角色与模板（数据源 role-templates）
+  const [roleDetailOpen, setRoleDetailOpen] = useState(false);
+  const [roleDetailLoading, setRoleDetailLoading] = useState(false);
+  const [roleDetail, setRoleDetail] = useState<{ name: string; desc?: string; rules: Array<{ resource: string; verbs: string[] }> } | null>(null);
+
+  const openRoleDetail = async (role: RoleItem) => {
+    setRoleDetailOpen(true);
+    setRoleDetailLoading(true);
+    setRoleDetail({ name: role.name, desc: role.desc, rules: [] });
+    try {
+      const detail = await rbacApi.getRoleTemplate(role.name);
+      setRoleDetail({
+        name: detail?.name || role.name,
+        desc: detail?.desc || role.desc,
+        rules: Array.isArray(detail?.rules) ? detail.rules : [],
+      });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '角色权限详情获取失败';
+      feedback.message.error(msg);
+    } finally {
+      setRoleDetailLoading(false);
+    }
+  };
+
   const roleColumns: ProColumns<RoleItem>[] = [
     {
-      title: '系统权限角色',
+      title: '模板名称',
       dataIndex: 'name',
       key: 'name',
       render: (text) => (
@@ -288,10 +391,27 @@ export const UsersPage: React.FC = () => {
       ),
     },
     {
-      title: '角色说明',
+      title: '说明',
       dataIndex: 'desc',
       key: 'desc',
-      render: (text) => <Text type="secondary">{String(text || '默认系统角色')}</Text>,
+      render: (text) => <Text type="secondary">{String(text || '-')}</Text>,
+    },
+    {
+      title: '类型',
+      dataIndex: 'type',
+      key: 'type',
+      width: 120,
+      render: (t) => (Number(t) === 1 ? <Tag color="gold">系统内置</Tag> : <Tag color="blue">自定义模板</Tag>),
+    },
+    {
+      title: '操作',
+      key: 'role_action',
+      width: 120,
+      render: (_, record) => (
+        <Button type="link" size="small" onClick={() => openRoleDetail(record)}>
+          查看权限详情
+        </Button>
+      ),
     },
   ];
 
@@ -375,6 +495,7 @@ export const UsersPage: React.FC = () => {
                         { label: '标准普通用户 (User)', value: 'user' },
                         { label: '系统管理员 (Admin)', value: 'admin' },
                       ]}
+                      extra="系统默认创建为普通用户；项目级精细授权请在项目「RBAC」页配置角色与绑定，此处仅声明账号类型，角色信息以后端实际生效为准。"
                     />
                   </ModalForm>,
                 ]}
@@ -436,7 +557,7 @@ export const UsersPage: React.FC = () => {
             key: 'roles',
             label: (
               <span>
-                <SafetyCertificateOutlined /> RBAC 角色列表
+                <SafetyCertificateOutlined /> 系统角色与模板
               </span>
             ),
             children: (
@@ -454,11 +575,104 @@ export const UsersPage: React.FC = () => {
                   };
                 }}
                 columns={roleColumns}
+                locale={{
+                  emptyText: <Typography.Text type="secondary">暂无角色模板</Typography.Text>,
+                }}
               />
             ),
           },
         ]}
       />
+
+      {/* R8 任务3: 重置密码 Modal */}
+      <Modal
+        title={`重置用户密码: ${resetPwdTarget?.account || ''}`}
+        open={resetPwdOpen}
+        onOk={handleResetPassword}
+        onCancel={() => setResetPwdOpen(false)}
+        confirmLoading={resettingPwd}
+        okText="确认重置"
+        cancelText="取消"
+        width={460}
+        destroyOnHidden
+      >
+        <Form form={resetPwdForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item
+            name="new_password"
+            label="新密码"
+            rules={[
+              { required: true, message: '请输入新密码' },
+              { min: 8, message: '密码长度不少于 8 位' },
+              {
+                pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/,
+                message: '密码必须包含大小写字母和数字',
+              },
+            ]}
+            extra="密码规则与创建用户一致：包含大小写字母与数字，长度不少于 8 位。"
+          >
+            <Input.Password placeholder="输入新密码" />
+          </Form.Item>
+          <Form.Item
+            name="confirm_password"
+            label="确认新密码"
+            dependencies={['new_password']}
+            rules={[
+              { required: true, message: '请再次输入新密码' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue('new_password') === value) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error('两次输入的密码不一致'));
+                },
+              }),
+            ]}
+          >
+            <Input.Password placeholder="再次输入新密码" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* R8 任务2: 角色权限详情 Modal */}
+      <Modal
+        title={`角色权限详情: ${roleDetail?.name || ''}`}
+        open={roleDetailOpen}
+        onCancel={() => setRoleDetailOpen(false)}
+        footer={[
+          <Button key="close" type="primary" onClick={() => setRoleDetailOpen(false)}>
+            关闭
+          </Button>,
+        ]}
+        width={560}
+      >
+        <Spin spinning={roleDetailLoading}>
+          <div style={{ paddingTop: 12 }}>
+            <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label="模板名称">{roleDetail?.name || '-'}</Descriptions.Item>
+              <Descriptions.Item label="说明">{roleDetail?.desc || '-'}</Descriptions.Item>
+            </Descriptions>
+            <Title level={5} style={{ marginTop: 16 }}>
+              权限规则 (resource → verbs)
+            </Title>
+            {roleDetail && roleDetail.rules.length > 0 ? (
+              roleDetail.rules.map((rule, i) => (
+                <div key={i} style={{ marginBottom: 8 }}>
+                  <Text strong>{rule.resource}</Text>
+                  <Space wrap size={[4, 4]} style={{ marginLeft: 8 }}>
+                    {(rule.verbs || []).map((v) => (
+                      <Tag key={v} color="geekblue">
+                        {v}
+                      </Tag>
+                    ))}
+                  </Space>
+                </div>
+              ))
+            ) : (
+              <Text type="secondary">该模板未声明细粒度权限规则（全局预设角色）。</Text>
+            )}
+          </div>
+        </Spin>
+      </Modal>
 
       {/* Edit Group Modal */}
       <ModalForm

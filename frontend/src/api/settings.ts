@@ -132,9 +132,11 @@ export interface UserGroupItem {
 }
 
 export interface RoleItem {
+  id?: number;
   name: string;
   desc?: string;
-  type?: string;
+  // role-templates: 0=自定义模板 1=系统内置（后端 types.RoleTemplate）
+  type?: number | string;
 }
 
 export interface AgentAccessCmdPlatform {
@@ -408,6 +410,22 @@ export const settingsApi = {
     return http.post('/api/v1/users', payload);
   },
 
+  // R8 任务3: 重置用户密码（PUT /users/:uid/password，后端 permission.Password 契约
+  // 为 {uid, oldPassword, newPassword}；管理端代重置时 oldPassword 置空，由后端鉴权裁决）
+  async resetUserPassword(uid: string, password: string): Promise<unknown> {
+    return http.put(
+      `/api/v1/users/${encodeURIComponent(uid)}/password`,
+      { uid, oldPassword: '', newPassword: password },
+      { skipErrorHandler: true }
+    );
+  },
+
+  // R8 任务3: 重置/停用用户 MFA（后端无 DELETE /users/:uid/mfa 路由，
+  // 对齐既有 DisableUserMFA 契约：POST /users/:uid/mfa/disable，仅本人可操作）
+  async resetUserMFA(uid: string): Promise<unknown> {
+    return http.post(`/api/v1/users/${encodeURIComponent(uid)}/mfa/disable`, {}, { skipErrorHandler: true });
+  },
+
   async deleteUser(uid: string): Promise<unknown> {
     return http.delete(`/api/v1/users/${uid}`);
   },
@@ -464,9 +482,10 @@ export const settingsApi = {
     }));
   },
 
-  // P1-E1: HTTP 故障异常上抛
+  // R8 任务2: 系统设置角色列表对齐 role-templates（后端 GET /policy/roles 强制 namespace，
+  // 系统级角色清单应使用 ListRoleTemplates，无 namespace 校验；type: 0=自定义模板 1=系统内置）
   async getRoles(): Promise<RoleItem[]> {
-    const res = await http.get<RoleItem[]>('/api/v1/policy/roles', { skipErrorHandler: true });
+    const res = await http.get<RoleItem[]>('/api/v1/policy/role-templates', { skipErrorHandler: true });
     return Array.isArray(res) ? res : [];
   },
 
