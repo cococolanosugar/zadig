@@ -17,6 +17,8 @@ import {
   Empty,
   Typography,
   Alert,
+  Row,
+  Col,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -25,6 +27,8 @@ import {
   PlusOutlined,
   ReloadOutlined,
   ApiOutlined,
+  BugOutlined,
+  ProjectOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import http from '../../api/client';
@@ -63,6 +67,27 @@ interface GitHookItem {
     codehost_id?: number;
     events?: string[];
   };
+}
+
+// JiraHook（models/workflow_v4.go:1799-1810）：name/enabled/description/jira_id/启用状态变更监听 + from/to 状态
+interface JiraHookItem {
+  name: string;
+  enabled: boolean;
+  description?: string;
+  jira_id?: string;
+  enabled_issue_status_change?: boolean;
+  from_status?: { id?: string; name?: string };
+  to_status?: { id?: string; name?: string };
+  workflow_arg?: unknown;
+}
+
+// MeegoHook（models/workflow_v4.go:1817-1825）：name/enabled/description/meego_id
+interface MeegoHookItem {
+  name: string;
+  enabled: boolean;
+  description?: string;
+  meego_id?: string;
+  workflow_arg?: unknown;
 }
 
 const FREQUENCY_OPTIONS = [
@@ -117,6 +142,18 @@ export const TriggerPanel: React.FC<{
   const [generalModalOpen, setGeneralModalOpen] = useState(false);
   const [generalForm] = Form.useForm();
 
+  // --- Jira webhook state（P1-W1 补齐） ---
+  const [jiraHooks, setJiraHooks] = useState<JiraHookItem[]>([]);
+  const [jiraLoading, setJiraLoading] = useState(false);
+  const [jiraModalOpen, setJiraModalOpen] = useState(false);
+  const [jiraForm] = Form.useForm();
+
+  // --- Meego (飞书项目) webhook state（P1-W1 补齐） ---
+  const [meegoHooks, setMeegoHooks] = useState<MeegoHookItem[]>([]);
+  const [meegoLoading, setMeegoLoading] = useState(false);
+  const [meegoModalOpen, setMeegoModalOpen] = useState(false);
+  const [meegoForm] = Form.useForm();
+
   const loadCrons = useCallback(async () => {
     if (!workflowName) return;
     setCronLoading(true);
@@ -125,8 +162,9 @@ export const TriggerPanel: React.FC<{
         skipErrorHandler: true,
       });
       setCrons(Array.isArray(res) ? res : []);
-    } catch {
+    } catch (err: unknown) {
       setCrons([]);
+      feedback.message.error(err instanceof Error ? err.message : '定时触发器列表加载失败');
     } finally {
       setCronLoading(false);
     }
@@ -138,10 +176,39 @@ export const TriggerPanel: React.FC<{
     try {
       const list = await workflowApi.listGeneralHooks(workflowName);
       setGeneralHooks(list);
-    } catch {
+    } catch (err: unknown) {
       setGeneralHooks([]);
+      feedback.message.error(err instanceof Error ? err.message : '通用 Webhook 列表加载失败');
     } finally {
       setGeneralLoading(false);
+    }
+  }, [workflowName]);
+
+  const loadJiraHooks = useCallback(async () => {
+    if (!workflowName) return;
+    setJiraLoading(true);
+    try {
+      const list = await workflowApi.getJiraHooks(workflowName);
+      setJiraHooks(Array.isArray(list) ? list : []);
+    } catch (err: unknown) {
+      setJiraHooks([]);
+      feedback.message.error(err instanceof Error ? err.message : 'Jira Webhook 列表加载失败');
+    } finally {
+      setJiraLoading(false);
+    }
+  }, [workflowName]);
+
+  const loadMeegoHooks = useCallback(async () => {
+    if (!workflowName) return;
+    setMeegoLoading(true);
+    try {
+      const list = await workflowApi.getLarkHooks(workflowName);
+      setMeegoHooks(Array.isArray(list) ? list : []);
+    } catch (err: unknown) {
+      setMeegoHooks([]);
+      feedback.message.error(err instanceof Error ? err.message : '飞书项目 Webhook 列表加载失败');
+    } finally {
+      setMeegoLoading(false);
     }
   }, [workflowName]);
 
@@ -191,8 +258,9 @@ export const TriggerPanel: React.FC<{
         { skipErrorHandler: true }
       );
       setHooks(Array.isArray(res) ? res : []);
-    } catch {
+    } catch (err: unknown) {
       setHooks([]);
+      feedback.message.error(err instanceof Error ? err.message : 'Git 触发器列表加载失败');
     } finally {
       setHookLoading(false);
     }
@@ -203,8 +271,10 @@ export const TriggerPanel: React.FC<{
       loadCrons();
       loadHooks();
       loadGeneralHooks();
+      loadJiraHooks();
+      loadMeegoHooks();
     }
-  }, [open, loadCrons, loadHooks, loadGeneralHooks]);
+  }, [open, loadCrons, loadHooks, loadGeneralHooks, loadJiraHooks, loadMeegoHooks]);
 
   const openCronModal = (item: CronItem | null) => {
     setEditingCron(item);
@@ -328,8 +398,108 @@ export const TriggerPanel: React.FC<{
       await http.delete(`/api/aslan/workflow/v4/webhook/${encodeURIComponent(workflowName)}/trigger/${item.name}`);
       feedback.message.success('Git 触发器已删除');
       loadHooks();
-    } catch {
-      // Handled
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : 'Git 触发器删除失败');
+    }
+  };
+
+  // --- Jira webhook handlers（P1-W1） ---
+  const handleCreateJiraHook = async () => {
+    try {
+      const values = await jiraForm.validateFields();
+      // 从 preset 取服务端渲染的最新工作流执行参数（与 general hook 同模式）
+      let workflowArg: unknown;
+      try {
+        const preset = await workflowApi.getJiraHookPreset(workflowName);
+        workflowArg = preset?.workflow_arg;
+      } catch {
+        // preset 失败时交由服务端校验
+      }
+      await workflowApi.addJiraHook(workflowName, {
+        name: values.name,
+        enabled: values.enabled ?? true,
+        description: values.description || '',
+        jira_id: values.jira_id,
+        enabled_issue_status_change: values.enabled_issue_status_change || false,
+        from_status: values.enabled_issue_status_change && values.from_status ? { name: values.from_status } : undefined,
+        to_status: values.enabled_issue_status_change && values.to_status ? { name: values.to_status } : undefined,
+        workflow_arg: workflowArg,
+      });
+      feedback.message.success('Jira Webhook 触发器已创建');
+      setJiraModalOpen(false);
+      loadJiraHooks();
+    } catch (err: any) {
+      if (!err?.errorFields) {
+        feedback.message.error(err?.response?.data?.message || err?.message || 'Jira Webhook 创建失败');
+      }
+    }
+  };
+
+  const handleDeleteJiraHook = async (item: JiraHookItem) => {
+    try {
+      await workflowApi.deleteJiraHook(workflowName, item.name);
+      feedback.message.success('Jira Webhook 触发器已删除');
+      loadJiraHooks();
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : 'Jira Webhook 删除失败');
+    }
+  };
+
+  const handleJiraToggle = async (item: JiraHookItem) => {
+    try {
+      await workflowApi.updateJiraHook(workflowName, { ...item, enabled: !item.enabled });
+      feedback.message.success(`Jira Webhook 已${!item.enabled ? '启用' : '停用'}`);
+      loadJiraHooks();
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : 'Jira Webhook 状态更新失败');
+    }
+  };
+
+  // --- Meego (飞书项目) webhook handlers（P1-W1） ---
+  const handleCreateMeegoHook = async () => {
+    try {
+      const values = await meegoForm.validateFields();
+      let workflowArg: unknown;
+      try {
+        const preset = await workflowApi.getLarkHookPreset(workflowName);
+        workflowArg = preset?.workflow_arg;
+      } catch {
+        // preset 失败时交由服务端校验
+      }
+      await workflowApi.addLarkHook(workflowName, {
+        name: values.name,
+        enabled: values.enabled ?? true,
+        description: values.description || '',
+        meego_id: values.meego_id,
+        workflow_arg: workflowArg,
+      });
+      feedback.message.success('飞书项目 Webhook 触发器已创建');
+      setMeegoModalOpen(false);
+      loadMeegoHooks();
+    } catch (err: any) {
+      if (!err?.errorFields) {
+        feedback.message.error(err?.response?.data?.message || err?.message || '飞书项目 Webhook 创建失败');
+      }
+    }
+  };
+
+  const handleDeleteMeegoHook = async (item: MeegoHookItem) => {
+    try {
+      await workflowApi.deleteLarkHook(workflowName, item.name);
+      feedback.message.success('飞书项目 Webhook 触发器已删除');
+      loadMeegoHooks();
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : '飞书项目 Webhook 删除失败');
+    }
+  };
+
+  const handleMeegoToggle = async (item: MeegoHookItem) => {
+    try {
+      await workflowApi.updateLarkHook(workflowName, { ...item, enabled: !item.enabled });
+      feedback.message.success(`飞书项目 Webhook 已${!item.enabled ? '启用' : '停用'}`);
+      loadMeegoHooks();
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : '飞书项目 Webhook 状态更新失败');
     }
   };
 
@@ -421,6 +591,96 @@ export const TriggerPanel: React.FC<{
       key: 'action',
       render: (_, r) => (
         <Popconfirm title={`确定删除 Git 触发器 [${r.name}]？`} onConfirm={() => handleDeleteHook(r)} okText="删除" cancelText="取消">
+          <Button type="link" size="small" danger disabled={readOnly}>
+            删除
+          </Button>
+        </Popconfirm>
+      ),
+    },
+  ];
+
+  const jiraColumns: ColumnsType<JiraHookItem> = [
+    {
+      title: '触发器名称',
+      dataIndex: 'name',
+      key: 'name',
+      render: (n) => <Text strong>{String(n || '-')}</Text>,
+    },
+    {
+      title: 'Jira 项目 Key / 集成 ID',
+      dataIndex: 'jira_id',
+      key: 'jira_id',
+      render: (v) => <Text code style={{ fontSize: 12 }}>{String(v || '-')}</Text>,
+    },
+    {
+      title: '监听事件',
+      key: 'events',
+      render: (_, r) =>
+        r.enabled_issue_status_change ? (
+          <Space orientation="horizontal" size={4} wrap>
+            <Tag color="geekblue">状态变更</Tag>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {`${r.from_status?.name || '任意'} → ${r.to_status?.name || '任意'}`}
+            </Text>
+          </Space>
+        ) : (
+          <Text type="secondary">-</Text>
+        ),
+    },
+    {
+      title: '状态',
+      dataIndex: 'enabled',
+      key: 'enabled',
+      render: (_, r) => (
+        <Switch size="small" checked={r.enabled} disabled={readOnly} onChange={() => handleJiraToggle(r)} />
+      ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      render: (_, r) => (
+        <Popconfirm title={`确定删除 Jira Webhook [${r.name}]？`} onConfirm={() => handleDeleteJiraHook(r)} okText="删除" cancelText="取消">
+          <Button type="link" size="small" danger disabled={readOnly}>
+            删除
+          </Button>
+        </Popconfirm>
+      ),
+    },
+  ];
+
+  const meegoColumns: ColumnsType<MeegoHookItem> = [
+    {
+      title: '触发器名称',
+      dataIndex: 'name',
+      key: 'name',
+      render: (n) => <Text strong>{String(n || '-')}</Text>,
+    },
+    {
+      title: '飞书项目 Token / Key',
+      dataIndex: 'meego_id',
+      key: 'meego_id',
+      render: (v) => <Text code style={{ fontSize: 12 }}>{String(v || '-')}</Text>,
+    },
+    {
+      title: '描述',
+      dataIndex: 'description',
+      key: 'description',
+      ellipsis: true,
+      render: (d) => <Text type="secondary">{String(d || '-')}</Text>,
+    },
+    {
+      title: '状态',
+      dataIndex: 'enabled',
+      key: 'enabled',
+      render: (_, r) => (
+        <Switch size="small" checked={r.enabled} disabled={readOnly} onChange={() => handleMeegoToggle(r)} />
+      ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      render: (_, r) => (
+        <Popconfirm title={`确定删除飞书项目 Webhook [${r.name}]？`} onConfirm={() => handleDeleteMeegoHook(r)} okText="删除" cancelText="取消">
           <Button type="link" size="small" danger disabled={readOnly}>
             删除
           </Button>
@@ -589,6 +849,90 @@ export const TriggerPanel: React.FC<{
               </div>
             ),
           },
+          {
+            key: 'jira',
+            label: (
+              <span>
+                <BugOutlined /> Jira Webhook
+              </span>
+            ),
+            children: (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                  <Button icon={<ReloadOutlined />} size="small" onClick={loadJiraHooks} />
+                  {!readOnly && (
+                    <Button
+                      type="primary"
+                      size="small"
+                      icon={<PlusOutlined />}
+                      onClick={() => {
+                        jiraForm.resetFields();
+                        jiraForm.setFieldsValue({ enabled: true, enabled_issue_status_change: false });
+                        setJiraModalOpen(true);
+                      }}
+                    >
+                      新建 Jira Webhook
+                    </Button>
+                  )}
+                </div>
+                <Table
+                  dataSource={jiraHooks}
+                  rowKey="name"
+                  loading={jiraLoading}
+                  pagination={false}
+                  size="small"
+                  columns={jiraColumns}
+                  locale={{
+                    emptyText: (
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无 Jira Webhook 触发器（Jira 工单状态变化自动触发工作流）" />
+                    ),
+                  }}
+                />
+              </div>
+            ),
+          },
+          {
+            key: 'meego',
+            label: (
+              <span>
+                <ProjectOutlined /> 飞书项目 (Meego) Webhook
+              </span>
+            ),
+            children: (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                  <Button icon={<ReloadOutlined />} size="small" onClick={loadMeegoHooks} />
+                  {!readOnly && (
+                    <Button
+                      type="primary"
+                      size="small"
+                      icon={<PlusOutlined />}
+                      onClick={() => {
+                        meegoForm.resetFields();
+                        meegoForm.setFieldsValue({ enabled: true });
+                        setMeegoModalOpen(true);
+                      }}
+                    >
+                      新建飞书项目 Webhook
+                    </Button>
+                  )}
+                </div>
+                <Table
+                  dataSource={meegoHooks}
+                  rowKey="name"
+                  loading={meegoLoading}
+                  pagination={false}
+                  size="small"
+                  columns={meegoColumns}
+                  locale={{
+                    emptyText: (
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无飞书项目 Webhook 触发器（飞书项目工作项事件自动触发工作流）" />
+                    ),
+                  }}
+                />
+              </div>
+            ),
+          },
         ]}
       />
 
@@ -709,6 +1053,102 @@ export const TriggerPanel: React.FC<{
           <Alert
             title="Webhook 调用地址"
             description={`POST /api/aslan/workflow/v4/generalhook/${workflowName}/${'{name}'}/webhook，请求体中通过触发器名称匹配。`}
+            type="info"
+            showIcon
+            style={{ borderRadius: 6 }}
+          />
+        </Form>
+      </Modal>
+
+      {/* Jira webhook create modal（P1-W1） */}
+      <Modal
+        title="新建 Jira Webhook 触发"
+        open={jiraModalOpen}
+        onOk={handleCreateJiraHook}
+        onCancel={() => setJiraModalOpen(false)}
+        okText="创建"
+        cancelText="取消"
+        width={520}
+      >
+        <Form form={jiraForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item
+            name="name"
+            label="触发器名称"
+            rules={[{ required: true, message: '请输入触发器名称' }]}
+          >
+            <Input placeholder="例如: jira-issue-done-trigger" />
+          </Form.Item>
+          <Form.Item
+            name="jira_id"
+            label="Jira 项目 Key / 集成 ID"
+            rules={[{ required: true, message: '请输入 Jira 项目 Key 或集成 ID' }]}
+          >
+            <Input placeholder="例如: JIRA-PROD（系统设置-项目管理中配置的集成标识）" />
+          </Form.Item>
+          <Form.Item name="description" label="描述">
+            <Input placeholder="触发器用途说明" />
+          </Form.Item>
+          <Form.Item name="enabled_issue_status_change" label="监听工单状态变更" valuePropName="checked" initialValue={false}>
+            <Switch />
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate={(p, c) => p.enabled_issue_status_change !== c.enabled_issue_status_change}>
+            {({ getFieldValue }) =>
+              getFieldValue('enabled_issue_status_change') ? (
+                <Row gutter={12}>
+                  <Col span={12}>
+                    <Form.Item name="from_status" label="起始状态（留空为任意）">
+                      <Input placeholder="例如: In Progress" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item name="to_status" label="目标状态（留空为任意）">
+                      <Input placeholder="例如: Done" />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              ) : null
+            }
+          </Form.Item>
+          <Form.Item name="enabled" label="启用状态" valuePropName="checked" initialValue={true}>
+            <Switch />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Meego (飞书项目) webhook create modal（P1-W1） */}
+      <Modal
+        title="新建飞书项目 (Meego) Webhook 触发"
+        open={meegoModalOpen}
+        onOk={handleCreateMeegoHook}
+        onCancel={() => setMeegoModalOpen(false)}
+        okText="创建"
+        cancelText="取消"
+        width={520}
+      >
+        <Form form={meegoForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item
+            name="name"
+            label="触发器名称"
+            rules={[{ required: true, message: '请输入触发器名称' }]}
+          >
+            <Input placeholder="例如: meego-issue-trigger" />
+          </Form.Item>
+          <Form.Item
+            name="meego_id"
+            label="飞书项目 Token / Key"
+            rules={[{ required: true, message: '请输入飞书项目 Token 或 Key' }]}
+          >
+            <Input placeholder="例如: 7491832540（系统设置-项目管理中配置的飞书项目标识）" />
+          </Form.Item>
+          <Form.Item name="description" label="描述">
+            <Input placeholder="触发器用途说明" />
+          </Form.Item>
+          <Form.Item name="enabled" label="启用状态" valuePropName="checked" initialValue={true}>
+            <Switch />
+          </Form.Item>
+          <Alert
+            title="工作项事件监听"
+            description="飞书项目工作项事件由服务端按集成配置统一回调；如需按工作项类型细分监听，请在系统设置-项目管理的集成配置中维护。"
             type="info"
             showIcon
             style={{ borderRadius: 6 }}

@@ -359,6 +359,9 @@ export const PipelineExecutionPage: React.FC = () => {
     try {
       const list = await workflowApi.getJobEvents(effWorkflowName, effTaskId, selectedJob, activeProject);
       setJobEvents(list);
+    } catch (err: unknown) {
+      setJobEvents([]);
+      feedback.message.error(err instanceof Error ? err.message : '任务事件获取失败');
     } finally {
       setEventsLoading(false);
     }

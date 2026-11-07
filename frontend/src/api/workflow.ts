@@ -313,27 +313,25 @@ export interface ListWorkflowTaskResponse {
 export const workflowApi = {
   /**
    * List workflows by project (or global if project omitted)
+   * P1-E1: HTTP 故障不再吞为空数组，异常上抛由调用方呈现错误态；仅对成功响应做防御性解析
    */
   async getWorkflows(projectName?: string): Promise<WorkflowV4Item[]> {
-    try {
-      const url = projectName
-        ? `/api/aslan/workflow/v4?projectName=${projectName}`
-        : '/api/aslan/workflow/v4';
-      const res = await http.get<{ workflow_list?: WorkflowV4Item[] } | WorkflowV4Item[]>(
-        url,
-        { skipErrorHandler: true }
-      );
-      if (Array.isArray(res)) return res;
-      if (res && 'workflow_list' in res && Array.isArray(res.workflow_list)) return res.workflow_list;
-      return [];
-    } catch {
-      return [];
-    }
+    const url = projectName
+      ? `/api/aslan/workflow/v4?projectName=${projectName}`
+      : '/api/aslan/workflow/v4';
+    const res = await http.get<{ workflow_list?: WorkflowV4Item[] } | WorkflowV4Item[]>(
+      url,
+      { skipErrorHandler: true }
+    );
+    if (Array.isArray(res)) return res;
+    if (res && 'workflow_list' in res && Array.isArray(res.workflow_list)) return res.workflow_list;
+    return [];
   },
 
   /**
    * List workflow tasks (GET /api/aslan/workflow/v4/workflowtask)
    * Aligned with zadig-ee-portal getCustomWorkflowTaskListAPI (page_num, page_size)
+   * P1-E1: HTTP 故障异常上抛，仅对成功响应做防御性解析
    */
   async getWorkflowTasks(params?: {
     pageNum?: number;
@@ -341,23 +339,19 @@ export const workflowApi = {
     projectName?: string;
     workflow_name?: string;
   }): Promise<ListWorkflowTaskResponse> {
-    try {
-      const queryParams: Record<string, unknown> = {};
-      if (params?.pageNum !== undefined) queryParams.page_num = params.pageNum;
-      if (params?.pageSize !== undefined) queryParams.page_size = params.pageSize;
-      if (params?.projectName) queryParams.projectName = params.projectName;
-      if (params?.workflow_name) queryParams.workflow_name = params.workflow_name;
-      const res = await http.get<ListWorkflowTaskResponse>('/api/aslan/workflow/v4/workflowtask', {
-        params: queryParams,
-        skipErrorHandler: true,
-      });
-      return {
-        workflow_list: res?.workflow_list || [],
-        total: res?.total || 0,
-      };
-    } catch {
-      return { workflow_list: [], total: 0 };
-    }
+    const queryParams: Record<string, unknown> = {};
+    if (params?.pageNum !== undefined) queryParams.page_num = params.pageNum;
+    if (params?.pageSize !== undefined) queryParams.page_size = params.pageSize;
+    if (params?.projectName) queryParams.projectName = params.projectName;
+    if (params?.workflow_name) queryParams.workflow_name = params.workflow_name;
+    const res = await http.get<ListWorkflowTaskResponse>('/api/aslan/workflow/v4/workflowtask', {
+      params: queryParams,
+      skipErrorHandler: true,
+    });
+    return {
+      workflow_list: res?.workflow_list || [],
+      total: res?.total || 0,
+    };
   },
 
   /**
@@ -515,17 +509,14 @@ export const workflowApi = {
   /**
    * List custom general-webhook triggers of a workflow.
    * GET /api/aslan/workflow/v4/generalhook/:workflowName
+   * P1-E1: HTTP 故障异常上抛，仅对成功响应做防御性解析
    */
   async listGeneralHooks(workflowName: string): Promise<Array<{ name: string; enabled: boolean; description?: string }>> {
-    try {
-      const res = await http.get<Array<{ name: string; enabled: boolean; description?: string }>>(
-        `/api/aslan/workflow/v4/generalhook/${encodeURIComponent(workflowName)}`,
-        { skipErrorHandler: true }
-      );
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<Array<{ name: string; enabled: boolean; description?: string }>>(
+      `/api/aslan/workflow/v4/generalhook/${encodeURIComponent(workflowName)}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
   },
 
   /**
@@ -579,15 +570,11 @@ export const workflowApi = {
     projectName?: string
   ): Promise<Array<{ event_type: string; time: string; message: string }>> {
     const query = projectName ? `?projectName=${encodeURIComponent(projectName)}` : '';
-    try {
-      const res = await http.get<Array<{ event_type: string; time: string; message: string }>>(
-        `/api/aslan/workflow/v4/workflowtask/workflow/${encodeURIComponent(workflowName)}/task/${taskId}/job/${encodeURIComponent(jobName)}/events${query}`,
-        { skipErrorHandler: true }
-      );
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<Array<{ event_type: string; time: string; message: string }>>(
+      `/api/aslan/workflow/v4/workflowtask/workflow/${encodeURIComponent(workflowName)}/task/${taskId}/job/${encodeURIComponent(jobName)}/events${query}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
   },
 
   /**

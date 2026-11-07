@@ -245,19 +245,16 @@ export const settingsApi = {
 
   // --- Code Hosts ---
   // 代码源实际挂载在 systemconfig 服务 /api/v1/codehosts（需 encryptedKey）
+  // P1-E1: HTTP 故障异常上抛，仅对成功响应做防御性解析
   async getCodeHosts(): Promise<CodeHostItem[]> {
-    try {
-      const publicKey = await authApi.getRSAPublicKey();
-      const aesKey = generateAesKey(32);
-      const encryptedKey = rsaEncrypt(aesKey, publicKey);
-      const res = await http.get<CodeHostItem[]>(
-        `/api/v1/codehosts?encryptedKey=${encodeURIComponent(encryptedKey)}`,
-        { skipErrorHandler: true }
-      );
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const publicKey = await authApi.getRSAPublicKey();
+    const aesKey = generateAesKey(32);
+    const encryptedKey = rsaEncrypt(aesKey, publicKey);
+    const res = await http.get<CodeHostItem[]>(
+      `/api/v1/codehosts?encryptedKey=${encodeURIComponent(encryptedKey)}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
   },
 
   async createCodeHost(payload: Partial<CodeHostItem>): Promise<unknown> {
@@ -269,6 +266,7 @@ export const settingsApi = {
   },
 
   // --- Registries ---
+  // P1-E1: 保留主通道 → 项目级降级链，但两级均失败时异常上抛；字段解密失败保留原文（合理降级）
   async getRegistries(projectName = ''): Promise<RegistryItem[]> {
     try {
       const publicKey = await authApi.getRSAPublicKey();
@@ -292,19 +290,18 @@ export const settingsApi = {
           return { ...reg, decrypted_secret_key: decryptedSecret };
         });
       }
-    } catch {
-      // Fallback to project registry endpoint
+      return [];
+    } catch (primaryErr) {
       try {
         const fallbackRes = await http.get<RegistryItem[]>(
           `/api/aslan/system/registry/project?projectName=${projectName}`,
           { skipErrorHandler: true }
         );
-        if (Array.isArray(fallbackRes)) return fallbackRes;
+        return Array.isArray(fallbackRes) ? fallbackRes : [];
       } catch {
-        // Return empty
+        throw primaryErr;
       }
     }
-    return [];
   },
 
   async createRegistry(payload: Partial<RegistryItem>): Promise<unknown> {
@@ -324,6 +321,7 @@ export const settingsApi = {
   },
 
   // --- Storage (S3 / OSS) ---
+  // P1-E1: 保留主通道 → 项目级降级链，但两级均失败时异常上抛；字段解密失败保留原文（合理降级）
   async getStorages(projectName = 'demo-k8s'): Promise<StorageItem[]> {
     try {
       const publicKey = await authApi.getRSAPublicKey();
@@ -347,19 +345,18 @@ export const settingsApi = {
           return { ...st, decrypted_sk: decryptedSk };
         });
       }
-    } catch {
-      // Fallback to project s3storage endpoint
+      return [];
+    } catch (primaryErr) {
       try {
         const fallbackRes = await http.get<StorageItem[]>(
           `/api/aslan/system/s3storage/project?projectName=${projectName || 'demo-k8s'}`,
           { skipErrorHandler: true }
         );
-        if (Array.isArray(fallbackRes)) return fallbackRes;
+        return Array.isArray(fallbackRes) ? fallbackRes : [];
       } catch {
-        // Return empty
+        throw primaryErr;
       }
     }
-    return [];
   },
 
   async createStorage(payload: Partial<StorageItem>): Promise<unknown> {
@@ -371,18 +368,15 @@ export const settingsApi = {
   },
 
   // --- Users & RBAC ---
+  // P1-E1: HTTP 故障异常上抛，仅对成功响应做防御性解析
   async getUsers(): Promise<UserManagementItem[]> {
-    try {
-      const res = await http.post<{ users?: UserManagementItem[] } | UserManagementItem[]>('/api/v1/users/search', {
-        page: 1,
-        per_page: 200,
-      }, { skipErrorHandler: true });
-      if (Array.isArray(res)) return res;
-      if (res && 'users' in res && Array.isArray(res.users)) return res.users;
-      return [];
-    } catch {
-      return [];
-    }
+    const res = await http.post<{ users?: UserManagementItem[] } | UserManagementItem[]>('/api/v1/users/search', {
+      page: 1,
+      per_page: 200,
+    }, { skipErrorHandler: true });
+    if (Array.isArray(res)) return res;
+    if (res && 'users' in res && Array.isArray(res.users)) return res.users;
+    return [];
   },
 
   async createUser(payload: Partial<UserManagementItem> & { password?: string }): Promise<unknown> {
@@ -393,18 +387,15 @@ export const settingsApi = {
     return http.delete(`/api/v1/users/${uid}`);
   },
 
+  // P1-E1: HTTP 故障异常上抛
   async getUserGroups(name?: string, pageNum = 1, pageSize = 200): Promise<UserGroupItem[]> {
-    try {
-      const query = name ? `&name=${encodeURIComponent(name)}` : '';
-      const res = await http.get<{ group_list?: UserGroupItem[]; total?: number } | UserGroupItem[]>(
-        `/api/v1/user-group?page_num=${pageNum}&page_size=${pageSize}${query}`,
-        { skipErrorHandler: true }
-      );
-      if (Array.isArray(res)) return res;
-      return Array.isArray(res?.group_list) ? res.group_list : [];
-    } catch {
-      return [];
-    }
+    const query = name ? `&name=${encodeURIComponent(name)}` : '';
+    const res = await http.get<{ group_list?: UserGroupItem[]; total?: number } | UserGroupItem[]>(
+      `/api/v1/user-group?page_num=${pageNum}&page_size=${pageSize}${query}`,
+      { skipErrorHandler: true }
+    );
+    if (Array.isArray(res)) return res;
+    return Array.isArray(res?.group_list) ? res.group_list : [];
   },
 
   async createUserGroup(payload: { name: string; description?: string; uids?: string[] }): Promise<UserGroupItem> {
@@ -431,72 +422,59 @@ export const settingsApi = {
     return http.post(`/api/v1/user-group/${id}/bulk-delete-users`, { uids });
   },
 
-  /** 用户简表：POST /api/v1/users/brief 无管理员限制（区别于 /users/search 仅系统管理员） */
+  /** 用户简表：POST /api/v1/users/brief 无管理员限制（区别于 /users/search 仅系统管理员）。P1-E1: 异常上抛 */
   async getUsersBrief(): Promise<UserManagementItem[]> {
-    try {
-      const res = await http.post<{ users?: Array<{ uid?: string; name?: string; account?: string; email?: string; identity_type?: string }> }>(
-        '/api/v1/users/brief',
-        { page: 1, per_page: 200 },
-        { skipErrorHandler: true }
-      );
-      const users = Array.isArray(res?.users) ? res.users : [];
-      return users.map((u) => ({
-        uid: u.uid || '',
-        account: u.account || '',
-        name: u.name || '',
-        email: u.email || '',
-        identity_type: u.identity_type,
-      }));
-    } catch {
-      return [];
-    }
+    const res = await http.post<{ users?: Array<{ uid?: string; name?: string; account?: string; email?: string; identity_type?: string }> }>(
+      '/api/v1/users/brief',
+      { page: 1, per_page: 200 },
+      { skipErrorHandler: true }
+    );
+    const users = Array.isArray(res?.users) ? res.users : [];
+    return users.map((u) => ({
+      uid: u.uid || '',
+      account: u.account || '',
+      name: u.name || '',
+      email: u.email || '',
+      identity_type: u.identity_type,
+    }));
   },
 
+  // P1-E1: HTTP 故障异常上抛
   async getRoles(): Promise<RoleItem[]> {
-    try {
-      const res = await http.get<RoleItem[]>('/api/v1/policy/roles', { skipErrorHandler: true });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<RoleItem[]>('/api/v1/policy/roles', { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
   },
 
   // --- VM Hosts (mounted at /api/aslan/vm and /api/vm) ---
+  // P1-E1: 主列表异常上抛；私钥映射仅为增强信息，失败回退原始列表（合理降级）
   async getVMs(label?: string): Promise<VMItem[]> {
+    const query = label ? `?label=${encodeURIComponent(label)}` : '';
+    const res = await http.get<VMItem[]>(`/api/aslan/vm/vms${query}`, { skipErrorHandler: true });
+    const vmList = Array.isArray(res) ? res : [];
     try {
-      const query = label ? `?label=${encodeURIComponent(label)}` : '';
-      const res = await http.get<VMItem[]>(`/api/aslan/vm/vms${query}`, { skipErrorHandler: true });
-      const vmList = Array.isArray(res) ? res : [];
-      try {
-        const pks = await http.get<Array<{ id: string; name: string }>>('/api/aslan/system/privateKey/internal', {
-          skipErrorHandler: true,
+      const pks = await http.get<Array<{ id: string; name: string }>>('/api/aslan/system/privateKey/internal', {
+        skipErrorHandler: true,
+      });
+      if (Array.isArray(pks)) {
+        const pkMap = new Map<string, string>();
+        pks.forEach((pk) => {
+          if (pk.name && pk.id) pkMap.set(pk.name, pk.id);
         });
-        if (Array.isArray(pks)) {
-          const pkMap = new Map<string, string>();
-          pks.forEach((pk) => {
-            if (pk.name && pk.id) pkMap.set(pk.name, pk.id);
-          });
-          return vmList.map((vm) => ({
-            ...vm,
-            id: vm.id || pkMap.get(vm.name),
-          }));
-        }
-      } catch {
-        // fallback to raw vms
+        return vmList.map((vm) => ({
+          ...vm,
+          id: vm.id || pkMap.get(vm.name),
+        }));
       }
-      return vmList;
     } catch {
-      return [];
+      // fallback to raw vms
     }
+    return vmList;
   },
 
+  // P1-E1: HTTP 故障异常上抛
   async getVMLabels(projectName = ''): Promise<string[]> {
-    try {
-      const res = await http.get<string[]>(`/api/aslan/vm/labels?projectName=${projectName}`, { skipErrorHandler: true });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<string[]>(`/api/aslan/vm/labels?projectName=${projectName}`, { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
   },
 
   async createAgentHost(payload: { name: string; label?: string; ip?: string }): Promise<{ vm_id: string }> {
@@ -531,13 +509,10 @@ export const settingsApi = {
   },
 
   // --- Helm Chart Repos ---
+  // P1-E1: HTTP 故障异常上抛
   async getHelmRepos(): Promise<HelmRepoItem[]> {
-    try {
-      const res = await http.get<HelmRepoItem[]>('/api/aslan/system/helm', { skipErrorHandler: true });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<HelmRepoItem[]>('/api/aslan/system/helm', { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
   },
 
   async createHelmRepo(payload: Partial<HelmRepoItem> & { password?: string }): Promise<unknown> {
@@ -553,13 +528,10 @@ export const settingsApi = {
   },
 
   // --- DB Instances ---
+  // P1-E1: HTTP 故障异常上抛
   async getDBInstances(): Promise<DBInstanceItem[]> {
-    try {
-      const res = await http.get<DBInstanceItem[]>('/api/aslan/system/dbinstance', { skipErrorHandler: true });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<DBInstanceItem[]>('/api/aslan/system/dbinstance', { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
   },
 
   async createDBInstance(
@@ -573,13 +545,10 @@ export const settingsApi = {
   },
 
   // --- System Proxy ---
+  // P1-E1: HTTP 故障异常上抛
   async getProxies(): Promise<ProxyConfig[]> {
-    try {
-      const res = await http.get<ProxyConfig[]>('/api/aslan/system/proxyManage', { skipErrorHandler: true });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<ProxyConfig[]>('/api/aslan/system/proxyManage', { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
   },
 
   async createProxy(payload: ProxyConfig): Promise<unknown> {
@@ -626,13 +595,10 @@ export const settingsApi = {
   },
 
   // --- Project Management (Jira, Meego, PingCode, Tapd) ---
+  // P1-E1: HTTP 故障异常上抛
   async getProjectManagements(): Promise<ProjectManagementItem[]> {
-    try {
-      const res = await http.get<ProjectManagementItem[]>('/api/aslan/system/project_management', { skipErrorHandler: true });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<ProjectManagementItem[]>('/api/aslan/system/project_management', { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
   },
 
   async createProjectManagement(payload: Partial<ProjectManagementItem>): Promise<unknown> {
@@ -667,13 +633,10 @@ export const settingsApi = {
   },
 
   // --- Configuration Management (Apollo, Nacos) ---
+  // P1-E1: HTTP 故障异常上抛
   async getConfigurations(): Promise<ConfigurationManagementItem[]> {
-    try {
-      const res = await http.get<ConfigurationManagementItem[]>('/api/aslan/system/configuration', { skipErrorHandler: true });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<ConfigurationManagementItem[]>('/api/aslan/system/configuration', { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
   },
 
   async createConfiguration(payload: Partial<ConfigurationManagementItem>): Promise<unknown> {
@@ -692,39 +655,31 @@ export const settingsApi = {
     return http.post('/api/aslan/system/configuration/validate', payload);
   },
 
+  // P1-E1: HTTP 故障异常上抛
   async getNacosNamespaces(nacosId: string): Promise<Array<{ namespaced_name?: string; namespace_id?: string }>> {
-    try {
-      const res = await http.get<Array<{ namespaced_name?: string; namespace_id?: string }>>(`/api/aslan/system/nacos/${nacosId}`, { skipErrorHandler: true });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<Array<{ namespaced_name?: string; namespace_id?: string }>>(`/api/aslan/system/nacos/${nacosId}`, { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
   },
 
   // --- Jenkins Dynamic Job and Args ---
+  // P1-E1: HTTP 故障异常上抛
   async getJenkinsJobNames(jenkinsId: string): Promise<string[]> {
-    try {
-      const res = await http.get<string[]>(`/api/aslan/system/jenkins/jobNames/${jenkinsId}`, { skipErrorHandler: true });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<string[]>(`/api/aslan/system/jenkins/jobNames/${jenkinsId}`, { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
   },
 
+  // P1-E1: HTTP 故障异常上抛
   async getJenkinsBuildArgs(jenkinsId: string, jobName: string): Promise<Array<{ name: string; default_value?: unknown; description?: string; type?: string }>> {
-    try {
-      const cleanJob = jobName.startsWith('/') ? jobName.slice(1) : jobName;
-      const encodedJob = cleanJob.split('/').map(encodeURIComponent).join('/');
-      const res = await http.get<Array<{ name: string; default_value?: unknown; description?: string; type?: string }>>(
-        `/api/aslan/system/jenkins/buildArgs/${jenkinsId}/${encodedJob}`,
-        { skipErrorHandler: true }
-      );
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const cleanJob = jobName.startsWith('/') ? jobName.slice(1) : jobName;
+    const encodedJob = cleanJob.split('/').map(encodeURIComponent).join('/');
+    const res = await http.get<Array<{ name: string; default_value?: unknown; description?: string; type?: string }>>(
+      `/api/aslan/system/jenkins/buildArgs/${jenkinsId}/${encodedJob}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
   },
 
+  // 特性探测：返回语义化默认值（未配置 Jenkins），非数据列表吞错；调用方需按 exist=false 呈现
   async checkJenkinsExist(): Promise<{ exist: boolean }> {
     try {
       return await http.get<{ exist: boolean }>('/api/aslan/system/jenkins/exist', { skipErrorHandler: true });
@@ -733,33 +688,25 @@ export const settingsApi = {
     }
   },
 
+  // P1-E1: HTTP 故障异常上抛
   async listAgentIntegrations(): Promise<any[]> {
-    try {
-      const res = await http.get<any[]>('/api/aslan/system/agent/integrations', { skipErrorHandler: true });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<any[]>('/api/aslan/system/agent/integrations', { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
   },
 
+  // P1-E1: HTTP 故障异常上抛
   async listLLMIntegrations(): Promise<any[]> {
-    try {
-      const res = await http.get<any[]>('/api/aslan/system/llm/integration', { skipErrorHandler: true });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<any[]>('/api/aslan/system/llm/integration', { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
   },
 
+  // P1-E1: HTTP 故障异常上抛
   async listLLMIntegrationBriefs(): Promise<any[]> {
-    try {
-      const res = await http.get<any[]>('/api/aslan/system/llm/integrations', { skipErrorHandler: true });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<any[]>('/api/aslan/system/llm/integrations', { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
   },
 
+  // 特性探测：返回语义化默认值（未配置 LLM），非数据列表吞错
   async checkLLMIntegration(): Promise<{ enabled: boolean }> {
     try {
       return await http.get<{ enabled: boolean }>('/api/aslan/system/llm/integration/check', { skipErrorHandler: true });
@@ -768,21 +715,15 @@ export const settingsApi = {
     }
   },
 
+  // P1-E1: HTTP 故障异常上抛（当前无调用方；登录页接入时需自带 try/catch 呈现"未配置默认账号"态）
   async getDefaultLogin(): Promise<any> {
-    try {
-      return await http.get('/api/aslan/system/login/default', { skipErrorHandler: true });
-    } catch {
-      return null;
-    }
+    return http.get('/api/aslan/system/login/default', { skipErrorHandler: true });
   },
 
+  // P1-E1: HTTP 故障异常上抛
   async getCICDTools(): Promise<CICDToolItem[]> {
-    try {
-      const res = await http.get<CICDToolItem[]>('/api/aslan/system/cicdTools', { skipErrorHandler: true });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<CICDToolItem[]>('/api/aslan/system/cicdTools', { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
   },
 };
 

@@ -9,6 +9,7 @@ export interface ProjectListResponse {
 export const projectApi = {
   /**
    * Get list of projects
+   * P1-E1: 保留 picket → aslan 降级链，但两级均失败时异常上抛，不再吞为空数组
    */
   async getProjects(params?: {
     ungrouped?: boolean;
@@ -32,7 +33,8 @@ export const projectApi = {
       if (res && res.projects && Array.isArray(res.projects)) {
         return res.projects;
       }
-    } catch {
+      return [];
+    } catch (picketErr) {
       try {
         const fallbackRes = await http.get<ProjectListResponse | ProjectItem[]>('/api/aslan/project/projects', {
           params: {
@@ -49,28 +51,26 @@ export const projectApi = {
         if (Array.isArray(fallbackRes)) {
           return fallbackRes;
         }
+        return [];
       } catch {
-        // Return empty
+        // picket 与 aslan 双通道均故障：上抛首个异常，由调用方呈现错误态
+        throw picketErr;
       }
     }
-    return [];
   },
 
   /**
    * Get project groups
+   * P1-E1: HTTP 故障异常上抛，仅对成功响应做防御性解析
    */
   async getProjectGroups(): Promise<Array<{ id: string; name: string }>> {
-    try {
-      const res = await http.get<unknown>('/api/aslan/project/group');
-      if (Array.isArray(res)) {
-        return res.map((item) =>
-          typeof item === 'string' ? { id: item, name: item } : (item as { id: string; name: string })
-        );
-      }
-      return [];
-    } catch {
-      return [];
+    const res = await http.get<unknown>('/api/aslan/project/group');
+    if (Array.isArray(res)) {
+      return res.map((item) =>
+        typeof item === 'string' ? { id: item, name: item } : (item as { id: string; name: string })
+      );
     }
+    return [];
   },
 
   /**

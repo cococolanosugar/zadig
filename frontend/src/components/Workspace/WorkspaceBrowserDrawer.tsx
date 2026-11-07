@@ -62,12 +62,15 @@ export const WorkspaceBrowserDrawer: React.FC<WorkspaceBrowserDrawerProps> = ({
   // 加载系统代码源列表
   useEffect(() => {
     if (open) {
-      settingsApi.getCodeHosts().then((list) => {
-        setCodeHosts(list);
-        if (!selectedCodeHostId && list.length > 0) {
-          setSelectedCodeHostId(list[0].id);
-        }
-      });
+      settingsApi
+        .getCodeHosts()
+        .then((list) => {
+          setCodeHosts(list);
+          if (!selectedCodeHostId && list.length > 0) {
+            setSelectedCodeHostId(list[0].id);
+          }
+        })
+        .catch(() => setCodeHosts([]));
     }
   }, [open, selectedCodeHostId]);
 

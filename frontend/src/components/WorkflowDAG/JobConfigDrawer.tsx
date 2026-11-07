@@ -243,12 +243,15 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
 
     // Jenkins 工具与 Job 列表
     if (job.type === 'jenkins') {
-      settingsApi.getCICDTools().then((tools) => {
-        const list = tools
-          .filter((t) => !t.type || t.type.toLowerCase() === 'jenkins')
-          .map((t) => ({ label: `${t.name} (${t.url})`, value: t.id }));
-        setJenkinsTools(list);
-      });
+      settingsApi
+        .getCICDTools()
+        .then((tools) => {
+          const list = tools
+            .filter((t) => !t.type || t.type.toLowerCase() === 'jenkins')
+            .map((t) => ({ label: `${t.name} (${t.url})`, value: t.id }));
+          setJenkinsTools(list);
+        })
+        .catch(() => setJenkinsTools([]));
       const initialJenkinsId = (job.spec?.jenkins_id as string) || '';
       if (initialJenkinsId) {
         setLoadingJenkinsJobs(true);

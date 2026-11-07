@@ -58,16 +58,12 @@ export interface DetailedRoleTemplate {
 const nsQuery = (projectName: string) => `namespace=${encodeURIComponent(projectName)}`;
 
 export const rbacApi = {
-  /** 项目角色列表 */
+  /** 项目角色列表。P1-E1: HTTP 故障异常上抛，仅对成功响应做防御性解析 */
   async listRoles(projectName: string): Promise<PolicyRole[]> {
-    try {
-      const res = await http.get<PolicyRole[]>(`/api/v1/policy/roles?${nsQuery(projectName)}`, {
-        skipErrorHandler: true,
-      });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<PolicyRole[]>(`/api/v1/policy/roles?${nsQuery(projectName)}`, {
+      skipErrorHandler: true,
+    });
+    return Array.isArray(res) ? res : [];
   },
 
   /** 角色详情（含权限规则 rules） */
@@ -98,16 +94,12 @@ export const rbacApi = {
     );
   },
 
-  /** 项目角色绑定列表（binding_type: user | group） */
+  /** 项目角色绑定列表（binding_type: user | group）。P1-E1: HTTP 故障异常上抛 */
   async listRoleBindings(projectName: string): Promise<RoleBindingResp[]> {
-    try {
-      const res = await http.get<RoleBindingResp[]>(`/api/v1/policy/role-bindings?${nsQuery(projectName)}`, {
-        skipErrorHandler: true,
-      });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<RoleBindingResp[]>(`/api/v1/policy/role-bindings?${nsQuery(projectName)}`, {
+      skipErrorHandler: true,
+    });
+    return Array.isArray(res) ? res : [];
   },
 
   /** 创建绑定：POST /api/v1/policy/role-bindings?namespace=，body {identities:[{identity_type,uid|gid}],role} */
@@ -138,31 +130,24 @@ export const rbacApi = {
     );
   },
 
-  /** 权限动作定义（resource → verbs），用于新建角色的动作选择器 */
+  /** 权限动作定义（resource → verbs），用于新建角色的动作选择器。P1-E1: HTTP 故障异常上抛 */
   async getResourceActions(): Promise<ResourceAction[]> {
-    try {
-      const res = await http.get<ResourceAction[]>('/api/v1/policy/resource-actions', {
-        skipErrorHandler: true,
-      });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<ResourceAction[]>('/api/v1/policy/resource-actions', {
+      skipErrorHandler: true,
+    });
+    return Array.isArray(res) ? res : [];
   },
 
   /**
    * 角色模板列表。
    * GET /api/v1/policy/role-templates (pkg/microservice/user/core/handler/router.go:115)
+   * P1-E1: HTTP 故障异常上抛
    */
   async listRoleTemplates(): Promise<RoleTemplate[]> {
-    try {
-      const res = await http.get<RoleTemplate[]>('/api/v1/policy/role-templates', {
-        skipErrorHandler: true,
-      });
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<RoleTemplate[]>('/api/v1/policy/role-templates', {
+      skipErrorHandler: true,
+    });
+    return Array.isArray(res) ? res : [];
   },
 
   /**

@@ -57,6 +57,24 @@ const MobileWorkflowDetailRedirect: React.FC = () => {
   return <Navigate to={`/v1/projects/detail/${projectName || ''}/pipelines/${workflowName || ''}`} replace />;
 };
 
+// P1-R1：移动端测试深链 — 携带 testName 时进入测试详情，否则回落测试中心
+const MobileTestDetailRedirect: React.FC = () => {
+  const { projectName, testName } = useParams<{ projectName?: string; testName?: string }>();
+  if (testName) {
+    return <Navigate to={`/v1/projects/detail/${projectName || ''}/test/detail/${testName}`} replace />;
+  }
+  return <Navigate to={`/v1/projects/detail/${projectName || ''}/test`} replace />;
+};
+
+// P1-R1：移动端环境深链 — 携带 envName 时进入对应环境（envs/:envName 直接绑定路由参数），否则回落环境列表
+const MobileEnvDetailRedirect: React.FC = () => {
+  const { projectName, envName } = useParams<{ projectName?: string; envName?: string }>();
+  if (envName) {
+    return <Navigate to={`/v1/projects/detail/${projectName || ''}/envs/${envName}`} replace />;
+  }
+  return <Navigate to={`/v1/projects/detail/${projectName || ''}/envs`} replace />;
+};
+
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const location = useLocation();
@@ -314,6 +332,11 @@ export const AppRouter: React.FC = () => {
         <Route path="/mobile/projects/detail/:projectName" element={<MobileProjectDetailRedirect />} />
         <Route path="/mobile/projects/detail/:projectName/workflows/:workflowName" element={<MobileWorkflowDetailRedirect />} />
         <Route path="/mobile/projects/detail/:projectName/workflows/:workflowName/:taskId" element={<MobileWorkflowDetailRedirect />} />
+        {/* P1-R1: 移动端测试与环境深链（动态参数插值，兜底 /mobile/* 保持末位） */}
+        <Route path="/mobile/projects/detail/:projectName/tests" element={<MobileTestDetailRedirect />} />
+        <Route path="/mobile/projects/detail/:projectName/tests/:testName" element={<MobileTestDetailRedirect />} />
+        <Route path="/mobile/projects/detail/:projectName/envs" element={<MobileEnvDetailRedirect />} />
+        <Route path="/mobile/projects/detail/:projectName/envs/detail/:envName" element={<MobileEnvDetailRedirect />} />
         <Route path="/mobile/*" element={<Navigate to="/v1/dashboard" replace />} />
 
         <Route path="/404" element={

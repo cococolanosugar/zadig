@@ -75,26 +75,38 @@ const RBACPage: React.FC = () => {
   const loadBindings = async () => {
     if (!projectName) return;
     setBindingsLoading(true);
-    const list = await rbacApi.listRoleBindings(projectName);
-    setBindings(list);
-    setBindingsLoading(false);
+    try {
+      const list = await rbacApi.listRoleBindings(projectName);
+      setBindings(list);
+    } catch {
+      setBindings([]);
+      feedback.message.error('角色绑定列表加载失败');
+    } finally {
+      setBindingsLoading(false);
+    }
   };
 
   const loadRoles = async () => {
     if (!projectName) return;
     setRolesLoading(true);
-    const list = await rbacApi.listRoles(projectName);
-    setRoles(list);
-    setRolesLoading(false);
+    try {
+      const list = await rbacApi.listRoles(projectName);
+      setRoles(list);
+    } catch {
+      setRoles([]);
+      feedback.message.error('角色列表加载失败');
+    } finally {
+      setRolesLoading(false);
+    }
   };
 
   useEffect(() => {
     loadBindings();
     loadRoles();
     // 用户来源用 /api/v1/users/brief（无管理员限制；/users/search 仅系统管理员可用）
-    settingsApi.getUsersBrief().then(setUsers);
-    settingsApi.getUserGroups().then(setGroups);
-    rbacApi.getResourceActions().then(setActions);
+    settingsApi.getUsersBrief().then(setUsers).catch(() => setUsers([]));
+    settingsApi.getUserGroups().then(setGroups).catch(() => setGroups([]));
+    rbacApi.getResourceActions().then(setActions).catch(() => setActions([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectName]);
 
