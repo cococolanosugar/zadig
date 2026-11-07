@@ -289,4 +289,57 @@ export const templateCrudApi = {
   async deleteScanningTemplate(id: string): Promise<unknown> {
     return http.delete(`/api/aslan/template/scanning/${id}`, { skipErrorHandler: true });
   },
+
+  // ---------- R9 任务一: 引用（Reference）与同步（Sync）闭环 ----------
+  // YAML 模板引用服务列表（router.go: yaml.GET("/:id/reference")）
+  async getYamlTemplateReference(id: string): Promise<Array<{ service_name: string; project_name: string; production?: boolean }>> {
+    const res = await http.get(`/api/aslan/template/yaml/${encodeURIComponent(id)}/reference`, { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
+  },
+
+  // YAML 模板同步到引用服务（router.go: yaml.POST("/:id/reference")）
+  async syncYamlTemplateReference(id: string): Promise<unknown> {
+    return http.post(`/api/aslan/template/yaml/${encodeURIComponent(id)}/reference`, {}, { skipErrorHandler: true });
+  },
+
+  // Dockerfile 模板引用构建列表（router.go: dockerfile.GET("/:id/reference")）
+  async getDockerfileTemplateReference(id: string): Promise<Array<{ build_name: string; project_name: string }>> {
+    const res = await http.get(`/api/aslan/template/dockerfile/${encodeURIComponent(id)}/reference`, { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
+  },
+
+  // Chart 模板同步到引用服务（router.go: chart.POST("/:name/reference")）
+  async syncChartTemplateReference(chartName: string): Promise<unknown> {
+    return http.post(`/api/aslan/template/charts/${encodeURIComponent(chartName)}/reference`, {}, { skipErrorHandler: true });
+  },
+
+  // 构建模板引用列表（router.go: build.GET("/:id/reference")）
+  async getBuildTemplateReference(id: string): Promise<Array<{ project_name: string; service_modules?: string[] }>> {
+    const res = await http.get(`/api/aslan/template/build/${encodeURIComponent(id)}/reference`, { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
+  },
+
+  // 扫描模板引用列表（router.go: scanning.GET("/:id/reference")）
+  async getScanningTemplateReference(id: string): Promise<Array<{ project_name: string; service_modules?: string[] }>> {
+    const res = await http.get(`/api/aslan/template/scanning/${encodeURIComponent(id)}/reference`, { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
+  },
+
+  // ---------- R9 任务五: 发布计划模板详情与删除（router.go: releasePlan 组） ----------
+  async getReleasePlanTemplateDetail(id: string): Promise<{
+    id?: string;
+    template_name?: string;
+    created_by?: string;
+    create_time?: number;
+    updated_by?: string;
+    update_time?: number;
+    jobs?: any[];
+    approval?: any;
+  }> {
+    return http.get(`/api/aslan/template/release_plan/${encodeURIComponent(id)}`, { skipErrorHandler: true });
+  },
+
+  async deleteReleasePlanTemplate(id: string): Promise<unknown> {
+    return http.delete(`/api/aslan/template/release_plan/${encodeURIComponent(id)}`, { skipErrorHandler: true });
+  },
 };

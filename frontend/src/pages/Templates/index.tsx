@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Tabs, Table, Tag, Typography, Button, Space, Input, Row, Col, Spin, Empty, Badge, Drawer, Tooltip, Modal, Form, Popconfirm, Alert, Select, InputNumber, Switch } from 'antd';
+import { Card, Tabs, Table, Tag, Typography, Button, Space, Input, Row, Col, Spin, Empty, Badge, Drawer, Tooltip, Modal, Form, Popconfirm, Alert, Select, InputNumber, Switch, Descriptions } from 'antd';
 import {
   AppstoreOutlined,
   BranchesOutlined,
@@ -11,6 +11,10 @@ import {
   PlusOutlined,
   RocketOutlined,
   ReloadOutlined,
+  TagsOutlined,
+  CheckCircleOutlined,
+  SyncOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons';
 import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import templateApi, {
@@ -72,6 +76,168 @@ export const TemplateCenterPage: React.FC = () => {
   const [codehostOptions, setCodehostOptions] = useState<Array<{ label: string; value: number }>>([]);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // ---------- R9 任务二: 模板引用（Reference）抽屉与一键同步 ----------
+  type ReferenceTarget = { kind: 'yaml' | 'dockerfile' | 'chart' | 'build' | 'scanning'; id?: string; name: string };
+  const [refTarget, setRefTarget] = useState<ReferenceTarget | null>(null);
+  const [refDrawerOpen, setRefDrawerOpen] = useState(false);
+  const [refList, setRefList] = useState<any[]>([]);
+  const [refLoading, setRefLoading] = useState(false);
+  const [refSyncing, setRefSyncing] = useState(false);
+
+  const openReferenceDrawer = async (target: ReferenceTarget) => {
+    setRefTarget(target);
+    setRefDrawerOpen(true);
+    setRefList([]);
+    setRefLoading(true);
+    try {
+      let list: any[] = [];
+      if (target.kind === 'yaml' && target.id) {
+        list = await templateCrudApi.getYamlTemplateReference(target.id);
+      } else if (target.kind === 'dockerfile' && target.id) {
+        list = await templateCrudApi.getDockerfileTemplateReference(target.id);
+      } else if (target.kind === 'build' && target.id) {
+        list = await templateCrudApi.getBuildTemplateReference(target.id);
+      } else if (target.kind === 'scanning' && target.id) {
+        list = await templateCrudApi.getScanningTemplateReference(target.id);
+      } else if (target.kind === 'chart' && target.name) {
+        list = await templateApi.getChartTemplateReference(target.name);
+      }
+      setRefList(list);
+    } catch (err: unknown) {
+      setRefList([]);
+      feedback.message.error(err instanceof Error ? err.message : '模板引用列表获取失败');
+    } finally {
+      setRefLoading(false);
+    }
+  };
+
+  const handleSyncReference = async () => {
+    if (!refTarget) return;
+    setRefSyncing(true);
+    try {
+      if (refTarget.kind === 'yaml' && refTarget.id) {
+        await templateCrudApi.syncYamlTemplateReference(refTarget.id);
+      } else if (refTarget.kind === 'chart' && refTarget.name) {
+        await templateCrudApi.syncChartTemplateReference(refTarget.name);
+      }
+      feedback.message.success('模板变更已成功同步到引用服务');
+      setRefDrawerOpen(false);
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : '模板同步失败');
+    } finally {
+      setRefSyncing(false);
+    }
+  };
+
+  // ---------- R9 任务三: YAML 变量提取与 Dockerfile 语法校验 ----------
+  const [extractingVars, setExtractingVars] = useState(false);
+  const [extractedVars, setExtractedVars] = useState<Array<{ key: string; value?: string }>>([]);
+
+  const handleExtractVars = async () => {
+    const content = editingForm.getFieldValue('content');
+    if (!content) {
+      feedback.message.warning('请先填写模板内容再提取变量');
+      return;
+    }
+    setExtractingVars(true);
+    try {
+      const vars = await templateApi.extractYamlVariables({ content });
+      setExtractedVars(Array.isArray(vars) ? vars : []);
+      feedback.message.success(`成功识别 ${Array.isArray(vars) ? vars.length : 0} 个模板变量`);
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : '模板变量提取失败');
+    } finally {
+      setExtractingVars(false);
+    }
+  };
+
+  const [validatingDockerfile, setValidatingDockerfile] = useState(false);
+  const handleValidateDockerfile = async () => {
+    const content = editingForm.getFieldValue('content');
+    if (!content) {
+      feedback.message.warning('请先填写 Dockerfile 内容再校验');
+      return;
+    }
+    setValidatingDockerfile(true);
+    try {
+      await templateApi.validateDockerfile({ content });
+      feedback.message.success('Dockerfile 语法校验通过');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '');
+      feedback.message.error(msg ? `Dockerfile 语法校验未通过: ${msg}` : 'Dockerfile 语法校验未通过');
+    } finally {
+      setValidatingDockerfile(false);
+    }
+  };
+
+  // ---------- R9 任务四: Chart 模板 values 变量配置抽屉 ----------
+  const [chartVarsOpen, setChartVarsOpen] = useState(false);
+  const [chartVarsName, setChartVarsName] = useState('');
+  const [chartVarsContent, setChartVarsContent] = useState('');
+  const [chartVarsLoading, setChartVarsLoading] = useState(false);
+  const [chartVarsSaving, setChartVarsSaving] = useState(false);
+
+  const openChartVarsDrawer = async (chartName: string) => {
+    setChartVarsName(chartName);
+    setChartVarsOpen(true);
+    setChartVarsLoading(true);
+    setChartVarsContent('');
+    try {
+      const res = await templateApi.getChartTemplateVariables(chartName);
+      // 后端返回 values yaml 内容（string 或 {content} 包裹），防御性归一
+      const content = typeof res === 'string' ? res : (res as { content?: string })?.content || JSON.stringify(res, null, 2);
+      setChartVarsContent(content);
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : 'Chart 模板变量获取失败');
+    } finally {
+      setChartVarsLoading(false);
+    }
+  };
+
+  const handleSaveChartVars = async () => {
+    if (!chartVarsName) return;
+    setChartVarsSaving(true);
+    try {
+      await templateApi.saveChartTemplateVariables(chartVarsName, { content: chartVarsContent });
+      feedback.message.success('Chart 模板变量已更新');
+      setChartVarsOpen(false);
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : 'Chart 模板变量保存失败');
+    } finally {
+      setChartVarsSaving(false);
+    }
+  };
+
+  // ---------- R9 任务五: 发布计划模板详情抽屉与删除 ----------
+  const [planTplDetailOpen, setPlanTplDetailOpen] = useState(false);
+  const [planTplDetail, setPlanTplDetail] = useState<any>(null);
+  const [planTplLoading, setPlanTplLoading] = useState(false);
+
+  const openPlanTplDetail = async (id: string) => {
+    setPlanTplDetailOpen(true);
+    setPlanTplLoading(true);
+    setPlanTplDetail(null);
+    try {
+      const detail = await templateCrudApi.getReleasePlanTemplateDetail(id);
+      setPlanTplDetail(detail || null);
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : '发布计划模板详情获取失败');
+    } finally {
+      setPlanTplLoading(false);
+    }
+  };
+
+  const handleDeletePlanTemplate = async (id: string, name?: string) => {
+    try {
+      await templateCrudApi.deleteReleasePlanTemplate(id);
+      feedback.message.success('发布计划模板已删除');
+      setReleasePlanTemplates((prev) => prev.filter((t) => t.id !== id));
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : `删除发布计划模板 [${name || id}] 失败`);
+    }
+  };
+
   const openCreateTemplate = () => {
     const kindByTab: Record<string, 'yaml' | 'dockerfile' | 'chart' | 'build' | 'scanning'> = {
       'k8s-yamls': 'yaml',
@@ -94,11 +260,13 @@ export const TemplateCenterPage: React.FC = () => {
     } else {
       editingForm.setFieldsValue({ name: '', content: '' });
     }
+    setExtractedVars([]);
     setEditing({ kind, name: '' } as NonNullable<typeof editing>);
   };
 
   const openEditTemplate = async (kind: 'yaml' | 'dockerfile' | 'chart' | 'build' | 'scanning', id: string | undefined, name: string, content?: string) => {
     setEditing({ kind, id, name } as NonNullable<typeof editing>);
+    setExtractedVars([]);
     if (kind === 'yaml' || kind === 'dockerfile') {
       editingForm.setFieldsValue({ name, content: content || '' });
       return;
@@ -631,6 +799,9 @@ export const TemplateCenterPage: React.FC = () => {
                   </Button>
                   {r.id && (
                     <>
+                      <Button type="link" onClick={() => openReferenceDrawer({ kind: 'yaml', id: r.id as string, name: r.name })}>
+                        引用
+                      </Button>
                       <Button type="link" onClick={() => openEditTemplate('yaml', r.id as string, r.name, r.content || '')}>
                         编辑
                       </Button>
@@ -684,6 +855,9 @@ export const TemplateCenterPage: React.FC = () => {
                   </Button>
                   {r.id && (
                     <>
+                      <Button type="link" onClick={() => openReferenceDrawer({ kind: 'dockerfile', id: r.id as string, name: r.name })}>
+                        引用
+                      </Button>
                       <Button type="link" onClick={() => openEditTemplate('dockerfile', r.id as string, r.name, r.content || '')}>
                         编辑
                       </Button>
@@ -730,6 +904,12 @@ export const TemplateCenterPage: React.FC = () => {
                   <Space size={0}>
                     {r.name && (
                       <>
+                        <Button type="link" onClick={() => openReferenceDrawer({ kind: 'chart', name: r.name as string })}>
+                          引用
+                        </Button>
+                        <Button type="link" onClick={() => openChartVarsDrawer(r.name as string)}>
+                          变量配置
+                        </Button>
                         <Button type="link" onClick={() => openEditTemplate('chart', undefined, r.name as string)}>
                           编辑
                         </Button>
@@ -743,7 +923,7 @@ export const TemplateCenterPage: React.FC = () => {
               },
             ]}
             locale={{
-              emptyText: <Empty description="暂无 Helm Chart 模板，请先在资源配置中接入 Chart 仓库" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+              emptyText: <Empty description="暂无 Helm Chart 模板，支持通过关联代码源导入 Chart 模板" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
             }}
           />
         ) : activeTab === 'builds' ? (
@@ -784,6 +964,9 @@ export const TemplateCenterPage: React.FC = () => {
                   <Space size={0}>
                     {r.id && (
                       <>
+                        <Button type="link" onClick={() => openReferenceDrawer({ kind: 'build', id: r.id as string, name: r.name })}>
+                          引用
+                        </Button>
                         <Button type="link" onClick={() => openEditTemplate('build', r.id as string, r.name)}>
                           编辑
                         </Button>
@@ -843,6 +1026,9 @@ export const TemplateCenterPage: React.FC = () => {
                   <Space size={0}>
                     {r.id && (
                       <>
+                        <Button type="link" onClick={() => openReferenceDrawer({ kind: 'scanning', id: r.id as string, name: r.name })}>
+                          引用
+                        </Button>
                         <Button type="link" onClick={() => openEditTemplate('scanning', r.id as string, r.name)}>
                           编辑
                         </Button>
@@ -888,6 +1074,25 @@ export const TemplateCenterPage: React.FC = () => {
                 key: 'update_time',
                 render: (t: number | undefined) => (t ? new Date(t * 1000).toLocaleString() : '-'),
               },
+              {
+                title: '操作',
+                key: 'action',
+                render: (_, r) => (
+                  <Space size={0}>
+                    <Button type="link" size="small" onClick={() => openPlanTplDetail(r.id as string)}>
+                      查看详情
+                    </Button>
+                    <Popconfirm
+                      title={`确定删除发布计划模板 [${r.name}]？`}
+                      onConfirm={() => handleDeletePlanTemplate(r.id as string, r.name)}
+                      okText="删除"
+                      cancelText="取消"
+                    >
+                      <Button type="link" size="small" danger>删除</Button>
+                    </Popconfirm>
+                  </Space>
+                ),
+              },
             ]}
             locale={{
               emptyText: <Empty description="暂无发布计划模板" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
@@ -921,21 +1126,52 @@ export const TemplateCenterPage: React.FC = () => {
 
           {/* K8s YAML / Dockerfile 内容型模板 */}
           {editing?.kind === 'yaml' || editing?.kind === 'dockerfile' ? (
-            <Form.Item
-              name="content"
-              label={editing?.kind === 'dockerfile' ? 'Dockerfile 内容' : 'K8s YAML 内容（{{.变量}} 语法自动提取为模板变量）'}
-              rules={[{ required: true, message: '请输入模板内容' }]}
-            >
-              <Input.TextArea
-                rows={16}
-                style={{ fontFamily: 'monospace', fontSize: 13 }}
-                placeholder={
-                  editing?.kind === 'dockerfile'
-                    ? 'FROM {{.base_image}}\n...'
-                    : 'apiVersion: apps/v1\nkind: Deployment\n...\nspec:\n  template:\n    spec:\n      containers:\n      - image: {{.image_name}}'
-                }
-              />
-            </Form.Item>
+            <>
+              <Form.Item
+                label={editing?.kind === 'dockerfile' ? 'Dockerfile 内容' : 'K8s YAML 内容（{{.变量}} 语法自动提取为模板变量）'}
+                required
+              >
+                <Space style={{ marginBottom: 8 }}>
+                  {editing?.kind === 'yaml' && (
+                    <Button size="small" icon={<TagsOutlined />} loading={extractingVars} onClick={handleExtractVars}>
+                      提取变量
+                    </Button>
+                  )}
+                  {editing?.kind === 'dockerfile' && (
+                    <Button size="small" icon={<CheckCircleOutlined />} loading={validatingDockerfile} onClick={handleValidateDockerfile}>
+                      语法校验
+                    </Button>
+                  )}
+                </Space>
+                <Form.Item
+                  name="content"
+                  noStyle
+                  rules={[{ required: true, message: '请输入模板内容' }]}
+                >
+                  <Input.TextArea
+                    rows={16}
+                    style={{ fontFamily: 'monospace', fontSize: 13 }}
+                    placeholder={
+                      editing?.kind === 'dockerfile'
+                        ? 'FROM {{.base_image}}\n...'
+                        : 'apiVersion: apps/v1\nkind: Deployment\n...\nspec:\n  template:\n    spec:\n      containers:\n      - image: {{.image_name}}'
+                    }
+                  />
+                </Form.Item>
+              </Form.Item>
+              {editing?.kind === 'yaml' && extractedVars.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                    已识别模板变量 ({extractedVars.length}):
+                  </Text>
+                  <Space wrap size={[4, 4]}>
+                    {extractedVars.map((v, i) => (
+                      <Tag key={`${v.key}-${i}`} color="geekblue">{v.key}</Tag>
+                    ))}
+                  </Space>
+                </div>
+              )}
+            </>
           ) : null}
 
           {/* Helm Chart 模板：代码仓库源（对齐后端 addChartArgs = name + fs.DownloadFromSourceArgs） */}
@@ -1148,6 +1384,177 @@ export const TemplateCenterPage: React.FC = () => {
             />
           </div>
         )}
+      </Drawer>
+
+      {/* R9 任务二: 模板引用服务抽屉 */}
+      <Drawer
+        title={`模板引用服务: ${refTarget?.name || ''}`}
+        placement="right"
+        open={refDrawerOpen}
+        onClose={() => setRefDrawerOpen(false)}
+        size="large"
+        extra={
+          (refTarget?.kind === 'yaml' || refTarget?.kind === 'chart') && refList.length > 0 ? (
+            <Popconfirm
+              title="确定将最新模板内容同步更新到所有引用的服务配置中吗？"
+              onConfirm={handleSyncReference}
+              okText="同步"
+              cancelText="取消"
+            >
+              <Button type="primary" size="small" icon={<SyncOutlined />} loading={refSyncing}>
+                同步到引用服务
+              </Button>
+            </Popconfirm>
+          ) : null
+        }
+      >
+        {refLoading ? (
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <Spin size="large" />
+          </div>
+        ) : refList.length > 0 ? (
+          <Table
+            dataSource={refList}
+            rowKey={(_, idx) => String(idx)}
+            pagination={false}
+            size="small"
+            columns={[
+              {
+                title: '所属项目',
+                dataIndex: 'project_name',
+                key: 'project_name',
+                render: (p) => <Tag color="blue">{String(p || '-')}</Tag>,
+              },
+              {
+                title: refTarget?.kind === 'dockerfile' ? '引用构建' : '引用服务/模块',
+                key: 'target',
+                render: (_, r) => (
+                  <Text strong>{String(r.service_name || r.build_name || '-')}</Text>
+                ),
+              },
+              ...(refTarget?.kind === 'yaml'
+                ? [
+                    {
+                      title: '环境类型',
+                      dataIndex: 'production',
+                      key: 'production',
+                      width: 110,
+                      render: (p: boolean | undefined) =>
+                        p ? <Tag color="orange">生产</Tag> : <Tag color="cyan">测试</Tag>,
+                    },
+                  ]
+                : []),
+              ...(refTarget?.kind === 'build' || refTarget?.kind === 'scanning'
+                ? [
+                    {
+                      title: '引用模块',
+                      dataIndex: 'service_modules',
+                      key: 'service_modules',
+                      render: (mods: string[] | undefined) =>
+                        mods && mods.length > 0 ? (
+                          <Space wrap size={[4, 4]}>
+                            {mods.map((m) => (
+                              <Tag key={m} color="geekblue">{m}</Tag>
+                            ))}
+                          </Space>
+                        ) : (
+                          <Text type="secondary">全部模块</Text>
+                        ),
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        ) : (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="暂无服务引用该模板"
+            style={{ padding: '40px 0' }}
+          />
+        )}
+      </Drawer>
+
+      {/* R9 任务四: Chart 模板 values 变量配置抽屉 */}
+      <Drawer
+        title={`Chart 模板变量配置: ${chartVarsName}`}
+        placement="right"
+        open={chartVarsOpen}
+        onClose={() => setChartVarsOpen(false)}
+        size="large"
+        extra={
+          <Button
+            type="primary"
+            size="small"
+            icon={<CheckCircleOutlined />}
+            loading={chartVarsSaving}
+            onClick={handleSaveChartVars}
+          >
+            保存变量
+          </Button>
+        }
+      >
+        {chartVarsLoading ? (
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <Spin size="large" />
+          </div>
+        ) : (
+          <Input.TextArea
+            rows={24}
+            value={chartVarsContent}
+            onChange={(e) => setChartVarsContent(e.target.value)}
+            style={{ fontFamily: 'monospace', fontSize: 13 }}
+            placeholder="Chart 模板 values 变量内容"
+          />
+        )}
+      </Drawer>
+
+      {/* R9 任务五: 发布计划模板详情抽屉 */}
+      <Drawer
+        title={`发布计划模板详情: ${planTplDetail?.template_name || ''}`}
+        placement="right"
+        open={planTplDetailOpen}
+        onClose={() => setPlanTplDetailOpen(false)}
+        size="large"
+      >
+        <Spin spinning={planTplLoading}>
+          {planTplDetail ? (
+            <div>
+              <Descriptions bordered column={1} size="small" style={{ marginBottom: 20 }}>
+                <Descriptions.Item label="模板名称">{planTplDetail.template_name || '-'}</Descriptions.Item>
+                <Descriptions.Item label="创建人">{planTplDetail.created_by || '-'}</Descriptions.Item>
+                <Descriptions.Item label="创建时间">
+                  {planTplDetail.create_time ? new Date(planTplDetail.create_time * 1000).toLocaleString() : '-'}
+                </Descriptions.Item>
+                <Descriptions.Item label="最近更新">
+                  {planTplDetail.update_time ? `${planTplDetail.updated_by || '-'} · ${new Date(planTplDetail.update_time * 1000).toLocaleString()}` : '-'}
+                </Descriptions.Item>
+              </Descriptions>
+
+              <Title level={5}>
+                <Space size={6}>
+                  <ApartmentOutlined />
+                  <span>任务编排 ({(planTplDetail.jobs || []).length})</span>
+                </Space>
+              </Title>
+              {(planTplDetail.jobs || []).length > 0 ? (
+                <Table
+                  dataSource={planTplDetail.jobs}
+                  rowKey={(j: any, idx) => String(j?.id || idx)}
+                  pagination={false}
+                  size="small"
+                  columns={[
+                    { title: 'Job 名称', dataIndex: 'name', key: 'name', render: (n) => <Text strong>{String(n || '-')}</Text> },
+                    { title: '类型', dataIndex: 'type', key: 'type', width: 120, render: (t) => <Tag color="geekblue">{String(t || '-')}</Tag> },
+                  ]}
+                />
+              ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该模板暂无任务编排定义" />
+              )}
+            </div>
+          ) : (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未获取到模板详情" />
+          )}
+        </Spin>
       </Drawer>
     </div>
   );
