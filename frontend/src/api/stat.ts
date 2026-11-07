@@ -131,6 +131,18 @@ export interface StatDashboardBasicData {
   production_deploy_success: number;
 }
 
+export interface DeployHealthStat {
+  success: number;
+  failure: number;
+}
+
+export interface RollbackServiceCountItem {
+  project_name?: string;
+  service_name?: string;
+  count: number;
+  production: boolean;
+}
+
 export const statApi = {
   // --- Group A: 质量/效能度量 (POST /stat/quality/* & GET /stat/v2/quality/rollback/stat) ---
   // 0. 构建健康度 (成功/失败总数)
@@ -223,6 +235,106 @@ export const statApi = {
     return http.get<StatDashboardBasicData>(
       `/api/aslan/stat/v2/dashboard/general?start_time=${startTime}&end_time=${endTime}`
     );
+  },
+
+  // 15. 发布健康度统计 (GET /stat/v2/quality/deploy/health)
+  getDeployHealthStats(params?: { startDate?: number; endDate?: number; projects?: string[]; type?: string }): Promise<DeployHealthStat> {
+    const q = new URLSearchParams();
+    if (params?.startDate) q.set('startDate', String(params.startDate));
+    if (params?.endDate) q.set('endDate', String(params.endDate));
+    if (params?.type) q.set('type', params.type);
+    if (params?.projects) params.projects.forEach((p) => q.append('projects', p));
+    const qs = q.toString();
+    return http.get(`/api/aslan/stat/v2/quality/deploy/health${qs ? `?${qs}` : ''}`, { skipErrorHandler: true });
+  },
+
+  // 16. 发布周趋势 (GET /stat/v2/quality/deploy/trend/weekly)
+  getDeployWeeklyTrend(params?: { startDate?: number; endDate?: number; projects?: string[] }): Promise<unknown> {
+    const q = new URLSearchParams();
+    if (params?.startDate) q.set('startDate', String(params.startDate));
+    if (params?.endDate) q.set('endDate', String(params.endDate));
+    if (params?.projects) params.projects.forEach((p) => q.append('projects', p));
+    const qs = q.toString();
+    return http.get(`/api/aslan/stat/v2/quality/deploy/trend/weekly${qs ? `?${qs}` : ''}`, { skipErrorHandler: true });
+  },
+
+  // 17. 发布月趋势 (GET /stat/v2/quality/deploy/trend/monthly)
+  getDeployMonthlyTrend(params?: { startDate?: number; endDate?: number; projects?: string[] }): Promise<unknown> {
+    const q = new URLSearchParams();
+    if (params?.startDate) q.set('startDate', String(params.startDate));
+    if (params?.endDate) q.set('endDate', String(params.endDate));
+    if (params?.projects) params.projects.forEach((p) => q.append('projects', p));
+    const qs = q.toString();
+    return http.get(`/api/aslan/stat/v2/quality/deploy/trend/monthly${qs ? `?${qs}` : ''}`, { skipErrorHandler: true });
+  },
+
+  // 18. 发布最多服务 Top (GET /stat/v2/quality/deploy/service/top)
+  getTopDeployedServices(params?: { startDate?: number; endDate?: number; top?: number; projects?: string[] }): Promise<unknown> {
+    const q = new URLSearchParams();
+    if (params?.startDate) q.set('startDate', String(params.startDate));
+    if (params?.endDate) q.set('endDate', String(params.endDate));
+    if (params?.top) q.set('top', String(params.top));
+    if (params?.projects) params.projects.forEach((p) => q.append('projects', p));
+    const qs = q.toString();
+    return http.get(`/api/aslan/stat/v2/quality/deploy/service/top${qs ? `?${qs}` : ''}`, { skipErrorHandler: true });
+  },
+
+  // 19. 失败最多服务 Top (GET /stat/v2/quality/deploy/service/failure)
+  getTopDeployFailures(params?: { startDate?: number; endDate?: number; top?: number; projects?: string[] }): Promise<unknown> {
+    const q = new URLSearchParams();
+    if (params?.startDate) q.set('startDate', String(params.startDate));
+    if (params?.endDate) q.set('endDate', String(params.endDate));
+    if (params?.top) q.set('top', String(params.top));
+    if (params?.projects) params.projects.forEach((p) => q.append('projects', p));
+    const qs = q.toString();
+    return http.get(`/api/aslan/stat/v2/quality/deploy/service/failure${qs ? `?${qs}` : ''}`, { skipErrorHandler: true });
+  },
+
+  // 20. 回滚总数 (GET /stat/v2/quality/rollback/total)
+  getRollbackTotalStat(params?: { startDate?: number; endDate?: number; projects?: string[] }): Promise<{ total: number }> {
+    const q = new URLSearchParams();
+    if (params?.startDate) q.set('startDate', String(params.startDate));
+    if (params?.endDate) q.set('endDate', String(params.endDate));
+    if (params?.projects) params.projects.forEach((p) => q.append('projects', p));
+    const qs = q.toString();
+    return http.get(`/api/aslan/stat/v2/quality/rollback/total${qs ? `?${qs}` : ''}`, { skipErrorHandler: true });
+  },
+
+  // 21. 回滚最多服务 Top (GET /stat/v2/quality/rollback/service/top)
+  getTopRollbackedServices(params?: { startDate?: number; endDate?: number; top?: number; projects?: string[]; type?: string }): Promise<RollbackServiceCountItem[]> {
+    const q = new URLSearchParams();
+    if (params?.startDate) q.set('startDate', String(params.startDate));
+    if (params?.endDate) q.set('endDate', String(params.endDate));
+    if (params?.top) q.set('top', String(params.top));
+    if (params?.type) q.set('type', params.type);
+    if (params?.projects) params.projects.forEach((p) => q.append('projects', p));
+    const qs = q.toString();
+    return http.get(`/api/aslan/stat/v2/quality/rollback/service/top${qs ? `?${qs}` : ''}`, { skipErrorHandler: true });
+  },
+
+  // 22. 回滚周趋势 (GET /stat/v2/quality/rollback/trend/weekly)
+  getRollbackWeeklyTrend(params?: { startDate?: number; endDate?: number; projects?: string[] }): Promise<unknown> {
+    const q = new URLSearchParams();
+    if (params?.startDate) q.set('startDate', String(params.startDate));
+    if (params?.endDate) q.set('endDate', String(params.endDate));
+    if (params?.projects) params.projects.forEach((p) => q.append('projects', p));
+    const qs = q.toString();
+    return http.get(`/api/aslan/stat/v2/quality/rollback/trend/weekly${qs ? `?${qs}` : ''}`, { skipErrorHandler: true });
+  },
+
+  // 23. 最近测试任务 (GET /stat/v2/quality/test/recentTask)
+  getRecentTestTasks(params?: { startDate?: number; endDate?: number; projects?: string[] }): Promise<unknown> {
+    const q = new URLSearchParams();
+    if (params?.startDate) q.set('startDate', String(params.startDate));
+    if (params?.endDate) q.set('endDate', String(params.endDate));
+    if (params?.projects) params.projects.forEach((p) => q.append('projects', p));
+    const qs = q.toString();
+    return http.get(`/api/aslan/stat/v2/quality/test/recentTask${qs ? `?${qs}` : ''}`, { skipErrorHandler: true });
+  },
+
+  // 24. 日测试健康趋势 (POST /stat/v2/quality/test/dailyHealthTrend)
+  getDailyTestHealthTrend(body: { startDate: number; endDate: number; projects?: string[] }): Promise<unknown> {
+    return http.post('/api/aslan/stat/v2/quality/test/dailyHealthTrend', body, { skipErrorHandler: true });
   },
 };
 

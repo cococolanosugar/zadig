@@ -775,6 +775,23 @@ export const environmentApi = {
       `/api/aslan/environment/kube/${encodeURIComponent(envName)}/pods/${encodeURIComponent(podName)}?${params.toString()}`
     );
   },
+
+  /**
+   * 获取 Helm 服务 Values YAML 内容预览
+   * GET /api/aslan/environment/rendersets/yamlContent?codehostID=&repoLink=&valuesPath=
+   * (pkg/microservice/aslan/core/environment/handler/router.go:260)
+   */
+  getYamlContent(args: {
+    codehostID?: number | string;
+    repoLink?: string;
+    valuesPath: string;
+  }): Promise<{ content?: string; yaml_content?: string }> {
+    const q = new URLSearchParams();
+    if (args.codehostID) q.set('codehostID', String(args.codehostID));
+    if (args.repoLink) q.set('repoLink', args.repoLink);
+    if (args.valuesPath) q.set('valuesPath', args.valuesPath);
+    return http.get(`/api/aslan/environment/rendersets/yamlContent?${q.toString()}`);
+  },
 };
 
 export interface EnvSvcRevision {

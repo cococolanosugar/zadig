@@ -145,39 +145,52 @@ export const DashboardPage: React.FC = () => {
         );
       } else if (card.type === 'deploy_statistics') {
         try {
-          const res = await http.get('/api/aslan/system/dashboard/deploy/statistics', { skipErrorHandler: true });
-          data = res || {
-            total_deploys: 128,
-            success_rate: 98.4,
-            failed_deploys: 2,
+          // 官方契约：GET /api/aslan/stat/v2/quality/deploy/health
+          const health = await http.get<{ success?: number; failure?: number }>(
+            '/api/aslan/stat/v2/quality/deploy/health',
+            { skipErrorHandler: true }
+          );
+          const success = health?.success || 0;
+          const failure = health?.failure || 0;
+          const total = success + failure;
+          const successRate = total > 0 ? Number(((success / total) * 100).toFixed(1)) : 100;
+          data = {
+            total_deploys: total,
+            success_rate: successRate,
+            failed_deploys: failure,
             avg_duration_min: 4.2,
             mttr_min: 11.5,
           };
         } catch {
           data = {
-            total_deploys: 128,
-            success_rate: 98.4,
-            failed_deploys: 2,
-            avg_duration_min: 4.2,
-            mttr_min: 11.5,
+            total_deploys: 0,
+            success_rate: 100,
+            failed_deploys: 0,
+            avg_duration_min: 0,
+            mttr_min: 0,
           };
         }
       } else if (card.type === 'service_rollback_ranking') {
         try {
-          const res = await http.get('/api/aslan/system/dashboard/service/rollback', { skipErrorHandler: true });
-          data = Array.isArray(res) && res.length > 0 ? res : [
-            { rank: 1, service_name: 'payment-core-api', count: 4, last_env: 'prod', last_time: '2026-10-09 14:22', reason: '数据库死锁超时' },
-            { rank: 2, service_name: 'order-dispatch-service', count: 3, last_env: 'prod', last_time: '2026-10-08 19:40', reason: 'RPC 接口空指针异常' },
-            { rank: 3, service_name: 'user-auth-gateway', count: 2, last_env: 'staging', last_time: '2026-10-05 11:15', reason: 'Redis 缓存击穿' },
-            { rank: 4, service_name: 'inventory-stock-manager', count: 1, last_env: 'qa', last_time: '2026-10-02 16:03', reason: '配置项未声明' },
-          ];
+          // 官方契约：GET /api/aslan/stat/v2/quality/rollback/service/top
+          const res = await http.get<Array<{ project_name?: string; service_name?: string; count?: number; production?: boolean }>>(
+            '/api/aslan/stat/v2/quality/rollback/service/top?top=5',
+            { skipErrorHandler: true }
+          );
+          if (Array.isArray(res) && res.length > 0) {
+            data = res.map((item, idx) => ({
+              rank: idx + 1,
+              service_name: item.service_name || 'unknown',
+              count: item.count || 0,
+              last_env: item.production ? 'prod' : 'dev/test',
+              last_time: '近30天',
+              reason: item.project_name ? `所属项目: ${item.project_name}` : '发布回滚',
+            }));
+          } else {
+            data = [];
+          }
         } catch {
-          data = [
-            { rank: 1, service_name: 'payment-core-api', count: 4, last_env: 'prod', last_time: '2026-10-09 14:22', reason: '数据库死锁超时' },
-            { rank: 2, service_name: 'order-dispatch-service', count: 3, last_env: 'prod', last_time: '2026-10-08 19:40', reason: 'RPC 接口空指针异常' },
-            { rank: 3, service_name: 'user-auth-gateway', count: 2, last_env: 'staging', last_time: '2026-10-05 11:15', reason: 'Redis 缓存击穿' },
-            { rank: 4, service_name: 'inventory-stock-manager', count: 1, last_env: 'qa', last_time: '2026-10-02 16:03', reason: '配置项未声明' },
-          ];
+          data = [];
         }
       }
       setCardData((prev) => ({ ...prev, [card.id || card.name]: data }));

@@ -713,13 +713,66 @@ export const settingsApi = {
 
   async getJenkinsBuildArgs(jenkinsId: string, jobName: string): Promise<Array<{ name: string; default_value?: unknown; description?: string; type?: string }>> {
     try {
+      const cleanJob = jobName.startsWith('/') ? jobName.slice(1) : jobName;
+      const encodedJob = cleanJob.split('/').map(encodeURIComponent).join('/');
       const res = await http.get<Array<{ name: string; default_value?: unknown; description?: string; type?: string }>>(
-        `/api/aslan/system/jenkins/buildArgs/${jenkinsId}/${encodeURIComponent(jobName)}`,
+        `/api/aslan/system/jenkins/buildArgs/${jenkinsId}/${encodedJob}`,
         { skipErrorHandler: true }
       );
       return Array.isArray(res) ? res : [];
     } catch {
       return [];
+    }
+  },
+
+  async checkJenkinsExist(): Promise<{ exist: boolean }> {
+    try {
+      return await http.get<{ exist: boolean }>('/api/aslan/system/jenkins/exist', { skipErrorHandler: true });
+    } catch {
+      return { exist: false };
+    }
+  },
+
+  async listAgentIntegrations(): Promise<any[]> {
+    try {
+      const res = await http.get<any[]>('/api/aslan/system/agent/integrations', { skipErrorHandler: true });
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  async listLLMIntegrations(): Promise<any[]> {
+    try {
+      const res = await http.get<any[]>('/api/aslan/system/llm/integration', { skipErrorHandler: true });
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  async listLLMIntegrationBriefs(): Promise<any[]> {
+    try {
+      const res = await http.get<any[]>('/api/aslan/system/llm/integrations', { skipErrorHandler: true });
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  async checkLLMIntegration(): Promise<{ enabled: boolean }> {
+    try {
+      return await http.get<{ enabled: boolean }>('/api/aslan/system/llm/integration/check', { skipErrorHandler: true });
+    } catch {
+      return { enabled: false };
+    }
+  },
+
+  async getDefaultLogin(): Promise<any> {
+    try {
+      return await http.get('/api/aslan/system/login/default', { skipErrorHandler: true });
+    } catch {
+      return null;
     }
   },
 

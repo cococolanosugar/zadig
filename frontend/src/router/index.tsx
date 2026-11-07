@@ -107,6 +107,15 @@ export const AppRouter: React.FC = () => {
             <Route path="pipelines/custom/:name" element={<PipelinesPage />} />
             <Route path="pipelines/custom/:name/:taskId" element={<PipelineExecutionPage />} />
             <Route path="pipelines/custom/testcase/*" element={<PipelineExecutionPage />} />
+            {/* Workflows (Official V4 Deep Link Aliases) */}
+            <Route path="workflows" element={<PipelinesPage />} />
+            <Route path="workflows/:name" element={<PipelinesPage />} />
+            <Route path="workflows/:name/task/:taskId" element={<PipelineExecutionPage />} />
+            <Route path="workflows/custom/create" element={<PipelinesPage />} />
+            <Route path="workflows/custom/edit/:name" element={<PipelinesPage />} />
+            <Route path="workflows/custom/:name" element={<PipelinesPage />} />
+            <Route path="workflows/custom/:name/:taskId" element={<PipelineExecutionPage />} />
+            <Route path="workflows/*" element={<PipelinesPage />} />
             <Route path="envs" element={<EnvironmentsPage />} />
             <Route path="envs/create" element={<EnvironmentWizardPage />} />
             <Route path="envs/detail" element={<EnvironmentsPage />} />
@@ -117,6 +126,9 @@ export const AppRouter: React.FC = () => {
             <Route path="envs/sae/create" element={<EnvironmentWizardPage />} />
             <Route path="envs/sae/production/create" element={<EnvironmentWizardPage />} />
             <Route path="envs/sae/config" element={<EnvironmentsPage />} />
+            <Route path="envs/sae/changeOrder" element={<EnvironmentsPage />} />
+            <Route path="envs/sae/changeOrder/:orderId/detail" element={<EnvironmentsPage />} />
+            <Route path="envs/sae/changeOrder/*" element={<EnvironmentsPage />} />
             <Route path="envs/:envName" element={<EnvironmentsPage />} />
             <Route path="envs/:envName/k8s/:serviceName" element={<ServiceDetailPage />} />
             <Route path="envs/:envName/helm/:serviceName" element={<ServiceDetailPage />} />
@@ -132,6 +144,13 @@ export const AppRouter: React.FC = () => {
             <Route path="builds/detail/:buildName" element={<BuildsPage />} />
             <Route path="test" element={<QualityCenterPage />} />
             <Route path="test/*" element={<QualityCenterPage />} />
+            {/* Tests (Official Deep Link Aliases) */}
+            <Route path="tests" element={<QualityCenterPage />} />
+            <Route path="tests/detail/:testName" element={<QualityCenterPage />} />
+            <Route path="tests/detail/:testName/:taskId" element={<QualityCenterPage />} />
+            <Route path="tests/:testName" element={<QualityCenterPage />} />
+            <Route path="tests/:testName/:taskId" element={<QualityCenterPage />} />
+            <Route path="tests/*" element={<QualityCenterPage />} />
             <Route path="scanner" element={<ScannersPage />} />
             <Route path="scanner/create" element={<ScannersPage />} />
             <Route path="scanner/edit/:scannerName" element={<ScannersPage />} />
@@ -208,6 +227,7 @@ export const AppRouter: React.FC = () => {
           {/* Insights & Statistics */}
           <Route path="statistics" element={<StatisticsPage />} />
           <Route path="insight" element={<Navigate to="view" replace />} />
+          <Route path="insight/board" element={<InsightsPage />} />
           <Route path="insight/view" element={<InsightsPage />} />
           <Route path="insight/config" element={<InsightsPage />} />
           <Route path="insight/detail" element={<Navigate to="overview" replace />} />

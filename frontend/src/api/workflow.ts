@@ -1098,6 +1098,60 @@ export const workflowApi = {
   getLarkHookPreset(workflowName: string) {
     return http.get<any>(`/api/aslan/workflow/v4/meegohook/preset?workflowName=${encodeURIComponent(workflowName)}`);
   },
+
+  /**
+   * 获取官方工作流插件模板清单
+   * GET /api/aslan/workflow/plugin/template
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:173)
+   */
+  listPluginTemplates() {
+    return http.get<any[]>('/api/aslan/workflow/plugin/template');
+  },
+
+  /**
+   * 获取自定义工作流插件仓库列表
+   * GET /api/aslan/workflow/plugin
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:176)
+   */
+  listPluginRepositories() {
+    return http.get<any[]>('/api/aslan/workflow/plugin');
+  },
+
+  /**
+   * 新增或更新用户自定义插件仓库
+   * POST /api/aslan/workflow/plugin
+   */
+  upsertUserPluginRepo(payload: any) {
+    return http.post<any>('/api/aslan/workflow/plugin', payload);
+  },
+
+  /**
+   * 新增或更新企业级插件仓库
+   * POST /api/aslan/workflow/plugin/enterprise
+   */
+  upsertEnterprisePluginRepo(payload: any) {
+    return http.post<any>('/api/aslan/workflow/plugin/enterprise', payload);
+  },
+
+  /**
+   * 删除工作流插件仓库
+   * DELETE /api/aslan/workflow/plugin/:id
+   */
+  deletePluginRepo(id: string | number) {
+    return http.delete(`/api/aslan/workflow/plugin/${encodeURIComponent(id)}`);
+  },
+
+  /**
+   * 设置工作流断点暂停/继续控制
+   * POST /api/aslan/workflow/v4/workflowtask/breakpoint/:workflowName/:jobName/task/:taskId/:position
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:143)
+   */
+  setWorkflowBreakpoint(workflowName: string, jobName: string, taskId: number | string, position: 'before' | 'after', projectName?: string) {
+    const query = projectName ? `?projectName=${encodeURIComponent(projectName)}` : '';
+    return http.post(
+      `/api/aslan/workflow/v4/workflowtask/breakpoint/${encodeURIComponent(workflowName)}/${encodeURIComponent(jobName)}/task/${taskId}/${position}${query}`
+    );
+  },
 };
 
 export interface HelmDeployJobMergeImageParams {
