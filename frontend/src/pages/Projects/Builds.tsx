@@ -310,7 +310,7 @@ export const BuildsPage: React.FC = () => {
                 j.spec?.service_name === executingBuild?.targets?.[0]?.service_name
             )
           )
-        ) || workflows[0];
+        );
 
       if (matchingWorkflow) {
         // 以 preset 为触发 body（后端要求完整 WorkflowV4 结构），修改构建分支参数
@@ -328,9 +328,8 @@ export const BuildsPage: React.FC = () => {
         setExecutingBuild(null);
       } else {
         feedback.message.warning(
-          `未检测到项目 [${projectName}] 的工作流，请前往“工作流”页面配置包含 [${execExecutingBuildName}] 的任务编排`
+          `未检测到项目 [${projectName}] 中关联构建 [${execExecutingBuildName}] 的工作流，请前往“工作流”页面配置包含该任务的编排`
         );
-        setExecutingBuild(null);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '触发构建任务失败，请检查 Runner 或网络状态';

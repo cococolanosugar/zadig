@@ -207,75 +207,109 @@ export const EnterprisePage: React.FC = () => {
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
             <Spin size="large" />
           </div>
-        ) : activeTab === 'license' ? (
-          <div style={{ maxWidth: 840 }}>
-            <Alert
-              title="当前环境已成功激活企业级功能授权"
-              description="可使用高并发工作流编排、跨集群微服务发布、多环境自动化隔离以及审计追溯功能。"
-              type="success"
-              showIcon
-              icon={<CheckCircleOutlined />}
-              style={{ marginBottom: 24, borderRadius: 6 }}
-            />
+        ) : activeTab === 'license' ? (() => {
+          const isLicenseActive = license.status?.toLowerCase() === 'active' || license.status?.toLowerCase() === 'valid';
+          const isExpired = license.expire_time ? (license.expire_time > 1e11 ? license.expire_time : license.expire_time * 1000) < Date.now() : false;
+          const isEffective = isLicenseActive && !isExpired;
 
-            <Descriptions
-              title="授权证书详细信息"
-              bordered
-              column={1}
-              size="middle"
-              styles={{ label: { width: 180, fontWeight: 500, backgroundColor: '#fafafa' } }}
-              items={[
-                {
-                  key: 'company',
-                  label: '授权公司 / 实体',
-                  children: license.company || 'KodeRover Community & Enterprise Evaluator',
-                },
-                {
-                  key: 'status',
-                  label: '证书状态',
-                  children: <Tag color="success">有效授权 (Active)</Tag>,
-                },
-                {
-                  key: 'version',
-                  label: '版本许可类型',
-                  children: <Tag color="geekblue">Zadig Enterprise Edition v5.0.0</Tag>,
-                },
-                {
-                  key: 'users',
-                  label: '席位与用户上限',
-                  children: license.user_limit ? `${license.user_limit} 席位` : '无限制 (Unlimited)',
-                },
-                {
-                  key: 'clusters',
-                  label: '接入集群上限',
-                  children: license.cluster_limit ? `${license.cluster_limit} 集群` : '无限制 (Unlimited)',
-                },
-                {
-                  key: 'features',
-                  label: '支持企业特性',
-                  children: (
-                    <Space orientation="horizontal" size={[4, 8]} wrap>
-                      <Tag color="blue">工作流 V4</Tag>
-                      <Tag color="blue">环境休眠/唤醒</Tag>
-                      <Tag color="blue">多集群编排</Tag>
-                      <Tag color="blue">交付物追溯</Tag>
-                      <Tag color="blue">AI 日志诊断</Tag>
-                    </Space>
-                  ),
-                },
-              ]}
-            />
+          return (
+            <div style={{ maxWidth: 840 }}>
+              {isEffective ? (
+                <Alert
+                  title="当前环境已成功激活企业级功能授权"
+                  description="可使用高并发工作流编排、跨集群微服务发布、多环境自动化隔离以及审计追溯功能。"
+                  type="success"
+                  showIcon
+                  icon={<CheckCircleOutlined />}
+                  style={{ marginBottom: 24, borderRadius: 6 }}
+                />
+              ) : isExpired ? (
+                <Alert
+                  title="企业级功能授权已过期"
+                  description="授权证书已超出有效使用期限，部分高并发特性受限，请联系官方商务获取最新证书更新。"
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: 24, borderRadius: 6 }}
+                />
+              ) : (
+                <Alert
+                  title="当前运行为社区评估 / 未激活企业特权状态"
+                  description="社区开源版本可使用核心持续交付与工作流功能；如需跨集群多租户、交付中心等企业特权，请导入官方 License。"
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 24, borderRadius: 6 }}
+                />
+              )}
 
-            <div style={{ marginTop: 24 }}>
-              <Button
-                type="primary"
-                onClick={() => feedback.message.info('请联系 KodeRover 官方商务获取更新 License 文件')}
-              >
-                更新 License 证书
-              </Button>
+              <Descriptions
+                title="授权证书详细信息"
+                bordered
+                column={1}
+                size="middle"
+                styles={{ label: { width: 180, fontWeight: 500, backgroundColor: '#fafafa' } }}
+                items={[
+                  {
+                    key: 'company',
+                    label: '授权公司 / 实体',
+                    children: license.company || 'KodeRover Community & Enterprise Evaluator',
+                  },
+                  {
+                    key: 'status',
+                    label: '证书状态',
+                    children: isEffective ? (
+                      <Tag color="success">有效授权 (Active)</Tag>
+                    ) : isExpired ? (
+                      <Tag color="warning">已过期 (Expired)</Tag>
+                    ) : (
+                      <Tag color="default">未激活 / 社区评估</Tag>
+                    ),
+                  },
+                  {
+                    key: 'version',
+                    label: '版本许可类型',
+                    children: (
+                      <Tag color={isEffective ? 'geekblue' : 'default'}>
+                        {license.license_type || (isEffective ? 'Zadig Enterprise Edition v5.0.0' : 'Zadig Community Edition')}
+                      </Tag>
+                    ),
+                  },
+                  {
+                    key: 'users',
+                    label: '席位与用户上限',
+                    children: license.user_limit ? `${license.user_limit} 席位` : '无限制 (Unlimited)',
+                  },
+                  {
+                    key: 'clusters',
+                    label: '接入集群上限',
+                    children: license.cluster_limit ? `${license.cluster_limit} 集群` : '无限制 (Unlimited)',
+                  },
+                  {
+                    key: 'features',
+                    label: '支持企业特性',
+                    children: (
+                      <Space orientation="horizontal" size={[4, 8]} wrap>
+                        <Tag color="blue">工作流 V4</Tag>
+                        <Tag color="blue">环境休眠/唤醒</Tag>
+                        <Tag color="blue">多集群编排</Tag>
+                        <Tag color="blue">交付物追溯</Tag>
+                        <Tag color="blue">AI 日志诊断</Tag>
+                      </Space>
+                    ),
+                  },
+                ]}
+              />
+
+              <div style={{ marginTop: 24 }}>
+                <Button
+                  type="primary"
+                  onClick={() => feedback.message.info('请联系 KodeRover 官方商务获取更新 License 文件')}
+                >
+                  更新 License 证书
+                </Button>
+              </div>
             </div>
-          </div>
-        ) : activeTab === 'theme' ? (
+          );
+        })() : activeTab === 'theme' ? (
           <div style={{ maxWidth: 720 }}>
             <Form form={themeForm} layout="vertical" initialValues={themeInitialValues}>
               <Form.Item name="theme_type" label="主题类型">

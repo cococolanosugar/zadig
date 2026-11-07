@@ -1,0 +1,220 @@
+﻿id,ee_path,react_paths,match_quality,status,domain,notes,evidence_refs,source
+ee-001,/v1,/v1,exact,部分,other,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=/v1,ee_retained
+ee-002,/v1/statistics,/v1/statistics,exact,部分,insight,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=statistics,ee_retained
+ee-003,/v1/insight,/v1/insight,exact,部分,insight,React 为 Navigate 重定向；需确认目标是否保留上下文,94.f10e6ea486b4e85dd1a7.js:path=insight,ee_retained
+ee-004,/v1/insight/view,/v1/insight/view,exact,部分,insight,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=insight/view,ee_retained
+ee-005,/v1/insight/config,/v1/insight/config,exact,部分,insight,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=insight/config,ee_retained
+ee-006,/v1/insight/detail,/v1/insight/detail,exact,部分,insight,React 为 Navigate 重定向；需确认目标是否保留上下文,94.f10e6ea486b4e85dd1a7.js:path=insight/detail,ee_retained
+ee-007,/v1/insight/detail/overview,/v1/insight/detail/:dimension,param,部分,insight,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=overview,ee_retained
+ee-008,/v1/insight/detail/build,/v1/insight/detail/:dimension,param,部分,builds,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=build,ee_retained
+ee-009,/v1/insight/detail/test,/v1/insight/detail/:dimension,param,部分,insight,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=test,ee_retained
+ee-010,/v1/insight/detail/deploy,/v1/insight/detail/:dimension,param,部分,insight,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=deploy,ee_retained
+ee-011,/v1/dashboard,/v1/dashboard,exact,已有,dashboard,核心入口存在非空页面实现（未宣称完整 1:1）,94.f10e6ea486b4e85dd1a7.js:path=dashboard,ee_retained
+ee-012,/v1/status,/v1/status,exact,已有,dashboard,核心入口存在非空页面实现（未宣称完整 1:1）,94.f10e6ea486b4e85dd1a7.js:path=status,ee_retained
+ee-013,/v1/projects,/v1/projects,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=projects,ee_retained
+ee-014,/v1/projects/detail/:project_name,/v1/projects/detail/:projectName,exact,部分,project,React 为 Navigate 重定向；需确认目标是否保留上下文,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name,ee_retained
+ee-015,/v1/projects/detail/:project_name/detail,/v1/projects/detail/:projectName/detail,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=detail,ee_retained
+ee-016,/v1/projects/detail/:project_name/sprints,/v1/projects/detail/:projectName/sprints,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=sprints,ee_retained
+ee-017,/v1/projects/detail/:project_name/sprints/config,/v1/projects/detail/:projectName/sprints/config,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=sprints/config,ee_retained
+ee-018,/v1/projects/detail/:project_name/pipelines,/v1/projects/detail/:projectName/pipelines,exact,部分,workflow,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=pipelines,ee_retained
+ee-019,/v1/projects/detail/:project_name/pipelines/custom/create,/v1/projects/detail/:projectName/pipelines/custom/create,exact,部分,workflow,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=pipelines/custom/create,ee_retained
+ee-020,/v1/projects/detail/:project_name/pipelines/custom/edit/:workflow_name,/v1/projects/detail/:projectName/pipelines/custom/edit/:name,exact,部分,workflow,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=pipelines/custom/edit/:workflow_name,ee_retained
+ee-021,/v1/projects/detail/:project_name/pipelines/custom/:workflow_name/:task_id,/v1/projects/detail/:projectName/pipelines/custom/:name/:taskId,exact,部分,workflow,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=pipelines/custom/:workflow_name/:task_id,ee_retained
+ee-022,/v1/projects/detail/:project_name/pipelines/custom/testcase/:workflow_name/:task_id/:test_name/:test_job_name,/v1/projects/detail/:projectName/pipelines/custom/testcase/*,wildcard,部分,workflow,仅被 React 通配/共享页承接，未做步骤验收,94.f10e6ea486b4e85dd1a7.js:path=pipelines/custom/testcase/:workflow_name/:task_id/:test_name/:test_job_name,ee_retained
+ee-023,/v1/projects/detail/:project_name/pipelines/custom/:workflow_name,/v1/projects/detail/:projectName/pipelines/custom/:name,exact,部分,workflow,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=pipelines/custom/:workflow_name,ee_retained
+ee-024,/v1/projects/detail/:project_name/services,/v1/projects/detail/:projectName/services,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=services,ee_retained
+ee-025,/v1/projects/detail/:project_name/services/production,/v1/projects/detail/:projectName/services/production,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=services/production,ee_retained
+ee-026,/v1/projects/detail/:project_name/builds,/v1/projects/detail/:projectName/builds,exact,部分,builds,构建页存在，但保留 workflows[0] 回退风险（Builds.tsx:298–340）,94.f10e6ea486b4e85dd1a7.js:path=builds,ee_retained
+ee-027,/v1/projects/detail/:project_name/builds/create,/v1/projects/detail/:projectName/builds/create,exact,部分,builds,构建页存在，但保留 workflows[0] 回退风险（Builds.tsx:298–340）,94.f10e6ea486b4e85dd1a7.js:path=builds/create,ee_retained
+ee-028,/v1/projects/detail/:project_name/builds/detail/:build_name,/v1/projects/detail/:projectName/builds/detail/:buildName,exact,部分,builds,构建页存在，但保留 workflows[0] 回退风险（Builds.tsx:298–340）,94.f10e6ea486b4e85dd1a7.js:path=builds/detail/:build_name,ee_retained
+ee-029,/v1/projects/detail/:project_name/test,/v1/projects/detail/:projectName/test,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=test,ee_retained
+ee-030,/v1/projects/detail/:project_name/test/function/:test_name,/v1/projects/detail/:projectName/test/*,wildcard,部分,project,仅被 React 通配/共享页承接，未做步骤验收,94.f10e6ea486b4e85dd1a7.js:path=test/function/:test_name,ee_retained
+ee-031,/v1/projects/detail/:project_name/test/add/function,/v1/projects/detail/:projectName/test/*,wildcard,部分,project,仅被 React 通配/共享页承接，未做步骤验收,94.f10e6ea486b4e85dd1a7.js:path=test/add/function,ee_retained
+ee-032,/v1/projects/detail/:project_name/test/detail/function/:test_name,/v1/projects/detail/:projectName/test/*,wildcard,部分,project,仅被 React 通配/共享页承接，未做步骤验收,94.f10e6ea486b4e85dd1a7.js:path=test/detail/function/:test_name,ee_retained
+ee-033,/v1/projects/detail/:project_name/test/detail/function/:test_name/:task_id,/v1/projects/detail/:projectName/test/*,wildcard,部分,project,仅被 React 通配/共享页承接，未做步骤验收,94.f10e6ea486b4e85dd1a7.js:path=test/detail/function/:test_name/:task_id,ee_retained
+ee-034,/v1/projects/detail/:project_name/test/testcase/function/:workflow_name/:task_id/:test_name,/v1/projects/detail/:projectName/test/*,wildcard,部分,project,仅被 React 通配/共享页承接，未做步骤验收,94.f10e6ea486b4e85dd1a7.js:path=test/testcase/function/:workflow_name/:task_id/:test_name,ee_retained
+ee-035,/v1/projects/detail/:project_name/test/testcase/function/:workflow_name/:task_id/test/:test_name,/v1/projects/detail/:projectName/test/*,wildcard,部分,project,仅被 React 通配/共享页承接，未做步骤验收,94.f10e6ea486b4e85dd1a7.js:path=test/testcase/function/:workflow_name/:task_id/test/:test_name,ee_retained
+ee-036,/v1/projects/detail/:project_name/scanner,/v1/projects/detail/:projectName/scanner,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=scanner,ee_retained
+ee-037,/v1/projects/detail/:project_name/scanner/create,/v1/projects/detail/:projectName/scanner/create,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=scanner/create,ee_retained
+ee-038,/v1/projects/detail/:project_name/scanner/ai-review/create,/v1/projects/detail/:projectName/scanner/ai-review/create,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=scanner/ai-review/create,ee_retained
+ee-039,/v1/projects/detail/:project_name/scanner/edit/:scanner_name,/v1/projects/detail/:projectName/scanner/edit/:scannerName,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=scanner/edit/:scanner_name,ee_retained
+ee-040,/v1/projects/detail/:project_name/scanner/ai-review/edit/:scanner_name,/v1/projects/detail/:projectName/scanner/ai-review/edit/:scannerName,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=scanner/ai-review/edit/:scanner_name,ee_retained
+ee-041,/v1/projects/detail/:project_name/scanner/detail/:scanner_name,/v1/projects/detail/:projectName/scanner/detail/:scannerName,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=scanner/detail/:scanner_name,ee_retained
+ee-042,/v1/projects/detail/:project_name/scanner/detail/:scanner_name/task/:task_id,/v1/projects/detail/:projectName/scanner/detail/:scannerName/task/:taskId,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=scanner/detail/:scanner_name/task/:task_id,ee_retained
+ee-043,/v1/projects/detail/:project_name/version,/v1/projects/detail/:projectName/version,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=version,ee_retained
+ee-044,/v1/projects/detail/:project_name/version/helm/create,/v1/projects/detail/:projectName/version/helm/create,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=version/helm/create,ee_retained
+ee-045,/v1/projects/detail/:project_name/version/k8s/create,/v1/projects/detail/:projectName/version/k8s/create,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=version/k8s/create,ee_retained
+ee-046,/v1/projects/detail/:project_name/version/detail/:id,/v1/projects/detail/:projectName/version/detail/:id,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=version/detail/:id,ee_retained
+ee-047,/v1/projects/detail/:project_name/envs,/v1/projects/detail/:projectName/envs,exact,部分,environment,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=envs,ee_retained
+ee-048,/v1/projects/detail/:project_name/envs/create,/v1/projects/detail/:projectName/envs/create,exact,部分,environment,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=create,ee_retained
+ee-049,/v1/projects/detail/:project_name/envs/detail,/v1/projects/detail/:projectName/envs/detail,exact,部分,environment,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=detail,ee_retained
+ee-050,/v1/projects/detail/:project_name/envs/:env_name/log,/v1/projects/detail/:projectName/envs/:envName/log,exact,未知,environment,EE 路径语义/专属组件证据不足；保留未知,94.f10e6ea486b4e85dd1a7.js:path=:env_name/log,ee_retained
+ee-051,/v1/projects/detail/:project_name/envs/externalConfig,/v1/projects/detail/:projectName/envs/:envName,param,未知,environment,EE 语义不足 / 动态承接不明确,94.f10e6ea486b4e85dd1a7.js:path=externalConfig,ee_retained
+ee-052,/v1/projects/detail/:project_name/envs/detail/:service_name,/v1/projects/detail/:projectName/envs/detail/:serviceName,exact,部分,environment,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=detail/:service_name,ee_retained
+ee-053,/v1/projects/detail/:project_name/envs/detail/:app_id/sae,/v1/projects/detail/:projectName/envs/:envName/*;/v1/projects/detail/:projectName/envs/detail/:serviceName/*,wildcard,缺失,sae,SAE 详情/变更单未接专属工作流，由通用 :serviceName/* 承接,94.f10e6ea486b4e85dd1a7.js:path=detail/:app_id/sae,ee_retained
+ee-054,/v1/projects/detail/:project_name/envs/detail/:app_id/sae/changeOrder,/v1/projects/detail/:projectName/envs/:envName/*;/v1/projects/detail/:projectName/envs/detail/:serviceName/*,wildcard,缺失,sae,SAE 详情/变更单未接专属工作流，由通用 :serviceName/* 承接,94.f10e6ea486b4e85dd1a7.js:path=detail/:app_id/sae/changeOrder,ee_retained
+ee-055,/v1/projects/detail/:project_name/envs/detail/:app_id/sae/changeOrder/:order_id/detail,/v1/projects/detail/:projectName/envs/:envName/*;/v1/projects/detail/:projectName/envs/detail/:serviceName/*,wildcard,缺失,sae,SAE 详情/变更单未接专属工作流，由通用 :serviceName/* 承接,94.f10e6ea486b4e85dd1a7.js:path=detail/:app_id/sae/changeOrder/:order_id/detail,ee_retained
+ee-056,/v1/projects/detail/:project_name/envs/detail/:app_id/sae/production,/v1/projects/detail/:projectName/envs/:envName/*;/v1/projects/detail/:projectName/envs/detail/:serviceName/*,wildcard,缺失,sae,SAE 详情/变更单未接专属工作流，由通用 :serviceName/* 承接,94.f10e6ea486b4e85dd1a7.js:path=detail/:app_id/sae/production,ee_retained
+ee-057,/v1/projects/detail/:project_name/envs/detail/:app_id/sae/changeOrder/production,/v1/projects/detail/:projectName/envs/:envName/*;/v1/projects/detail/:projectName/envs/detail/:serviceName/*,wildcard,缺失,sae,SAE 详情/变更单未接专属工作流，由通用 :serviceName/* 承接,94.f10e6ea486b4e85dd1a7.js:path=detail/:app_id/sae/changeOrder/production,ee_retained
+ee-058,/v1/projects/detail/:project_name/envs/detail/:app_id/sae/changeOrder/:order_id/detail/production,/v1/projects/detail/:projectName/envs/:envName/*;/v1/projects/detail/:projectName/envs/detail/:serviceName/*,wildcard,缺失,sae,SAE 详情/变更单未接专属工作流，由通用 :serviceName/* 承接,94.f10e6ea486b4e85dd1a7.js:path=detail/:app_id/sae/changeOrder/:order_id/detail/production,ee_retained
+ee-059,/v1/projects/detail/:project_name/envs/detail/:service_name/production,/v1/projects/detail/:projectName/envs/:envName/*;/v1/projects/detail/:projectName/envs/detail/:serviceName/*,wildcard,部分,environment,仅被 React 通配/共享页承接，未做步骤验收,94.f10e6ea486b4e85dd1a7.js:path=detail/:service_name/production,ee_retained
+ee-060,/v1/projects/detail/:project_name/envs/detail/:service_name/pm,/v1/projects/detail/:projectName/envs/:envName/*;/v1/projects/detail/:projectName/envs/detail/:serviceName/*,wildcard,部分,environment,仅被 React 通配/共享页承接，未做步骤验收,94.f10e6ea486b4e85dd1a7.js:path=detail/:service_name/pm,ee_retained
+ee-061,/v1/projects/detail/:project_name/envs/detail/:service_name/config,/v1/projects/detail/:projectName/envs/:envName/*;/v1/projects/detail/:projectName/envs/detail/:serviceName/*,wildcard,部分,environment,仅被 React 通配/共享页承接，未做步骤验收,94.f10e6ea486b4e85dd1a7.js:path=detail/:service_name/config,ee_retained
+ee-062,/v1/projects/detail/:project_name/envs/detail/:env_name/envConfig,/v1/projects/detail/:projectName/envs/:envName/*;/v1/projects/detail/:projectName/envs/detail/:serviceName/*,wildcard,部分,environment,仅被 React 通配/共享页承接，未做步骤验收,94.f10e6ea486b4e85dd1a7.js:path=detail/:env_name/envConfig,ee_retained
+ee-063,/v1/projects/detail/:project_name/envs/production/create,/v1/projects/detail/:projectName/envs/production/create,exact,部分,environment,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=production/create,ee_retained
+ee-064,/v1/projects/detail/:project_name/envs/production/host/create,/v1/projects/detail/:projectName/envs/production/host/create,exact,部分,environment,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=production/host/create,ee_retained
+ee-065,/v1/projects/detail/:project_name/envs/sae/create,/v1/projects/detail/:projectName/envs/sae/create,exact,部分,sae,SAE 入口复用 EnvironmentWizard/Environments 普通页,94.f10e6ea486b4e85dd1a7.js:path=sae/create,ee_retained
+ee-066,/v1/projects/detail/:project_name/envs/sae/production/create,/v1/projects/detail/:projectName/envs/sae/production/create,exact,部分,sae,SAE 入口复用 EnvironmentWizard/Environments 普通页,94.f10e6ea486b4e85dd1a7.js:path=sae/production/create,ee_retained
+ee-067,/v1/projects/detail/:project_name/envs/sae/config,/v1/projects/detail/:projectName/envs/sae/config,exact,部分,sae,SAE 入口复用 EnvironmentWizard/Environments 普通页,94.f10e6ea486b4e85dd1a7.js:path=sae/config,ee_retained
+ee-068,/v1/projects/detail/:project_name/envs/resourceDetail,/v1/projects/detail/:projectName/envs/:envName,param,未知,environment,EE 语义不足 / 动态承接不明确,94.f10e6ea486b4e85dd1a7.js:path=resourceDetail,ee_retained
+ee-069,/v1/projects/detail/:project_name/envs/podDetail,/v1/projects/detail/:projectName/envs/:envName,param,未知,environment,EE 语义不足 / 动态承接不明确,94.f10e6ea486b4e85dd1a7.js:path=podDetail,ee_retained
+ee-070,/v1/releasePlan,/v1/releasePlan,exact,部分,releasePlan,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=releasePlan,ee_retained
+ee-071,/v1/releasePlan/index,/v1/releasePlan/index,exact,部分,releasePlan,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=index,ee_retained
+ee-072,/v1/releasePlan/detail,/v1/releasePlan/detail,exact,部分,releasePlan,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=detail,ee_retained
+ee-073,/v1/releaseWorkflow,/v1/releaseWorkflow,exact,部分,workflow,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=releaseWorkflow,ee_retained
+ee-074,/v1/plutus,/v1/plutus,exact,部分,plutus,仅同形入口；多屏被单表 Plutus 页通配承接,94.f10e6ea486b4e85dd1a7.js:path=plutus,ee_retained
+ee-075,/v1/plutus/project/create,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=plutus/project/create,ee_retained
+ee-076,/v1/plutus/project/detail/:plutus_project_name/customer/detail/:customer_name,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=plutus/project/detail/:plutus_project_name/customer/detail/:customer_name,ee_retained
+ee-077,/v1/plutus/project/detail/:plutus_project_name/customer/detail/:customer_name/info,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=info,ee_retained
+ee-078,/v1/plutus/project/detail/:plutus_project_name/customer/detail/:customer_name/env,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=env,ee_retained
+ee-079,/v1/plutus/project/detail/:plutus_project_name/customer/detail/:customer_name/env/:service_name,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=env/:service_name,ee_retained
+ee-080,/v1/plutus/project/detail/:plutus_project_name/customer/detail/:customer_name/console,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=console,ee_retained
+ee-081,/v1/plutus/project/detail/:plutus_project_name/customer/detail/:customer_name/console/:service_name,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=console/:service_name,ee_retained
+ee-082,/v1/plutus/project/detail/:plutus_project_name/customer/detail/:customer_name/version,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=version,ee_retained
+ee-083,/v1/plutus/project/detail/:plutus_project_name/customer/detail/:customer_name/config,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=config,ee_retained
+ee-084,/v1/plutus/project/detail/:plutus_project_name,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=plutus/project/detail/:plutus_project_name,ee_retained
+ee-085,/v1/plutus/project/detail/:plutus_project_name/customer,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=customer,ee_retained
+ee-086,/v1/plutus/project/detail/:plutus_project_name/customer/create,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=customer/create,ee_retained
+ee-087,/v1/plutus/project/detail/:plutus_project_name/version,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=version,ee_retained
+ee-088,/v1/plutus/project/detail/:plutus_project_name/version/group/:group_id/:group_name,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=version/group/:group_id/:group_name,ee_retained
+ee-089,/v1/plutus/project/detail/:plutus_project_name/version/create/helm,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=version/create/helm,ee_retained
+ee-090,/v1/plutus/project/detail/:plutus_project_name/version/edit/:version_name/:version_id/helm,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=version/edit/:version_name/:version_id/helm,ee_retained
+ee-091,/v1/plutus/project/detail/:plutus_project_name/auditlog,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=auditlog,ee_retained
+ee-092,/v1/plutus/project/detail/:plutus_project_name/board,/v1/plutus/*,wildcard,缺失,plutus,EE 专属 Plutus 深链落 React 单页占位表（新建无 onClick / 四 Tab 共用）,94.f10e6ea486b4e85dd1a7.js:path=board,ee_retained
+ee-093,/v1/template,/v1/template,exact,部分,template,React 为 Navigate 重定向；需确认目标是否保留上下文,94.f10e6ea486b4e85dd1a7.js:path=template,ee_retained
+ee-094,/v1/template/charts,/v1/template/charts,exact,部分,template,模板中心存在；部分类型写能力只读或跳转他域,94.f10e6ea486b4e85dd1a7.js:path=charts,ee_retained
+ee-095,/v1/template/dockerfiles,/v1/template/dockerfiles,exact,部分,template,模板中心存在；部分类型写能力只读或跳转他域,94.f10e6ea486b4e85dd1a7.js:path=dockerfiles,ee_retained
+ee-096,/v1/template/k8s-yamls,/v1/template/k8s-yamls,exact,部分,template,模板中心存在；部分类型写能力只读或跳转他域,94.f10e6ea486b4e85dd1a7.js:path=k8s-yamls,ee_retained
+ee-097,/v1/template/builds,/v1/template/builds,exact,部分,builds,构建页存在，但保留 workflows[0] 回退风险（Builds.tsx:298–340）,94.f10e6ea486b4e85dd1a7.js:path=builds,ee_retained
+ee-098,/v1/template/scanners,/v1/template/scanners,exact,部分,template,模板中心存在；部分类型写能力只读或跳转他域,94.f10e6ea486b4e85dd1a7.js:path=scanners,ee_retained
+ee-099,/v1/template/workflows,/v1/template/workflows,exact,部分,template,模板中心存在；部分类型写能力只读或跳转他域,94.f10e6ea486b4e85dd1a7.js:path=workflows,ee_retained
+ee-100,/v1/template/workflows/config,/v1/template/workflows/config,exact,部分,template,模板中心存在；部分类型写能力只读或跳转他域,94.f10e6ea486b4e85dd1a7.js:path=workflows/config,ee_retained
+ee-101,/v1/template/releasePlan,/v1/template/releasePlan,exact,部分,template,模板中心存在；部分类型写能力只读或跳转他域,94.f10e6ea486b4e85dd1a7.js:path=releasePlan,ee_retained
+ee-102,/v1/delivery,/v1/delivery,exact,部分,delivery,React 为 Navigate 重定向；需确认目标是否保留上下文,94.f10e6ea486b4e85dd1a7.js:path=delivery,ee_retained
+ee-103,/v1/delivery/version,/v1/delivery/version,exact,部分,delivery,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=version,ee_retained
+ee-104,/v1/delivery/version/detail/:project_name/:id,/v1/delivery/version/detail/:projectName/:id,exact,部分,delivery,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=version/detail/:project_name/:id,ee_retained
+ee-105,/v1/delivery/artifacts,/v1/delivery/artifacts,exact,部分,delivery,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=artifacts,ee_retained
+ee-106,/v1/delivery/artifacts/detail/:id,/v1/delivery/artifacts/detail/:id,exact,部分,delivery,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=artifacts/detail/:id,ee_retained
+ee-107,/v1/projects/create,/v1/projects/create,exact,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create,ee_retained
+ee-108,/v1/projects/create/:project_name/k8s/info,/v1/projects/create/:projectName/k8s/info,exact,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/k8s/info,ee_retained
+ee-109,/v1/projects/create/:project_name/k8s/service,/v1/projects/create/:projectName/:deployType/:step;/v1/projects/create/:projectName/k8s/:step,param,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/k8s/service,ee_retained
+ee-110,/v1/projects/create/:project_name/k8s/runtime,/v1/projects/create/:projectName/:deployType/:step;/v1/projects/create/:projectName/k8s/:step,param,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/k8s/runtime,ee_retained
+ee-111,/v1/projects/create/:project_name/k8s/delivery,/v1/projects/create/:projectName/:deployType/:step;/v1/projects/create/:projectName/k8s/:step,param,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/k8s/delivery,ee_retained
+ee-112,/v1/projects/create/:project_name/host/config,/v1/projects/create/:projectName/:deployType/:step,param,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/host/config,ee_retained
+ee-113,/v1/projects/create/:project_name/helm/info,/v1/projects/create/:projectName/:deployType/:step,param,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/helm/info,ee_retained
+ee-114,/v1/projects/create/:project_name/helm/service,/v1/projects/create/:projectName/:deployType/:step,param,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/helm/service,ee_retained
+ee-115,/v1/projects/create/:project_name/helm/runtime,/v1/projects/create/:projectName/:deployType/:step,param,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/helm/runtime,ee_retained
+ee-116,/v1/projects/create/:project_name/helm/delivery,/v1/projects/create/:projectName/:deployType/:step,param,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/helm/delivery,ee_retained
+ee-117,/v1/projects/create/:project_name/pm/info,/v1/projects/create/:projectName/:deployType/:step,param,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/pm/info,ee_retained
+ee-118,/v1/projects/create/:project_name/pm/config,/v1/projects/create/:projectName/:deployType/:step,param,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/pm/config,ee_retained
+ee-119,/v1/projects/create/:project_name/pm/deploy,/v1/projects/create/:projectName/:deployType/:step,param,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/pm/deploy,ee_retained
+ee-120,/v1/projects/create/:project_name/pm/delivery,/v1/projects/create/:projectName/:deployType/:step,param,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/pm/delivery,ee_retained
+ee-121,/v1/projects/create/:project_name/app/info,/v1/projects/create/:projectName/:deployType/:step,param,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/app/info,ee_retained
+ee-122,/v1/projects/create/:project_name/app/config,/v1/projects/create/:projectName/:deployType/:step,param,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/app/config,ee_retained
+ee-123,/v1/projects/create/:project_name/app/release,/v1/projects/create/:projectName/:deployType/:step,param,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/create/:project_name/app/release,ee_retained
+ee-124,/v1/projects/edit/:project_name,/v1/projects/edit/:projectName,exact,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/edit/:project_name,ee_retained
+ee-125,/v1/projects/initialize/:project_name,/v1/projects/initialize/:projectName,exact,部分,project,项目向导/编辑存在；Helm/PM 跳步与 edit/initialize 复用总览（P1）,94.f10e6ea486b4e85dd1a7.js:path=projects/initialize/:project_name,ee_retained
+ee-126,/v1/projects/detail/:project_name/agents,/v1/projects/detail/:projectName/agents,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/agents,ee_retained
+ee-127,/v1/projects/detail/:project_name/agents/:agent_id/config,/v1/projects/detail/:projectName/agents/:agentId/config,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/agents/:agent_id/config,ee_retained
+ee-128,/v1/projects/detail/:project_name/rbac,/v1/projects/detail/:projectName/rbac,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/rbac,ee_retained
+ee-129,/v1/projects/detail/:project_name/integration,/v1/projects/detail/:projectName/integration,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/integration,ee_retained
+ee-130,/v1/projects/detail/:project_name/secrets,/v1/projects/detail/:projectName/secrets,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/secrets,ee_retained
+ee-131,/v1/projects/detail/:project_name/integration/git,/v1/projects/detail/:projectName/integration/:category,param,部分,project,集成泛化 category 页；厂商字段需逐类验证,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/integration/git,ee_retained
+ee-132,/v1/projects/detail/:project_name/integration/host,/v1/projects/detail/:projectName/integration/:category,param,部分,project,集成泛化 category 页；厂商字段需逐类验证,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/integration/host,ee_retained
+ee-133,/v1/projects/detail/:project_name/group,/v1/projects/detail/:projectName/group,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/group,ee_retained
+ee-134,/v1/projects/detail/:project_name/group/create,/v1/projects/detail/:projectName/group/create,exact,部分,project,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/group/create,ee_retained
+ee-135,/v1/plugin/:pluginRoute*,/v1/plugin/*,wildcard,缺失,plugin,插件容器仅为静态文案，未见动态注册挂载（router/index.tsx:254–263）,94.f10e6ea486b4e85dd1a7.js:path=plugin/:pluginRoute*,ee_retained
+ee-136,/v1/tests,/v1/tests,exact,部分,quality,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=/v1/tests,ee_retained
+ee-137,/v1/directory,/v1/directory,exact,部分,directory,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=/v1/directory,ee_retained
+ee-138,/v1/directory/detail/:id,/v1/directory/detail/:id,exact,部分,directory,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=detail/:id,ee_retained
+ee-139,/v1/resource,/v1/resource,exact,部分,resource,React 为 Navigate 重定向；需确认目标是否保留上下文,94.f10e6ea486b4e85dd1a7.js:path=resource,ee_retained
+ee-140,/v1/resource/cluster,/v1/resource/cluster,exact,部分,resource,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=cluster,ee_retained
+ee-141,/v1/resource/host,/v1/resource/host,exact,部分,resource,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=host,ee_retained
+ee-142,/v1/resource/registry,/v1/resource/registry,exact,部分,resource,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=registry,ee_retained
+ee-143,/v1/resource/helmChartRepo,/v1/resource/helmChartRepo,exact,部分,resource,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=helmChartRepo,ee_retained
+ee-144,/v1/resource/storage,/v1/resource/storage,exact,部分,resource,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=storage,ee_retained
+ee-145,/v1/resource/database,/v1/resource/database,exact,部分,resource,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=database,ee_retained
+ee-146,/v1/profile,/v1/profile,exact,部分,profile,React 为 Navigate 重定向；需确认目标是否保留上下文,94.f10e6ea486b4e85dd1a7.js:path=/v1/profile,ee_retained
+ee-147,/v1/profile/info,/v1/profile/info,exact,部分,profile,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=info,ee_retained
+ee-148,/v1/profile/mcp,/v1/profile/mcp,exact,部分,profile,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=mcp,ee_retained
+ee-149,/v1/profile/security,/v1/profile/security,exact,部分,profile,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=security,ee_retained
+ee-150,/v1/profile/preference,/v1/profile/preference,exact,部分,profile,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=preference,ee_retained
+ee-151,/v1/system,/v1/system,exact,部分,system,React 为 Navigate 重定向；需确认目标是否保留上下文,94.f10e6ea486b4e85dd1a7.js:path=/v1/system,ee_retained
+ee-152,/v1/system/apps,/v1/system/apps,exact,部分,system,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=apps,ee_retained
+ee-153,/v1/system/imgs,/v1/system/imgs,exact,部分,system,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=imgs,ee_retained
+ee-154,/v1/system/workflowTasks,/v1/system/workflowTasks,exact,部分,system,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=workflowTasks,ee_retained
+ee-155,/v1/system/plugins,/v1/system/plugins,exact,部分,plugin,系统插件列表页存在，运行时挂载未证实,94.f10e6ea486b4e85dd1a7.js:path=plugins,ee_retained
+ee-156,/v1/system/secrets,/v1/system/secrets,exact,部分,system,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=secrets,ee_retained
+ee-157,/v1/system/integration,/v1/system/integration,exact,部分,system,集成泛化 category 页；厂商字段需逐类验证,94.f10e6ea486b4e85dd1a7.js:path=integration,ee_retained
+ee-158,/v1/system/integration/account,/v1/system/integration/:category,param,部分,system,集成泛化 category 页；厂商字段需逐类验证,94.f10e6ea486b4e85dd1a7.js:path=integration/account,ee_retained
+ee-159,/v1/system/integration/project,/v1/system/integration/:category,param,部分,project,集成泛化 category 页；厂商字段需逐类验证,94.f10e6ea486b4e85dd1a7.js:path=integration/project,ee_retained
+ee-160,/v1/system/integration/git,/v1/system/integration/:category,param,部分,system,集成泛化 category 页；厂商字段需逐类验证,94.f10e6ea486b4e85dd1a7.js:path=integration/git,ee_retained
+ee-161,/v1/system/integration/config,/v1/system/integration/:category,param,部分,system,集成泛化 category 页；厂商字段需逐类验证,94.f10e6ea486b4e85dd1a7.js:path=integration/config,ee_retained
+ee-162,/v1/system/integration/ci,/v1/system/integration/:category,param,部分,system,集成泛化 category 页；厂商字段需逐类验证,94.f10e6ea486b4e85dd1a7.js:path=integration/ci,ee_retained
+ee-163,/v1/system/integration/scanner,/v1/system/integration/:category,param,部分,system,集成泛化 category 页；厂商字段需逐类验证,94.f10e6ea486b4e85dd1a7.js:path=integration/scanner,ee_retained
+ee-164,/v1/system/integration/gateway,/v1/system/integration/:category,param,部分,system,集成泛化 category 页；厂商字段需逐类验证,94.f10e6ea486b4e85dd1a7.js:path=integration/gateway,ee_retained
+ee-165,/v1/system/integration/monitor,/v1/system/integration/:category,param,部分,system,集成泛化 category 页；厂商字段需逐类验证,94.f10e6ea486b4e85dd1a7.js:path=integration/monitor,ee_retained
+ee-166,/v1/system/integration/im,/v1/system/integration/:category,param,部分,system,集成泛化 category 页；厂商字段需逐类验证,94.f10e6ea486b4e85dd1a7.js:path=integration/im,ee_retained
+ee-167,/v1/system/integration/ai,/v1/system/integration/:category,param,部分,system,集成泛化 category 页；厂商字段需逐类验证,94.f10e6ea486b4e85dd1a7.js:path=integration/ai,ee_retained
+ee-168,/v1/system/integration/cloudService,/v1/system/integration/:category,param,部分,system,集成泛化 category 页；厂商字段需逐类验证,94.f10e6ea486b4e85dd1a7.js:path=integration/cloudService,ee_retained
+ee-169,/v1/system/integration/external,/v1/system/integration/:category,param,部分,system,集成泛化 category 页；厂商字段需逐类验证,94.f10e6ea486b4e85dd1a7.js:path=integration/external,ee_retained
+ee-170,/v1/system/aiCodeReview,/v1/system/aiCodeReview,exact,部分,system,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=aiCodeReview,ee_retained
+ee-171,/v1/system/config,/v1/system/config,exact,部分,system,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=config,ee_retained
+ee-172,/v1/system/users,/v1/system/users,exact,部分,system,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=users,ee_retained
+ee-173,/v1/system/announcement,/v1/system/announcement,exact,部分,system,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=announcement,ee_retained
+ee-174,/v1/system/auditlog,/v1/system/auditlog,exact,部分,system,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=auditlog,ee_retained
+ee-175,/v1/enterprise,/v1/enterprise,exact,部分,enterprise,React 为 Navigate 重定向；需确认目标是否保留上下文,94.f10e6ea486b4e85dd1a7.js:path=/v1/enterprise,ee_retained
+ee-176,/v1/enterprise/info,/v1/enterprise/info,exact,部分,enterprise,企业/License 页存在，但固定 Active/版本（Enterprise/index.tsx）,94.f10e6ea486b4e85dd1a7.js:path=info,ee_retained
+ee-177,/v1/enterprise/license,/v1/enterprise/license,exact,部分,enterprise,企业/License 页存在，但固定 Active/版本（Enterprise/index.tsx）,94.f10e6ea486b4e85dd1a7.js:path=license,ee_retained
+ee-178,/v1/enterprise/theme,/v1/enterprise/theme,exact,部分,enterprise,企业/License 页存在，但固定 Active/版本（Enterprise/index.tsx）,94.f10e6ea486b4e85dd1a7.js:path=theme,ee_retained
+ee-179,/v1/enterprise/language,/v1/enterprise/language,exact,部分,enterprise,企业/License 页存在，但固定 Active/版本（Enterprise/index.tsx）,94.f10e6ea486b4e85dd1a7.js:path=language,ee_retained
+ee-180,/mobile,/mobile,exact,缺失,mobile,移动深链被 Navigate 回桌面；:projectName 字面量风险（router/index.tsx:277–282）,94.f10e6ea486b4e85dd1a7.js:path=/mobile,ee_retained
+ee-181,/mobile/status,/mobile/status,exact,缺失,mobile,移动深链被 Navigate 回桌面；:projectName 字面量风险（router/index.tsx:277–282）,94.f10e6ea486b4e85dd1a7.js:path=status,ee_retained
+ee-182,/mobile/profile,/mobile/profile,exact,缺失,mobile,移动深链被 Navigate 回桌面；:projectName 字面量风险（router/index.tsx:277–282）,94.f10e6ea486b4e85dd1a7.js:path=profile,ee_retained
+ee-183,/mobile/projects,/mobile/projects,exact,缺失,mobile,移动深链被 Navigate 回桌面；:projectName 字面量风险（router/index.tsx:277–282）,94.f10e6ea486b4e85dd1a7.js:path=projects,ee_retained
+ee-184,/mobile/projects/detail/:project_name,/mobile/projects/detail/:projectName,exact,缺失,mobile,移动深链被 Navigate 回桌面；:projectName 字面量风险（router/index.tsx:277–282）,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name,ee_retained
+ee-185,/mobile/projects/detail/:project_name/workflows/custom/:workflow_name,/mobile/*,wildcard,缺失,mobile,移动深链被 Navigate 回桌面；:projectName 字面量风险（router/index.tsx:277–282）,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/workflows/custom/:workflow_name,ee_retained
+ee-186,/mobile/projects/detail/:project_name/tests/:test_name,/mobile/*,wildcard,缺失,mobile,移动深链被 Navigate 回桌面；:projectName 字面量风险（router/index.tsx:277–282）,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/tests/:test_name,ee_retained
+ee-187,/mobile/projects/detail/:project_name/tests/:test_name/:task_id,/mobile/*,wildcard,缺失,mobile,移动深链被 Navigate 回桌面；:projectName 字面量风险（router/index.tsx:277–282）,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/tests/:test_name/:task_id,ee_retained
+ee-188,/mobile/projects/detail/:project_name/envs/:env_name,/mobile/*,wildcard,缺失,mobile,移动深链被 Navigate 回桌面；:projectName 字面量风险（router/index.tsx:277–282）,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/envs/:env_name,ee_retained
+ee-189,/mobile/projects/detail/:project_name/envs/:env_name/k8s/:service_name,/mobile/*,wildcard,缺失,mobile,移动深链被 Navigate 回桌面；:projectName 字面量风险（router/index.tsx:277–282）,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/envs/:env_name/k8s/:service_name,ee_retained
+ee-190,/mobile/projects/detail/:project_name/envs/:env_name/helm/:service_name,/mobile/*,wildcard,缺失,mobile,移动深链被 Navigate 回桌面；:projectName 字面量风险（router/index.tsx:277–282）,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/envs/:env_name/helm/:service_name,ee_retained
+ee-191,/mobile/projects/detail/:project_name/envs/:env_name/pm/:service_name,/mobile/*,wildcard,缺失,mobile,移动深链被 Navigate 回桌面；:projectName 字面量风险（router/index.tsx:277–282）,94.f10e6ea486b4e85dd1a7.js:path=projects/detail/:project_name/envs/:env_name/pm/:service_name,ee_retained
+ee-192,/v1/installation/signup,/v1/installation/signup,exact,已有,auth,核心入口存在非空页面实现（未宣称完整 1:1）,94.f10e6ea486b4e85dd1a7.js:path=/v1/installation/signup,ee_retained
+ee-193,/v1/installation/version,/v1/installation/version,exact,已有,delivery,核心入口存在非空页面实现（未宣称完整 1:1）,94.f10e6ea486b4e85dd1a7.js:path=/v1/installation/version,ee_retained
+ee-194,/signin,/signin,exact,已有,auth,核心入口存在非空页面实现（未宣称完整 1:1）,94.f10e6ea486b4e85dd1a7.js:path=/signin,ee_retained
+ee-195,/mfa-enroll,/mfa-enroll,exact,部分,auth,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=/mfa-enroll,ee_retained
+ee-196,/404,/404,exact,部分,other,路径同形且有页面组件，未做交互/契约步骤验收,94.f10e6ea486b4e85dd1a7.js:path=/404,ee_retained
+ee-197,/,/,exact,部分,other,React 为 Navigate 重定向；需确认目标是否保留上下文,94.f10e6ea486b4e85dd1a7.js:path=/,ee_retained
+ee-198,/login/password,/login/password,exact,已有,auth,核心入口存在非空页面实现（未宣称完整 1:1）,94.f10e6ea486b4e85dd1a7.js:path=/login/password,ee_retained
+ee-199,/*,/*,exact,部分,other,React 为 Navigate 重定向；需确认目标是否保留上下文,94.f10e6ea486b4e85dd1a7.js:path=*,ee_retained
+rx-001,,/login,react_only,未知,auth,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:65,react_extra
+rx-002,,/v1/projects/create/:projectName,react_only,未知,project,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:90,react_extra
+rx-003,,/v1/projects/detail/:projectName/pipelines/:name,react_only,未知,workflow,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:103,react_extra
+rx-004,,/v1/projects/detail/:projectName/pipelines/:name/task/:taskId,react_only,未知,workflow,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:104,react_extra
+rx-005,,/v1/projects/detail/:projectName/envs/:envName/k8s/:serviceName,react_only,未知,environment,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:121,react_extra
+rx-006,,/v1/projects/detail/:projectName/envs/:envName/helm/:serviceName,react_only,未知,environment,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:122,react_extra
+rx-007,,/v1/projects/detail/:projectName/envs/:envName/pm/:serviceName,react_only,未知,environment,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:123,react_extra
+rx-008,,/v1/projects/detail/:projectName/hosts,react_only,未知,project,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:153,react_extra
+rx-009,,/v1/pipelines,react_only,未知,workflow,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:162,react_extra
+rx-010,,/v1/pipelines/:name/task/:taskId,react_only,未知,workflow,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:164,react_extra
+rx-011,,/v1/services,react_only,未知,service,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:173,react_extra
+rx-012,,/v1/envs,react_only,未知,environment,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:174,react_extra
+rx-013,,/v1/envs/:envName,react_only,未知,environment,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:175,react_extra
+rx-014,,/v1/tests/*,react_only,未知,quality,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:192,react_extra
+rx-015,,/v1/insights,react_only,未知,insight,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:215,react_extra
+rx-016,,/v1/system/clusters,react_only,未知,system,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:235,react_extra
+rx-017,,/v1/system/codehosts,react_only,未知,system,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:236,react_extra
+rx-018,,/v1/system/registries,react_only,未知,system,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:237,react_extra
+rx-019,,/v1/system/storage,react_only,未知,system,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:238,react_extra
+rx-020,,/v1/system/labels,react_only,未知,system,EE 保留集未恢复的 React JSX 路径声明,frontend/src/router/index.tsx:247,react_extra

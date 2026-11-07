@@ -1,0 +1,95 @@
+﻿path,kind,domain,status,notes,related_routes,evidence_refs,mapping_status,lines
+frontend/src/pages/Dashboard/index.tsx,page,dashboard,已有,源码文件非空；不等于交互/契约已对齐,,pages/Dashboard/index.tsx:590L,未知,590
+frontend/src/pages/Delivery/CreateHelmReleaseModal.tsx,feature,delivery,已有,源码文件非空；不等于交互/契约已对齐,,pages/Delivery/CreateHelmReleaseModal.tsx:507L,未知,507
+frontend/src/pages/Delivery/index.tsx,page,delivery,已有,源码文件非空；不等于交互/契约已对齐,,pages/Delivery/index.tsx:1228L,未知,1228
+frontend/src/pages/Directory/FieldDefinitionDrawer.tsx,feature,directory,已有,源码文件非空；不等于交互/契约已对齐,,pages/Directory/FieldDefinitionDrawer.tsx:411L,未知,411
+frontend/src/pages/Directory/index.tsx,page,directory,已有,源码文件非空；不等于交互/契约已对齐,,pages/Directory/index.tsx:531L,未知,531
+frontend/src/pages/Enterprise/index.tsx,page,enterprise,部分,License 固定 Active/版本展示（P1）,,pages/Enterprise/index.tsx:375L,未知,375
+frontend/src/pages/Environments/CollaborationTopologyDrawer.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/CollaborationTopologyDrawer.tsx:372L,未知,372
+frontend/src/pages/Environments/EnvConfigDrawer.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/EnvConfigDrawer.tsx:570L,未知,570
+frontend/src/pages/Environments/EnvConfigHistoryModal.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/EnvConfigHistoryModal.tsx:332L,未知,332
+frontend/src/pages/Environments/EnvEventsDrawer.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/EnvEventsDrawer.tsx:228L,未知,228
+frontend/src/pages/Environments/EnvNodesDrawer.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/EnvNodesDrawer.tsx:223L,未知,223
+frontend/src/pages/Environments/EnvRevisionDrawer.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/EnvRevisionDrawer.tsx:499L,未知,499
+frontend/src/pages/Environments/EnvServiceHistoryDrawer.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/EnvServiceHistoryDrawer.tsx:540L,未知,540
+frontend/src/pages/Environments/EnvWorkloadsDrawer.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/EnvWorkloadsDrawer.tsx:543L,未知,543
+frontend/src/pages/Environments/HelmReleasesDrawer.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/HelmReleasesDrawer.tsx:251L,未知,251
+frontend/src/pages/Environments/HelmRendersetDrawer.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/HelmRendersetDrawer.tsx:559L,未知,559
+frontend/src/pages/Environments/IstioGrayscaleDrawer.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/IstioGrayscaleDrawer.tsx:886L,未知,886
+frontend/src/pages/Environments/PortalServiceModal.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/PortalServiceModal.tsx:334L,未知,334
+frontend/src/pages/Environments/ServiceDetail.tsx,page,environment,部分,亦承接 SAE detail/changeOrder 通配风险,,pages/Environments/ServiceDetail.tsx:789L,未知,789
+frontend/src/pages/Environments/ServiceDiffModal.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/ServiceDiffModal.tsx:197L,未知,197
+frontend/src/pages/Environments/ShareEnvModal.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/ShareEnvModal.tsx:414L,未知,414
+frontend/src/pages/Environments/SleepCronModal.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/SleepCronModal.tsx:298L,未知,298
+frontend/src/pages/Environments/UpdateImageModal.tsx,feature,environment,已有,源码文件非空；不等于交互/契约已对齐,,pages/Environments/UpdateImageModal.tsx:224L,未知,224
+frontend/src/pages/Environments/Wizard.tsx,page,environment,部分,亦被 SAE create 入口复用；SAE 专属流程未拆,,pages/Environments/Wizard.tsx:558L,未知,558
+frontend/src/pages/Environments/index.tsx,page,environment,部分,承接 SAE config 等入口复用,,pages/Environments/index.tsx:1650L,未知,1650
+frontend/src/pages/Insights/Detail.tsx,page,insight,已有,源码文件非空；不等于交互/契约已对齐,,pages/Insights/Detail.tsx:691L,未知,691
+frontend/src/pages/Insights/index.tsx,page,insight,已有,源码文件非空；不等于交互/契约已对齐,,pages/Insights/index.tsx:1020L,未知,1020
+frontend/src/pages/Installation/SignUp.tsx,page,auth,已有,源码文件非空；不等于交互/契约已对齐,,pages/Installation/SignUp.tsx:355L,未知,355
+frontend/src/pages/Installation/Version.tsx,page,delivery,已有,源码文件非空；不等于交互/契约已对齐,,pages/Installation/Version.tsx:271L,未知,271
+frontend/src/pages/Login/index.tsx,page,auth,已有,源码文件非空；不等于交互/契约已对齐,,pages/Login/index.tsx:848L,未知,848
+frontend/src/pages/Pipelines/Execution.tsx,page,workflow,已有,源码文件非空；不等于交互/契约已对齐,,pages/Pipelines/Execution.tsx:905L,未知,905
+frontend/src/pages/Pipelines/ManualExecModal.tsx,feature,workflow,已有,源码文件非空；不等于交互/契约已对齐,,pages/Pipelines/ManualExecModal.tsx:325L,未知,325
+frontend/src/pages/Pipelines/index.tsx,page,workflow,已有,源码文件非空；不等于交互/契约已对齐,,pages/Pipelines/index.tsx:974L,未知,974
+frontend/src/pages/Plutus/index.tsx,page,plutus,部分,Plutus 单页占位表；多屏未拆（P0）,,pages/Plutus/index.tsx:166L,未知,166
+frontend/src/pages/Profile/index.tsx,page,profile,已有,源码文件非空；不等于交互/契约已对齐,,pages/Profile/index.tsx:935L,未知,935
+frontend/src/pages/Projects/Agents.tsx,page,project,已有,源码文件非空；不等于交互/契约已对齐,,pages/Projects/Agents.tsx:510L,未知,510
+frontend/src/pages/Projects/Builds.tsx,page,builds,部分,保留 workflows[0] 回退风险（P0）,,pages/Projects/Builds.tsx:1081L,未知,1081
+frontend/src/pages/Projects/CollaborationDrawer.tsx,feature,project,已有,源码文件非空；不等于交互/契约已对齐,,pages/Projects/CollaborationDrawer.tsx:378L,未知,378
+frontend/src/pages/Projects/Hosts.tsx,page,project,已有,源码文件非空；不等于交互/契约已对齐,,pages/Projects/Hosts.tsx:1238L,未知,1238
+frontend/src/pages/Projects/Overview.tsx,page,project,已有,源码文件非空；不等于交互/契约已对齐,,pages/Projects/Overview.tsx:260L,未知,260
+frontend/src/pages/Projects/ProjectHierarchyDrawer.tsx,feature,project,已有,源码文件非空；不等于交互/契约已对齐,,pages/Projects/ProjectHierarchyDrawer.tsx:302L,未知,302
+frontend/src/pages/Projects/ProjectStrategyDrawer.tsx,feature,project,已有,源码文件非空；不等于交互/契约已对齐,,pages/Projects/ProjectStrategyDrawer.tsx:512L,未知,512
+frontend/src/pages/Projects/RBAC.tsx,page,project,已有,源码文件非空；不等于交互/契约已对齐,,pages/Projects/RBAC.tsx:519L,未知,519
+frontend/src/pages/Projects/Scanners.tsx,page,project,已有,源码文件非空；不等于交互/契约已对齐,,pages/Projects/Scanners.tsx:1874L,未知,1874
+frontend/src/pages/Projects/SprintWorkItemDrawer.tsx,feature,project,已有,源码文件非空；不等于交互/契约已对齐,,pages/Projects/SprintWorkItemDrawer.tsx:683L,未知,683
+frontend/src/pages/Projects/Sprints.tsx,page,project,已有,源码文件非空；不等于交互/契约已对齐,,pages/Projects/Sprints.tsx:453L,未知,453
+frontend/src/pages/Projects/VarsGroup.tsx,page,project,已有,源码文件非空；不等于交互/契约已对齐,,pages/Projects/VarsGroup.tsx:336L,未知,336
+frontend/src/pages/Projects/Wizard.tsx,page,project,部分,Helm/PM 创建跳步风险（P1）,,pages/Projects/Wizard.tsx:656L,未知,656
+frontend/src/pages/Projects/index.tsx,page,project,已有,源码文件非空；不等于交互/契约已对齐,,pages/Projects/index.tsx:703L,未知,703
+frontend/src/pages/Quality/index.tsx,page,quality,部分,质量中心承接 test/* 通配；深链能力待验,,pages/Quality/index.tsx:2176L,未知,2176
+frontend/src/pages/ReleasePlan/index.tsx,page,releasePlan,已有,源码文件非空；不等于交互/契约已对齐,,pages/ReleasePlan/index.tsx:540L,未知,540
+frontend/src/pages/Resource/index.tsx,page,resource,已有,源码文件非空；不等于交互/契约已对齐,,pages/Resource/index.tsx:141L,未知,141
+frontend/src/pages/Services/CollaborationAwarenessBar.tsx,feature,service,已有,源码文件非空；不等于交互/契约已对齐,,pages/Services/CollaborationAwarenessBar.tsx:164L,未知,164
+frontend/src/pages/Services/HelmServiceDrawer.tsx,feature,service,已有,源码文件非空；不等于交互/契约已对齐,,pages/Services/HelmServiceDrawer.tsx:828L,未知,828
+frontend/src/pages/Services/ImportFromKubeWorkloadsModal.tsx,feature,service,已有,源码文件非空；不等于交互/契约已对齐,,pages/Services/ImportFromKubeWorkloadsModal.tsx:424L,未知,424
+frontend/src/pages/Services/ImportFromRepoModal.tsx,feature,service,已有,源码文件非空；不等于交互/契约已对齐,,pages/Services/ImportFromRepoModal.tsx:474L,未知,474
+frontend/src/pages/Services/ImportFromTemplateModal.tsx,feature,service,已有,源码文件非空；不等于交互/契约已对齐,,pages/Services/ImportFromTemplateModal.tsx:392L,未知,392
+frontend/src/pages/Services/PmServiceModal.tsx,feature,service,已有,源码文件非空；不等于交互/契约已对齐,,pages/Services/PmServiceModal.tsx:478L,未知,478
+frontend/src/pages/Services/ServiceModulesDrawer.tsx,feature,service,已有,源码文件非空；不等于交互/契约已对齐,,pages/Services/ServiceModulesDrawer.tsx:435L,未知,435
+frontend/src/pages/Services/ServiceVariablesDrawer.tsx,feature,service,已有,源码文件非空；不等于交互/契约已对齐,,pages/Services/ServiceVariablesDrawer.tsx:447L,未知,447
+frontend/src/pages/Services/index.tsx,page,service,已有,源码文件非空；不等于交互/契约已对齐,,pages/Services/index.tsx:1032L,未知,1032
+frontend/src/pages/Settings/ChartRepos/index.tsx,page,other,已有,源码文件非空；不等于交互/契约已对齐,,pages/Settings/ChartRepos/index.tsx:170L,未知,170
+frontend/src/pages/Settings/Clusters/ClusterCacheModal.tsx,feature,other,已有,源码文件非空；不等于交互/契约已对齐,,pages/Settings/Clusters/ClusterCacheModal.tsx:234L,未知,234
+frontend/src/pages/Settings/Clusters/ClusterCleanCacheModal.tsx,feature,other,已有,源码文件非空；不等于交互/契约已对齐,,pages/Settings/Clusters/ClusterCleanCacheModal.tsx:170L,未知,170
+frontend/src/pages/Settings/Clusters/ClusterShareStorageModal.tsx,feature,other,已有,源码文件非空；不等于交互/契约已对齐,,pages/Settings/Clusters/ClusterShareStorageModal.tsx:216L,未知,216
+frontend/src/pages/Settings/Clusters/ClusterStrategyDrawer.tsx,feature,other,已有,源码文件非空；不等于交互/契约已对齐,,pages/Settings/Clusters/ClusterStrategyDrawer.tsx:436L,未知,436
+frontend/src/pages/Settings/Clusters/index.tsx,page,other,已有,源码文件非空；不等于交互/契约已对齐,,pages/Settings/Clusters/index.tsx:330L,未知,330
+frontend/src/pages/Settings/CodeHosts/index.tsx,page,other,已有,源码文件非空；不等于交互/契约已对齐,,pages/Settings/CodeHosts/index.tsx:184L,未知,184
+frontend/src/pages/Settings/Config/index.tsx,page,other,部分,系统配置泛化页；含 plugins 等，运行时待验,,pages/Settings/Config/index.tsx:3194L,未知,3194
+frontend/src/pages/Settings/DBInstances/index.tsx,page,other,已有,源码文件非空；不等于交互/契约已对齐,,pages/Settings/DBInstances/index.tsx:195L,未知,195
+frontend/src/pages/Settings/Integration/index.tsx,page,system,部分,系统集成泛化页；厂商字段待验,,pages/Settings/Integration/index.tsx:963L,未知,963
+frontend/src/pages/Settings/KeyVault/index.tsx,page,other,已有,源码文件非空；不等于交互/契约已对齐,,pages/Settings/KeyVault/index.tsx:200L,未知,200
+frontend/src/pages/Settings/Registries/index.tsx,page,other,已有,源码文件非空；不等于交互/契约已对齐,,pages/Settings/Registries/index.tsx:273L,未知,273
+frontend/src/pages/Settings/Storage/index.tsx,page,other,已有,源码文件非空；不等于交互/契约已对齐,,pages/Settings/Storage/index.tsx:172L,未知,172
+frontend/src/pages/Settings/Users/GroupMembersDrawer.tsx,feature,project,已有,源码文件非空；不等于交互/契约已对齐,,pages/Settings/Users/GroupMembersDrawer.tsx:247L,未知,247
+frontend/src/pages/Settings/Users/index.tsx,page,other,已有,源码文件非空；不等于交互/契约已对齐,,pages/Settings/Users/index.tsx:503L,未知,503
+frontend/src/pages/Settings/VMs/index.tsx,page,other,已有,源码文件非空；不等于交互/契约已对齐,,pages/Settings/VMs/index.tsx:751L,未知,751
+frontend/src/pages/Statistics/index.tsx,page,insight,已有,源码文件非空；不等于交互/契约已对齐,,pages/Statistics/index.tsx:282L,未知,282
+frontend/src/pages/Templates/index.tsx,page,template,部分,部分模板类型写能力只读/跳转（P1）,,pages/Templates/index.tsx:776L,未知,776
+frontend/src/components/Brand/ZadigLogo.tsx,shared,shared,已有,源码文件非空；不等于交互/契约已对齐,,components/Brand/ZadigLogo.tsx:42L,未知,42
+frontend/src/components/Editor/YamlDiffEditor.tsx,shared,shared,已有,源码文件非空；不等于交互/契约已对齐,,components/Editor/YamlDiffEditor.tsx:49L,未知,49
+frontend/src/components/Editor/YamlEditor.tsx,shared,shared,已有,源码文件非空；不等于交互/契约已对齐,,components/Editor/YamlEditor.tsx:200L,未知,200
+frontend/src/components/InsightAI/AiAnalysisDrawer.tsx,shared,shared,已有,源码文件非空；不等于交互/契约已对齐,,components/InsightAI/AiAnalysisDrawer.tsx:423L,未知,423
+frontend/src/components/Terminal/LogViewer.tsx,shared,shared,已有,源码文件非空；不等于交互/契约已对齐,,components/Terminal/LogViewer.tsx:324L,未知,324
+frontend/src/components/Terminal/PodTerminal.tsx,shared,shared,已有,源码文件非空；不等于交互/契约已对齐,,components/Terminal/PodTerminal.tsx:719L,未知,719
+frontend/src/components/WorkflowDAG/JobConfigDrawer.tsx,shared,shared,已有,源码文件非空；不等于交互/契约已对齐,,components/WorkflowDAG/JobConfigDrawer.tsx:3016L,未知,3016
+frontend/src/components/WorkflowDAG/JobNode.tsx,shared,shared,已有,源码文件非空；不等于交互/契约已对齐,,components/WorkflowDAG/JobNode.tsx:159L,未知,159
+frontend/src/components/WorkflowDAG/TriggerPanel.tsx,shared,shared,已有,源码文件非空；不等于交互/契约已对齐,,components/WorkflowDAG/TriggerPanel.tsx:723L,未知,723
+frontend/src/components/WorkflowDAG/WorkflowCanvas.tsx,shared,shared,已有,源码文件非空；不等于交互/契约已对齐,,components/WorkflowDAG/WorkflowCanvas.tsx:349L,未知,349
+frontend/src/components/WorkflowDAG/WorkflowTriggerModal.tsx,shared,shared,已有,源码文件非空；不等于交互/契约已对齐,,components/WorkflowDAG/WorkflowTriggerModal.tsx:281L,未知,281
+frontend/src/components/Workspace/WorkspaceBrowserDrawer.tsx,shared,shared,已有,源码文件非空；不等于交互/契约已对齐,,components/Workspace/WorkspaceBrowserDrawer.tsx:377L,未知,377
+frontend/src/components/common/ChunkUploader.tsx,shared,shared,已有,源码文件非空；不等于交互/契约已对齐,,components/common/ChunkUploader.tsx:197L,未知,197
+frontend/src/layouts/BasicLayout.tsx,layout,layout,部分,退出仅清本地；服务端 logout 未证实（P1）,,layouts/BasicLayout.tsx:1559L,未知,1559
+frontend/src/layouts/ProjectDetailLayout.tsx,layout,layout,已有,源码文件非空；不等于交互/契约已对齐,,layouts/ProjectDetailLayout.tsx:286L,未知,286

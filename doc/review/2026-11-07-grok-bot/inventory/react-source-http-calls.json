@@ -1,0 +1,3459 @@
+{
+  "generated_at": "2026-11-07 17:29:01 +0800 Asia/Shanghai",
+  "count": 429,
+  "calls": [
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/application/applications",
+      "sources": [
+        "pages/Directory/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/application/applications/:param",
+      "sources": [
+        "pages/Directory/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/application/applications/:param",
+      "sources": [
+        "pages/Directory/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/application/applications/search",
+      "sources": [
+        "pages/Directory/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "GET",
+      "path_shape": "/api/aslan/application/fields",
+      "sources": [
+        "api/application.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/application/fields",
+      "sources": [
+        "api/application.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/application/fields/:param",
+      "sources": [
+        "api/application.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/application/fields/:param",
+      "sources": [
+        "api/application.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/build/build",
+      "sources": [
+        "pages/Projects/Builds.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/build/build",
+      "sources": [
+        "pages/Projects/Builds.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/build/build",
+      "sources": [
+        "pages/Projects/Builds.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/build/build/:param",
+      "sources": [
+        "pages/Projects/Builds.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/build/build/serviceModule",
+      "sources": [
+        "pages/Projects/Builds.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/cluster/check/ephemeralcontainers",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/cluster/clusters",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/cluster/clusters/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/cluster/clusters/:param/cache",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/cluster/clusters/:param/storage",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/cluster/clusters/:param/strategy",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/cluster/clusters/:param/strategy",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/cluster/clusters/:param/strategy/references",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/cluster/clusters/validate",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/cluster/istio/check/:param",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/code/codehost/:param/branches",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/code/codehost/:param/namespaces",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/code/codehost/:param/repos",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/code/workspace/getcontents/:param",
+      "sources": [
+        "api/workspace.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/code/workspace/git/:param",
+      "sources": [
+        "api/workspace.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/code/workspace/tree",
+      "sources": [
+        "api/workspace.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/collaboration/collaborations",
+      "sources": [
+        "api/collaboration.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/collaboration/collaborations/:param",
+      "sources": [
+        "api/collaboration.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/collaboration/collaborations/new",
+      "sources": [
+        "api/collaboration.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/collaboration/collaborations/sync",
+      "sources": [
+        "api/collaboration.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/delivery/artifacts",
+      "sources": [
+        "pages/Delivery/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/delivery/releases/:param",
+      "sources": [
+        "api/delivery.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/delivery/releases/check",
+      "sources": [
+        "api/delivery.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/delivery/releases/helm",
+      "sources": [
+        "api/delivery.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/delivery/releases/helm/charts",
+      "sources": [
+        "api/delivery.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/delivery/releases/helm/charts/version",
+      "sources": [
+        "api/delivery.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/delivery/releases/helm/global-variables",
+      "sources": [
+        "api/delivery.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/delivery/releases/k8s",
+      "sources": [
+        "api/delivery.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/delivery/releases/labels:param",
+      "sources": [
+        "api/delivery.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/delivery/releases/retry",
+      "sources": [
+        "pages/Delivery/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/delivery/releases:param",
+      "sources": [
+        "api/delivery.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/configmaps/:param",
+      "sources": [
+        "pages/Environments/EnvConfigDrawer.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/diff/products/:param/service/:param",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/environment/envcfgs/:param",
+      "sources": [
+        "pages/Environments/EnvConfigDrawer.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/environment/envcfgs/:param",
+      "sources": [
+        "pages/Environments/EnvConfigDrawer.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/environment/envcfgs/:param/cfg/:param",
+      "sources": [
+        "pages/Environments/EnvConfigDrawer.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/environment/environments",
+      "sources": [
+        "pages/Projects/Wizard.tsx",
+        "pages/Environments/Wizard.tsx"
+      ],
+      "count": 4
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/environment/environments/:param",
+      "sources": [
+        "pages/Environments/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/environment/environments/:param",
+      "sources": [
+        "pages/Environments/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/environment/environments/:param/alias",
+      "sources": [
+        "pages/Environments/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/environments/:param/check/istioGrayscale/:param/ready",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/environments/:param/check/sharenv/:param/ready",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/environments/:param/check/workloads/k8services",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/environments/:param/globalVariableCandidates",
+      "sources": [
+        "pages/Environments/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/environments/:param/helm/releases",
+      "sources": [
+        "pages/Environments/HelmReleasesDrawer.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/environments/:param/helm/releases/diffs",
+      "sources": [
+        "pages/Environments/HelmReleasesDrawer.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/environment/environments/:param/istioGrayscale/config",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/environment/environments/:param/istioGrayscale/enable",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/environment/environments/:param/istioGrayscale/enable",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/environment/environments/:param/istioGrayscale/portal/:param",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/environment/environments/:param/k8s/globalVariables",
+      "sources": [
+        "pages/Environments/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/environments/:param/services",
+      "sources": [
+        "pages/Environments/CollaborationTopologyDrawer.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/environment/environments/:param/services/:param",
+      "sources": [
+        "pages/Environments/ServiceDetail.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/environment/environments/:param/services/:param/restart",
+      "sources": [
+        "pages/Environments/ServiceDetail.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/environment/environments/:param/services/:param/scaleNew",
+      "sources": [
+        "pages/Environments/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/environment/environments/:param/share/enable",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/environment/environments/:param/share/enable",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/environment/environments/:param/share/portal/:param",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/environment/environments/:param/sleep",
+      "sources": [
+        "pages/Environments/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/environment/environments/:param/sleep/cron",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/environment/environments/:param/sync",
+      "sources": [
+        "pages/Environments/CollaborationTopologyDrawer.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/image/:param/:param:param",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/ingresses/:param",
+      "sources": [
+        "pages/Environments/EnvConfigDrawer.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/environment/init/type/vm",
+      "sources": [
+        "pages/Environments/Wizard.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/init_info/:param",
+      "sources": [
+        "pages/Environments/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/environment/kube/:param/pods/:param",
+      "sources": [
+        "pages/Environments/ServiceDetail.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/kube/:param/pods/:param/debugcontainer",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/kube/available_namespaces",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/kube/canary_service/cluster/:param/namespace/:param",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/kube/events",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/kube/nodes:param",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/kube/pods",
+      "sources": [
+        "pages/Environments/ServiceDetail.tsx",
+        "pages/Environments/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/kube/pods/:param",
+      "sources": [
+        "pages/Environments/ServiceDetail.tsx",
+        "pages/Environments/index.tsx"
+      ],
+      "count": 3
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/kube/pods/:param/events",
+      "sources": [
+        "pages/Environments/ServiceDetail.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/kube/pods/:param/file",
+      "sources": [
+        "components/Terminal/PodTerminal.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/kube/resources/:param",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/kube/workloads/:param",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/operations",
+      "sources": [
+        "pages/Environments/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/pvcs/:param",
+      "sources": [
+        "pages/Environments/EnvConfigDrawer.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/rendersets/default-values",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/rendersets/globalVariables",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/rendersets/renderchart",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/rendersets/variables",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/revision/products",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/revision/productsnaps",
+      "sources": [
+        "api/environment.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/environment/secrets/:param",
+      "sources": [
+        "pages/Environments/EnvConfigDrawer.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/project/group",
+      "sources": [
+        "api/project.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/project/group",
+      "sources": [
+        "api/project.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/project/group",
+      "sources": [
+        "api/project.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "GET",
+      "path_shape": "/api/aslan/project/group/preset",
+      "sources": [
+        "api/project.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/project/pms",
+      "sources": [
+        "api/pmHost.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/project/pms/:param",
+      "sources": [
+        "api/pmHost.ts"
+      ],
+      "count": 3
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/project/pms/:param/agent/access",
+      "sources": [
+        "api/pmHost.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/project/pms/:param/agent/offline",
+      "sources": [
+        "api/pmHost.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/project/pms/:param/agent/recovery",
+      "sources": [
+        "api/pmHost.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/project/pms/:param/agent/upgrade",
+      "sources": [
+        "api/pmHost.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/project/pms/batch",
+      "sources": [
+        "api/pmHost.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/project/pms/labels",
+      "sources": [
+        "api/pmHost.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/project/products",
+      "sources": [
+        "api/project.ts",
+        "pages/Projects/Wizard.tsx"
+      ],
+      "count": 4
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/project/products",
+      "sources": [
+        "api/project.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/project/products/:param",
+      "sources": [
+        "api/project.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "GET",
+      "path_shape": "/api/aslan/project/products/:param",
+      "sources": [
+        "api/project.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/project/projects",
+      "sources": [
+        "api/project.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/project/templates/info",
+      "sources": [
+        "api/project.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/project/variablesets",
+      "sources": [
+        "pages/Projects/VarsGroup.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/project/variablesets/:param",
+      "sources": [
+        "pages/Projects/VarsGroup.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/project/variablesets/:param",
+      "sources": [
+        "pages/Projects/VarsGroup.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/release_plan/v1",
+      "sources": [
+        "api/releasePlan.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/release_plan/v1/:param",
+      "sources": [
+        "api/releasePlan.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/release_plan/v1/hook/setting",
+      "sources": [
+        "api/releasePlan.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/helm/:param",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/service/helm/:param/file",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/service/helm/services",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/service/helm/services",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/helm/services/bulk",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/service/helm/services/releaseNaming",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/service/loader/load/:param",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/service/loader/load/:param",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/loader/preload/:param",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/service/pm/:param",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/service/pm/:param",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/service/pm/healthCheckUpdate",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/service/services",
+      "sources": [
+        "pages/Services/index.tsx",
+        "pages/Projects/Wizard.tsx"
+      ],
+      "count": 6
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/services/:param/:param",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/services/:param/auto-modules",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/services/:param/auto-modules/recognize",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/services/:param/k8s",
+      "sources": [
+        "pages/Services/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/services/:param/manual-modules",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/service/services/:param/variable",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/service/services/auto-modules/:param",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/services/kube/workloads",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/services/manual-modules",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/service/services/manual-modules/:param",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/service/services/manual-modules/:param",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/services/variable/convert",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/service/services/yaml",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/services/yaml/validator",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/service/template/load",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/template/preview",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/service/template/reload",
+      "sources": [
+        "api/service.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/version/:param",
+      "sources": [
+        "pages/Services/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/version/:param/diff",
+      "sources": [
+        "pages/Services/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/service/version/:param/revision/:param",
+      "sources": [
+        "pages/Services/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/service/version/:param/rollback",
+      "sources": [
+        "pages/Services/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/sprint_management/v1/sprint",
+      "sources": [
+        "pages/Projects/Sprints.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/sprint_management/v1/sprint/:param",
+      "sources": [
+        "pages/Projects/Sprints.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/sprint_management/v1/sprint/:param/activate",
+      "sources": [
+        "pages/Projects/Sprints.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/sprint_management/v1/sprint/:param/archive",
+      "sources": [
+        "pages/Projects/Sprints.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/sprint_management/v1/sprint/:param/name",
+      "sources": [
+        "pages/Projects/Sprints.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/sprint_management/v1/sprint_template",
+      "sources": [
+        "pages/Projects/Sprints.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/sprint_management/v1/sprint_workitem",
+      "sources": [
+        "api/sprint.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/sprint_management/v1/sprint_workitem/:param",
+      "sources": [
+        "api/sprint.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/sprint_management/v1/sprint_workitem/:param/desc",
+      "sources": [
+        "api/sprint.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/sprint_management/v1/sprint_workitem/:param/move",
+      "sources": [
+        "api/sprint.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/sprint_management/v1/sprint_workitem/:param/title",
+      "sources": [
+        "api/sprint.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/stat/dashboard/build",
+      "sources": [
+        "pages/Insights/index.tsx",
+        "pages/Insights/Detail.tsx",
+        "pages/Statistics/index.tsx"
+      ],
+      "count": 3
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/stat/dashboard/deploy",
+      "sources": [
+        "pages/Insights/index.tsx",
+        "pages/Insights/Detail.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/stat/dashboard/overview",
+      "sources": [
+        "pages/Statistics/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/stat/dashboard/release",
+      "sources": [
+        "pages/Insights/Detail.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/stat/dashboard/test",
+      "sources": [
+        "pages/Insights/Detail.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/stat/quality/buildAverageMeasure",
+      "sources": [
+        "api/stat.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/stat/quality/buildDailyMeasure",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/stat/quality/buildHealthMeasure",
+      "sources": [
+        "api/stat.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/stat/quality/buildLatestTenMeasure",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/stat/quality/buildTenDurationMeasure",
+      "sources": [
+        "api/stat.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/stat/quality/buildTrend",
+      "sources": [
+        "api/stat.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/stat/quality/testAverageMeasure",
+      "sources": [
+        "api/stat.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/stat/quality/testHealthMeasure",
+      "sources": [
+        "api/stat.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/stat/v2/ai/analysis",
+      "sources": [
+        "api/stat.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "GET",
+      "path_shape": "/api/aslan/stat/v2/ai/analysis/prompt",
+      "sources": [
+        "api/stat.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/stat/v2/config",
+      "sources": [
+        "api/stat.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/stat/v2/config/:param",
+      "sources": [
+        "api/stat.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/stat/v2/config/:param",
+      "sources": [
+        "api/stat.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/stat/v2/dashboard",
+      "sources": [
+        "api/stat.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/stat/v2/dashboard/general",
+      "sources": [
+        "api/stat.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/stat/v2/quality/deploy/health",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/stat/v2/quality/deploy/service/top",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/stat/v2/quality/deploy/trend/monthly",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "GET",
+      "path_shape": "/api/aslan/stat/v2/quality/rollback/stat",
+      "sources": [
+        "api/stat.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/stat/v2/quality/rollback/total",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/stat/v2/quality/test/count",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/stat/v2/quality/test/dailyHealthTrend",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/agent/integration",
+      "sources": [
+        "api/agent.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/agent/integration/:param",
+      "sources": [
+        "api/agent.ts"
+      ],
+      "count": 3
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/agent/integration/validate",
+      "sources": [
+        "api/agent.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/ai/review",
+      "sources": [
+        "pages/Settings/Config/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/announcement",
+      "sources": [
+        "pages/Settings/Config/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/announcement/all",
+      "sources": [
+        "pages/Settings/Config/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/announcement/update",
+      "sources": [
+        "pages/Settings/Config/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/api_gateways",
+      "sources": [
+        "pages/Settings/Integration/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/basicImages",
+      "sources": [
+        "pages/Settings/Config/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/system/basicImages/:param",
+      "sources": [
+        "pages/Settings/Config/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/capacity",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/capacity/clean",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/capacity/gc",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/capacity/target/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/cicdTools",
+      "sources": [
+        "api/settings.ts",
+        "pages/Settings/Integration/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/cleanCache/cron",
+      "sources": [
+        "api/systemConfig.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/cleanCache/oneClick",
+      "sources": [
+        "api/systemConfig.ts",
+        "pages/Settings/Clusters/ClusterCleanCacheModal.tsx"
+      ],
+      "count": 4
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/cleanCache/sharedStorage",
+      "sources": [
+        "api/systemConfig.ts",
+        "pages/Settings/Clusters/ClusterCleanCacheModal.tsx"
+      ],
+      "count": 4
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/cleanCache/state",
+      "sources": [
+        "api/systemConfig.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/cloud_service",
+      "sources": [
+        "pages/Settings/Integration/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/concurrency/workflow",
+      "sources": [
+        "pages/Settings/Config/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/configuration",
+      "sources": [
+        "api/settings.ts",
+        "pages/Settings/Integration/index.tsx"
+      ],
+      "count": 4
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/system/configuration/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/configuration/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/configuration/validate",
+      "sources": [
+        "api/settings.ts",
+        "pages/Settings/Integration/index.tsx"
+      ],
+      "count": 4
+    },
+    {
+      "method": "GET",
+      "path_shape": "/api/aslan/system/dashboard/deploy/statistics",
+      "sources": [
+        "pages/Dashboard/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/dashboard/environment/:param",
+      "sources": [
+        "pages/Dashboard/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "GET",
+      "path_shape": "/api/aslan/system/dashboard/service/rollback",
+      "sources": [
+        "pages/Dashboard/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/dashboard/settings",
+      "sources": [
+        "pages/Dashboard/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/dashboard/workflow/mine${card.id ",
+      "sources": [
+        "pages/Dashboard/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/dashboard/workflow/running",
+      "sources": [
+        "pages/Dashboard/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/dbinstance",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/system/dbinstance/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/external",
+      "sources": [
+        "pages/Settings/Integration/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/externalLink",
+      "sources": [
+        "api/systemConfig.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/system/externalLink/:param",
+      "sources": [
+        "api/systemConfig.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/externalLink/:param",
+      "sources": [
+        "api/systemConfig.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/system/favorite/environment/:param",
+      "sources": [
+        "pages/Environments/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/favorite/environment/:param",
+      "sources": [
+        "pages/Environments/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/helm",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/system/helm/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/helm/validate",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/im_app",
+      "sources": [
+        "pages/Settings/Integration/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/initialization/status",
+      "sources": [
+        "api/installation.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/initialization/user",
+      "sources": [
+        "api/installation.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/install",
+      "sources": [
+        "pages/Settings/Config/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/jenkins/buildArgs/:param/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/jenkins/jobNames/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/jenkins/user/connection",
+      "sources": [
+        "pages/Settings/Integration/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/system/keyvault/groups/:param",
+      "sources": [
+        "api/systemConfig.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/keyvault/items",
+      "sources": [
+        "api/systemConfig.ts",
+        "pages/Settings/KeyVault/index.tsx"
+      ],
+      "count": 4
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/system/keyvault/items/:param",
+      "sources": [
+        "api/systemConfig.ts",
+        "pages/Settings/KeyVault/index.tsx"
+      ],
+      "count": 4
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/keyvault/items/:param",
+      "sources": [
+        "api/systemConfig.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/labels",
+      "sources": [
+        "pages/Settings/Config/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/system/labels/:param",
+      "sources": [
+        "pages/Settings/Config/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/labels/:param",
+      "sources": [
+        "pages/Settings/Config/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/language",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/llm/integration",
+      "sources": [
+        "pages/Settings/Integration/index.tsx",
+        "pages/Settings/Config/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/nacos/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/navigation",
+      "sources": [
+        "api/systemConfig.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/notification",
+      "sources": [
+        "api/notification.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/notification/delete",
+      "sources": [
+        "api/notification.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/notification/read",
+      "sources": [
+        "api/notification.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/notification/subscribe",
+      "sources": [
+        "api/notification.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/notification/subscribe/:param",
+      "sources": [
+        "api/notification.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/system/notification/unsubscribe/notifytype/:param",
+      "sources": [
+        "api/notification.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/observability",
+      "sources": [
+        "pages/Settings/Integration/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/operation",
+      "sources": [
+        "pages/Settings/Config/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/plugin",
+      "sources": [
+        "pages/Settings/Config/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/privateKey",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/system/privateKey/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/privateKey/internal",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/project_management",
+      "sources": [
+        "api/settings.ts",
+        "pages/Settings/Integration/index.tsx"
+      ],
+      "count": 4
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/system/project_management/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/project_management/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/project_management/validate",
+      "sources": [
+        "api/settings.ts",
+        "pages/Settings/Integration/index.tsx"
+      ],
+      "count": 4
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/proxyManage",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/system/proxyManage/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/proxyManage/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/proxyManage/connectionTest",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/registry/namespaces",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/system/registry/namespaces/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/registry/namespaces/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/registry/project",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/registry/validate",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/rsaKey/publicKey",
+      "sources": [
+        "api/auth.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/s3storage",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/system/s3storage/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/s3storage/project",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/security",
+      "sources": [
+        "api/systemConfig.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/server/url",
+      "sources": [
+        "api/systemConfig.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/sonar/integration",
+      "sources": [
+        "pages/Settings/Integration/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/sonar/validate",
+      "sources": [
+        "pages/Settings/Integration/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/tempFile/complete/:param",
+      "sources": [
+        "api/tempFile.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/tempFile/download/:param",
+      "sources": [
+        "api/tempFile.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/tempFile/fileInfo/:param",
+      "sources": [
+        "api/tempFile.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/tempFile/initiate",
+      "sources": [
+        "api/tempFile.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/tempFile/status/:param",
+      "sources": [
+        "api/tempFile.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/system/tempFile/upload/:param/:param",
+      "sources": [
+        "api/tempFile.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/theme",
+      "sources": [
+        "api/enterprise.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/webhook/config",
+      "sources": [
+        "api/systemConfig.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/system/workflowHook",
+      "sources": [
+        "api/systemConfig.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/system/workflow_parameter",
+      "sources": [
+        "api/systemConfig.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/template/build",
+      "sources": [
+        "api/template.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/template/charts",
+      "sources": [
+        "api/template.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/template/dockerfile",
+      "sources": [
+        "api/template.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/template/dockerfile/:param",
+      "sources": [
+        "api/template.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/template/dockerfile/:param",
+      "sources": [
+        "api/template.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/template/release_plan",
+      "sources": [
+        "api/template.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/template/scanning",
+      "sources": [
+        "api/template.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/template/workflow",
+      "sources": [
+        "api/template.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/template/yaml",
+      "sources": [
+        "api/template.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/template/yaml/:param",
+      "sources": [
+        "api/template.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/template/yaml/:param",
+      "sources": [
+        "api/template.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/testing/report/html/testing/:param/:param/:param/",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/testing/report/html/workflowv4/:param/${encodeURIComponent(effWorkflowName ||",
+      "sources": [
+        "pages/Pipelines/Execution.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/testing/scanning",
+      "sources": [
+        "pages/Projects/Scanners.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/testing/scanning/:param",
+      "sources": [
+        "pages/Projects/Scanners.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/testing/scanning/:param",
+      "sources": [
+        "pages/Projects/Scanners.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/testing/scanning/:param/task",
+      "sources": [
+        "pages/Projects/Scanners.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/testing/scanning/:param/task/:param",
+      "sources": [
+        "pages/Projects/Scanners.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/testing/scanning/:param/task/:param/artifact_info",
+      "sources": [
+        "pages/Projects/Scanners.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/testing/scanning/:param/task/:param/events",
+      "sources": [
+        "pages/Projects/Scanners.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/testing/scanning/:param/task/:param/sse",
+      "sources": [
+        "pages/Projects/Scanners.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/testing/scanning/repo",
+      "sources": [
+        "pages/Projects/Scanners.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/testing/sse/:param/tasks/:param",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/testing/test",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/testing/test",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/testing/test/:param",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/testing/test/:param:param",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/testing/testtask",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "GET",
+      "path_shape": "/api/aslan/testing/testtask/artifact",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/testing/testtask/restart",
+      "sources": [
+        "pages/Quality/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "GET",
+      "path_shape": "/api/aslan/vm/:param/agent/access",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/vm/:param/agent/offline",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/vm/:param/agent/recovery",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/vm/:param/agent/upgrade",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/vm/labels",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/vm/vms:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/workflow/favorite",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/workflow/favorite/:param/:param/workflow_v4",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/sse/workflowTasks/pending",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/sse/workflowTasks/running",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/workflow/v4",
+      "sources": [
+        "api/workflow.ts",
+        "pages/Projects/Wizard.tsx"
+      ],
+      "count": 4
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/workflow/v4/:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/workflow/v4/:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/bluegreen/:param/:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/workflow/v4/cron",
+      "sources": [
+        "components/WorkflowDAG/TriggerPanel.tsx"
+      ],
+      "count": 4
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/workflow/v4/cron/:param",
+      "sources": [
+        "components/WorkflowDAG/TriggerPanel.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/workflow/v4/cron/:param/trigger/:param",
+      "sources": [
+        "components/WorkflowDAG/TriggerPanel.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/cron/preset",
+      "sources": [
+        "components/WorkflowDAG/TriggerPanel.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/deploy/mergeImage",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/dynamicVariable/available",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/dynamicVariable/render",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/workflow/v4/generalhook/:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/workflow/v4/generalhook/:param/:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/generalhook/preset",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/lint",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/name/:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/preset/:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/sharestorage",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/sql/validate",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/webhook",
+      "sources": [
+        "components/WorkflowDAG/TriggerPanel.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/workflow/v4/webhook/:param",
+      "sources": [
+        "components/WorkflowDAG/TriggerPanel.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/workflow/v4/webhook/:param/trigger/:param",
+      "sources": [
+        "components/WorkflowDAG/TriggerPanel.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/webhook/preset",
+      "sources": [
+        "components/WorkflowDAG/TriggerPanel.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/workflowtask",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/workflowtask/:param/field",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/workflow/v4/workflowtask/approve:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/workflow/v4/workflowtask/breakpoint/:param/:param/task/:param/:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/workflowtask/clone/workflow/:param/task/:param:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/workflow/v4/workflowtask/debug/:param/:param/task/:param/:param:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/workflow/v4/workflowtask/debug/:param/task/:param:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/workflow/v4/workflowtask/handle/error",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/workflowtask/manualexec/workflow/:param/task/:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/workflow/v4/workflowtask/retry/workflow/:param/task/:param:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/workflow/v4/workflowtask/revert/:param/:param/task/:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/workflowtask/workflow/:param/task/:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/v4/workflowtask/workflow/:param/task/:param/job/:param/events:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/workflow/v4/workflowtask/workflow/:param/task/:param:param",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/aslan/workflow/view",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/aslan/workflow/view",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/aslan/workflow/view",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/aslan/workflow/view/preset",
+      "sources": [
+        "api/workflow.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/logs/sse/pods/:param/containers/:param",
+      "sources": [
+        "pages/Environments/ServiceDetail.tsx",
+        "pages/Environments/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/logs/sse/v4/workflow/:param/:param/:param/:param",
+      "sources": [
+        "pages/Pipelines/Execution.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/plutus-enterprise/license",
+      "sources": [
+        "api/installation.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/plutus/products",
+      "sources": [
+        "pages/Plutus/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/captcha",
+      "sources": [
+        "pages/Login/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/v1/codehosts",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/v1/codehosts/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/connectors",
+      "sources": [
+        "pages/Settings/Integration/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/v1/emails/host",
+      "sources": [
+        "api/email.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/v1/emails/host",
+      "sources": [
+        "api/email.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/v1/emails/host/validate",
+      "sources": [
+        "api/email.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/emails/internal/host",
+      "sources": [
+        "api/email.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/features/:param",
+      "sources": [
+        "api/auth.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/login",
+      "sources": [
+        "api/auth.ts",
+        "pages/Login/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "GET",
+      "path_shape": "/api/v1/login-enabled",
+      "sources": [
+        "api/auth.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/login/mfa/enroll",
+      "sources": [
+        "api/auth.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/login/mfa/setup",
+      "sources": [
+        "api/auth.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/login/mfa/verify",
+      "sources": [
+        "api/auth.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "GET",
+      "path_shape": "/api/v1/logout",
+      "sources": [
+        "api/auth.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/picket/projects",
+      "sources": [
+        "api/project.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/policy/permission",
+      "sources": [
+        "api/auth.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/policy/permission/project/:param",
+      "sources": [
+        "api/auth.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/policy/resource-actions",
+      "sources": [
+        "api/rbac.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/v1/policy/role-bindings",
+      "sources": [
+        "api/rbac.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/v1/policy/role-bindings/group/:param",
+      "sources": [
+        "api/rbac.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/v1/policy/role-bindings/user/:param",
+      "sources": [
+        "api/rbac.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/v1/policy/role-templates",
+      "sources": [
+        "api/rbac.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/v1/policy/role-templates/:param",
+      "sources": [
+        "api/rbac.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/v1/policy/role-templates/:param",
+      "sources": [
+        "api/rbac.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/v1/policy/roles",
+      "sources": [
+        "api/rbac.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/v1/policy/roles/:param",
+      "sources": [
+        "api/rbac.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/reset",
+      "sources": [
+        "pages/Login/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/retrieve",
+      "sources": [
+        "pages/Login/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/v1/user-group",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/v1/user-group/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "GET",
+      "path_shape": "/api/v1/user-group/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/v1/user-group/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/v1/user-group/:param/bulk-create-users",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/v1/user-group/:param/bulk-delete-users",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/v1/users",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "DELETE",
+      "path_shape": "/api/v1/users/:param",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "POST",
+      "path_shape": "/api/v1/users/:param/mfa/disable",
+      "sources": [
+        "pages/Profile/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/users/:param/mfa/enable",
+      "sources": [
+        "pages/Profile/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/users/:param/mfa/setup",
+      "sources": [
+        "pages/Profile/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/users/:param/mfa/status",
+      "sources": [
+        "pages/Profile/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "PUT",
+      "path_shape": "/api/v1/users/:param/password",
+      "sources": [
+        "pages/Profile/index.tsx"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/users/:param/personal",
+      "sources": [
+        "api/auth.ts"
+      ],
+      "count": 2
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/users/:param/token",
+      "sources": [
+        "pages/Profile/index.tsx"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/users/brief",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 1
+    },
+    {
+      "method": "ANY",
+      "path_shape": "/api/v1/users/search",
+      "sources": [
+        "api/settings.ts"
+      ],
+      "count": 1
+    }
+  ]
+}

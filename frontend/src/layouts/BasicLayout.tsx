@@ -57,6 +57,7 @@ import {
   ReloadOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '../stores/auth';
+import authApi from '../api/auth';
 import { useProjectStore } from '../stores/project';
 import { projectApi } from '../api/project';
 import notificationApi, { type NotificationItem } from '../api/notification';
@@ -193,9 +194,15 @@ export const BasicLayout: React.FC = () => {
       content: '退出后需要重新输入凭据登录。',
       okText: '退出',
       cancelText: '取消',
-      onOk: () => {
-        logout();
-        navigate('/signin');
+      onOk: async () => {
+        try {
+          await authApi.logout();
+        } catch {
+          // 容忍网络或服务端异常，确保本地会话彻底注销
+        } finally {
+          logout();
+          navigate('/signin');
+        }
       },
     });
   };

@@ -1,0 +1,119 @@
+{
+  "generated_at": "2026-11-07 17:30:58 +0800 Asia/Shanghai",
+  "head": "82ec35eed48e93a65486811a38700e97ab2ab472",
+  "branch": "feat/zadig-portal-next",
+  "methodology": "Post-wipe static regeneration (no REA observation IDs). EE routes from nested Vue router in zadig-ee-portal/static/js/94.*.js; React routes brace-aware from frontend/src/router/index.tsx with :param/* pattern match; components = pages+components+layouts TSX; APIs = /api/ harvest across EE JS + frontend/src. Not a claim of full 1:1 parity.",
+  "denominators": {
+    "ee_routes": 199,
+    "react_extras": 20,
+    "routes_all_rows": 219,
+    "components": 94,
+    "apis": 762,
+    "react_http_calls": 429,
+    "react_jsx_declarations": 166
+  },
+  "status_counts": {
+    "ee_routes": {
+      "部分": 152,
+      "已有": 6,
+      "未知": 4,
+      "缺失": 37
+    },
+    "react_extras": {
+      "未知": 20
+    },
+    "components": {
+      "已有": 82,
+      "部分": 12
+    },
+    "apis": {
+      "部分": 286,
+      "未知": 436,
+      "缺失": 40
+    }
+  },
+  "prior_published": {
+    "ee_routes": {
+      "total": 207,
+      "已有": 6,
+      "部分": 156,
+      "缺失": 37,
+      "未知": 8
+    },
+    "react_extras": {
+      "total": 30,
+      "未知": 30
+    },
+    "routes_all": {
+      "total": 237
+    },
+    "components": {
+      "total": 94,
+      "已有": 81,
+      "部分": 13,
+      "缺失": 0,
+      "未知": 0
+    },
+    "apis": {
+      "total": 725,
+      "已有": 0,
+      "部分": 373,
+      "缺失": 40,
+      "未知": 312
+    }
+  },
+  "deltas_vs_prior": {
+    "ee_routes": {
+      "total_delta": -8,
+      "已有_delta": 0,
+      "部分_delta": -4,
+      "缺失_delta": 0,
+      "未知_delta": -4
+    },
+    "react_extras": {
+      "total_delta": -10
+    },
+    "routes_all": {
+      "total_delta": -18
+    },
+    "components": {
+      "total_delta": 0,
+      "已有_delta": 1,
+      "部分_delta": -1,
+      "缺失_delta": 0,
+      "未知_delta": 0
+    },
+    "apis": {
+      "total_delta": 37,
+      "已有_delta": 0,
+      "部分_delta": -87,
+      "缺失_delta": 0,
+      "未知_delta": 124
+    }
+  },
+  "file_sizes_bytes": {
+    "routes.json": 221119,
+    "routes.csv": 51348,
+    "components.json": 35255,
+    "components.csv": 16612,
+    "apis.json": 262350,
+    "apis.csv": 137274,
+    "react-source-http-calls.json": 75816,
+    "README.md": 1013,
+    "summary.json": 3188
+  },
+  "p0_notes": {
+    "plutus": "dedicated screens → 缺失/部分 via single React placeholder",
+    "sae": "detail/changeOrder → 缺失; create/config → 部分",
+    "mobile": "all → 缺失 (Navigate to desktop)",
+    "plugins": "runtime → 缺失; system/plugins → 部分",
+    "builds": "related → 部分 (workflows[0] risk)"
+  },
+  "material_delta_notes": [
+    "EE routes 199 vs prior 207 (chunk-94 nested expand vs prior REA multi-chunk candidate union).",
+    "EE status ≈ prior: 缺失=37 (was 37); 部分/已有/未知 small deltas from static vs REA.",
+    "APIs 762 vs 725: broader harvest; 部分/未知 mix differs without REA request window; 已有=0; 缺失 capped≈40 Plutus/SAE.",
+    "Components 94 with 已有/部分 near prior.",
+    "React extras 20 vs 30."
+  ]
+}

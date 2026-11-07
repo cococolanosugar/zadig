@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { useAuthStore } from '../stores/auth';
 import BasicLayout from '../layouts/BasicLayout';
 import ProjectDetailLayout from '../layouts/ProjectDetailLayout';
@@ -44,7 +44,20 @@ import SystemIntegrationPage from '../pages/Settings/Integration';
 import InstallationSignUpPage from '../pages/Installation/SignUp';
 import InstallationVersionPage from '../pages/Installation/Version';
 
-export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const MobileProjectDetailRedirect: React.FC = () => {
+  const { projectName } = useParams<{ projectName?: string }>();
+  return <Navigate to={`/v1/projects/detail/${projectName || ''}/detail`} replace />;
+};
+
+const MobileWorkflowDetailRedirect: React.FC = () => {
+  const { projectName, workflowName, taskId } = useParams<{ projectName?: string; workflowName?: string; taskId?: string }>();
+  if (taskId) {
+    return <Navigate to={`/v1/projects/detail/${projectName || ''}/pipelines/${workflowName || ''}/task/${taskId}`} replace />;
+  }
+  return <Navigate to={`/v1/projects/detail/${projectName || ''}/pipelines/${workflowName || ''}`} replace />;
+};
+
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const location = useLocation();
 
@@ -293,12 +306,14 @@ export const AppRouter: React.FC = () => {
           />
         </Route>
 
-        {/* Mobile Route Compatibility (Redirects to Desktop Portal Equivalents) */}
+        {/* Mobile Route Compatibility (Redirects to Desktop Portal Equivalents with Dynamic Param Interpolation) */}
         <Route path="/mobile" element={<Navigate to="/v1/dashboard" replace />} />
         <Route path="/mobile/status" element={<Navigate to="/v1/status" replace />} />
         <Route path="/mobile/profile" element={<Navigate to="/v1/profile/info" replace />} />
         <Route path="/mobile/projects" element={<Navigate to="/v1/projects" replace />} />
-        <Route path="/mobile/projects/detail/:projectName" element={<Navigate to="/v1/projects/detail/:projectName/detail" replace />} />
+        <Route path="/mobile/projects/detail/:projectName" element={<MobileProjectDetailRedirect />} />
+        <Route path="/mobile/projects/detail/:projectName/workflows/:workflowName" element={<MobileWorkflowDetailRedirect />} />
+        <Route path="/mobile/projects/detail/:projectName/workflows/:workflowName/:taskId" element={<MobileWorkflowDetailRedirect />} />
         <Route path="/mobile/*" element={<Navigate to="/v1/dashboard" replace />} />
 
         <Route path="/404" element={
