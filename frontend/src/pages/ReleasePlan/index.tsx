@@ -18,6 +18,8 @@ import {
   Switch,
   Checkbox,
   Spin,
+  Alert,
+  Timeline,
 } from 'antd';
 import {
   ScheduleOutlined,
@@ -27,18 +29,24 @@ import {
   DeleteOutlined,
   ReloadOutlined,
   CalendarOutlined,
-  InfoCircleOutlined,
   SettingOutlined,
+  CopyOutlined,
+  FileTextOutlined,
+  SafetyOutlined,
 } from '@ant-design/icons';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
-import { releasePlanApi, type ReleasePlanItem } from '../../api/releasePlan';
+import { releasePlanApi, type ReleasePlanItem, type ReleaseJobItem } from '../../api/releasePlan';
 import { feedback } from '../../utils/feedback';
 import { useAuthStore } from '../../stores/auth';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 const { RangePicker } = DatePicker;
+
+// 已进入终态的 Job 不再提供执行/重试/跳过操作
+const readOnlyJobStatus = (status?: string) =>
+  ['success', 'skipped', 'cancelled'].includes(String(status || ''));
 
 export const ReleasePlanPage: React.FC = () => {
   const { userInfo } = useAuthStore();
@@ -64,6 +72,20 @@ export const ReleasePlanPage: React.FC = () => {
   // Drawer state
   const [detailDrawerVisible, setDetailDrawerVisible] = useState<boolean>(false);
   const [activePlan, setActivePlan] = useState<ReleasePlanItem | null>(null);
+
+  // R4-A2: 真实编排数据（getPlan 拉取的实时 jobs 与审批态）
+  const [planDetail, setPlanDetail] = useState<ReleasePlanItem | null>(null);
+  const [planDetailLoading, setPlanDetailLoading] = useState<boolean>(false);
+  const [jobActing, setJobActing] = useState<string | null>(null);
+  // 复制计划
+  const [copyModalOpen, setCopyModalOpen] = useState<boolean>(false);
+  const [copyTarget, setCopyTarget] = useState<ReleasePlanItem | null>(null);
+  const [copyName, setCopyName] = useState<string>('');
+  const [copying, setCopying] = useState<boolean>(false);
+  // 操作日志
+  const [logsModalOpen, setLogsModalOpen] = useState<boolean>(false);
+  const [planLogs, setPlanLogs] = useState<any[]>([]);
+  const [logsLoading, setLogsLoading] = useState<boolean>(false);
 
   const fetchPlans = useCallback(async () => {
     setLoading(true);
@@ -130,6 +152,121 @@ export const ReleasePlanPage: React.FC = () => {
       fetchPlans();
     } catch (err: any) {
       feedback.message.error(err?.message || '删除发布计划失败');
+    }
+  };
+
+  // --- R4-A2: 真实 Job 执行编排 ---
+  const loadPlanDetail = useCallback(async (planId: string) => {
+    if (!planId) return;
+    setPlanDetailLoading(true);
+    try {
+      const detail = await releasePlanApi.getPlan(planId);
+      setPlanDetail(detail || null);
+    } catch (err: unknown) {
+      setPlanDetail(null);
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '发布计划详情获取失败');
+      feedback.message.error(msg);
+    } finally {
+      setPlanDetailLoading(false);
+    }
+  }, []);
+
+  // Drawer 打开或活跃计划变化时拉取实时数据
+  useEffect(() => {
+    const planId = activePlan?.id || activePlan?._id || '';
+    if (detailDrawerVisible && planId) {
+      loadPlanDetail(planId);
+    }
+    if (!detailDrawerVisible) {
+      setPlanDetail(null);
+    }
+  }, [detailDrawerVisible, activePlan, loadPlanDetail]);
+
+  const runJobAction = async (
+    job: ReleaseJobItem,
+    action: 'execute' | 'retry' | 'skip'
+  ) => {
+    const planId = activePlan?.id || activePlan?._id || planDetail?.id || '';
+    if (!planId || !job.id) return;
+    setJobActing(`${action}-${job.id}`);
+    try {
+      if (action === 'execute') {
+        await releasePlanApi.executeJob(planId, { id: job.id, name: job.name, type: job.type });
+        feedback.message.success(`任务 [${job.name}] 已开始执行`);
+      } else if (action === 'retry') {
+        await releasePlanApi.retryJob(planId, { id: job.id });
+        feedback.message.success(`任务 [${job.name}] 已重新入队重试`);
+      } else {
+        await releasePlanApi.skipJob(planId, { id: job.id });
+        feedback.message.success(`任务 [${job.name}] 已跳过`);
+      }
+      await loadPlanDetail(planId);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '任务操作失败');
+      feedback.message.error(msg);
+    } finally {
+      setJobActing(null);
+    }
+  };
+
+  const handleApprovePlan = async () => {
+    const planId = activePlan?.id || activePlan?._id || planDetail?.id || '';
+    if (!planId) return;
+    setJobActing('approve');
+    try {
+      await releasePlanApi.approvePlan(planId);
+      feedback.message.success('发布计划审批已通过');
+      await loadPlanDetail(planId);
+      fetchPlans();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '审批操作失败');
+      feedback.message.error(msg);
+    } finally {
+      setJobActing(null);
+    }
+  };
+
+  const handleCopyPlan = async () => {
+    const planId = copyTarget?.id || copyTarget?._id || '';
+    if (!planId || !copyName.trim()) {
+      feedback.message.warning('请输入新计划名称');
+      return;
+    }
+    setCopying(true);
+    try {
+      await releasePlanApi.copyPlan(planId, copyName.trim());
+      feedback.message.success(`发布计划已复制为 [${copyName.trim()}]`);
+      setCopyModalOpen(false);
+      setCopyName('');
+      setCopyTarget(null);
+      fetchPlans();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '复制发布计划失败');
+      feedback.message.error(msg);
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const openPlanLogs = async (record: ReleasePlanItem) => {
+    const planId = record.id || record._id || '';
+    if (!planId) return;
+    setLogsModalOpen(true);
+    setLogsLoading(true);
+    setPlanLogs([]);
+    try {
+      const logs = await releasePlanApi.getPlanLogs(planId);
+      setPlanLogs(logs);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '发布计划操作日志获取失败');
+      feedback.message.error(msg);
+    } finally {
+      setLogsLoading(false);
     }
   };
 
@@ -242,9 +379,9 @@ export const ReleasePlanPage: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 180,
+      width: 280,
       render: (_, record) => (
-        <Space size="middle">
+        <Space size="middle" wrap>
           <Button
             type="link"
             size="small"
@@ -254,6 +391,21 @@ export const ReleasePlanPage: React.FC = () => {
             }}
           >
             详情编排
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<CopyOutlined />}
+            onClick={() => {
+              setCopyTarget(record);
+              setCopyName(`${record.name}-copy`);
+              setCopyModalOpen(true);
+            }}
+          >
+            复制
+          </Button>
+          <Button type="link" size="small" icon={<FileTextOutlined />} onClick={() => openPlanLogs(record)}>
+            查看日志
           </Button>
           <Popconfirm
             title={`确认删除发布计划 [${record.name}]？`}
@@ -416,44 +568,216 @@ export const ReleasePlanPage: React.FC = () => {
         {activePlan && (
           <div>
             <Descriptions bordered column={1} size="small" style={{ marginBottom: 24 }}>
-              <Descriptions.Item label="计划名称">{activePlan.name}</Descriptions.Item>
+              <Descriptions.Item label="计划名称">{planDetail?.name || activePlan.name}</Descriptions.Item>
               <Descriptions.Item label="当前状态">
-                <Tag color="blue">{activePlan.status || 'planning'}</Tag>
+                <Tag color="blue">{planDetail?.status || activePlan.status || 'planning'}</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="责任人">{activePlan.manager || '-'}</Descriptions.Item>
-              <Descriptions.Item label="发布窗口">{activePlan.release_time || '-'}</Descriptions.Item>
-              <Descriptions.Item label="说明备注">{activePlan.description || '无详细说明'}</Descriptions.Item>
+              <Descriptions.Item label="责任人">{planDetail?.manager || activePlan.manager || '-'}</Descriptions.Item>
+              <Descriptions.Item label="发布窗口">{planDetail?.release_time || activePlan.release_time || '-'}</Descriptions.Item>
+              <Descriptions.Item label="说明备注">{planDetail?.description || activePlan.description || '无详细说明'}</Descriptions.Item>
             </Descriptions>
 
-            <Title level={5} style={{ marginTop: 24 }}>
-              里程碑检查项 (Release Checklist)
+            {/* R4-A2: 审批门禁（wait_for_approval 或包含审批节点时渲染） */}
+            {(planDetail?.status === 'wait_for_approval' ||
+              (planDetail?.jobs || []).some((j) => j.type === 'approval')) && (
+              <Alert
+                type="warning"
+                showIcon
+                icon={<SafetyOutlined />}
+                title="该发布计划等待审批"
+                description="审批通过后发布计划才能继续推进执行。"
+                style={{ marginBottom: 16, borderRadius: 6 }}
+                action={
+                  <Button
+                    type="primary"
+                    size="small"
+                    icon={<CheckCircleOutlined />}
+                    loading={jobActing === 'approve'}
+                    onClick={handleApprovePlan}
+                  >
+                    审批通过
+                  </Button>
+                }
+              />
+            )}
+
+            <Title level={5} style={{ marginTop: 8 }}>
+              发布任务编排 (Jobs)
             </Title>
             <Paragraph type="secondary" style={{ fontSize: 13 }}>
-              包含质量门禁、安全扫描与生产发布审批的自动化核验状态。
+              计划内的真实发布任务列表，执行状态与操作实时同步服务端。
             </Paragraph>
 
-            <Card variant="borderless" style={{ background: '#fafafa', borderRadius: 6 }}>
-              <Space vertical size={12} style={{ width: '100%' }}>
-                <Space>
-                  <CheckCircleOutlined style={{ color: '#52c41a' }} />
-                  <Text strong>代码审查门禁：</Text>
-                  <Tag color="success">已通过</Tag>
-                </Space>
-                <Space>
-                  <CheckCircleOutlined style={{ color: '#52c41a' }} />
-                  <Text strong>自动化回归测试：</Text>
-                  <Tag color="success">已通过 (100%)</Tag>
-                </Space>
-                <Space>
-                  <InfoCircleOutlined style={{ color: '#faad14' }} />
-                  <Text strong>生产变更审批单：</Text>
-                  <Tag color="warning">待主管签批</Tag>
-                </Space>
-              </Space>
-            </Card>
+            <Table
+              rowKey={(j) => j.id || j.name}
+              dataSource={planDetail?.jobs || []}
+              loading={planDetailLoading}
+              pagination={false}
+              size="small"
+              columns={[
+                {
+                  title: 'Job 名称',
+                  dataIndex: 'name',
+                  key: 'name',
+                  render: (n) => <Text strong>{String(n || '-')}</Text>,
+                },
+                {
+                  title: '类型',
+                  dataIndex: 'type',
+                  key: 'type',
+                  width: 120,
+                  render: (t) => <Tag color="geekblue">{String(t || '-')}</Tag>,
+                },
+                {
+                  title: '状态',
+                  dataIndex: 'status',
+                  key: 'status',
+                  width: 110,
+                  render: (s) => {
+                    switch (s) {
+                      case 'success':
+                        return <Tag color="success">成功</Tag>;
+                      case 'failed':
+                        return <Tag color="error">失败</Tag>;
+                      case 'executing':
+                      case 'running':
+                        return <Tag color="processing">执行中</Tag>;
+                      case 'skipped':
+                        return <Tag color="default">已跳过</Tag>;
+                      case 'wait_for_approval':
+                        return <Tag color="warning">待审批</Tag>;
+                      default:
+                        return <Tag color="default">待执行</Tag>;
+                    }
+                  },
+                },
+                {
+                  title: '负责人 / 执行人',
+                  key: 'people',
+                  width: 170,
+                  render: (_, j) => (
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {j.manager || '-'}{j.executed_by ? ` / ${j.executed_by}` : ''}
+                    </Text>
+                  ),
+                },
+                {
+                  title: '操作',
+                  key: 'job_action',
+                  width: 190,
+                  render: (_, j: ReleaseJobItem) => {
+                    const planId = activePlan?.id || activePlan?._id || '';
+                    const actionable = Boolean(planId && j.id && !readOnlyJobStatus(j.status));
+                    return (
+                      <Space size={0}>
+                        {j.status === 'failed' ? (
+                          <Button
+                            type="link"
+                            size="small"
+                            disabled={!actionable}
+                            loading={jobActing === `retry-${j.id}`}
+                            onClick={() => runJobAction(j, 'retry')}
+                          >
+                            重试
+                          </Button>
+                        ) : (
+                          <Button
+                            type="link"
+                            size="small"
+                            disabled={!actionable}
+                            loading={jobActing === `execute-${j.id}`}
+                            onClick={() => runJobAction(j, 'execute')}
+                          >
+                            执行
+                          </Button>
+                        )}
+                        <Button
+                          type="link"
+                          size="small"
+                          disabled={!actionable}
+                          loading={jobActing === `skip-${j.id}`}
+                          onClick={() => runJobAction(j, 'skip')}
+                        >
+                          跳过
+                        </Button>
+                      </Space>
+                    );
+                  },
+                },
+              ]}
+              locale={{
+                emptyText: (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description={planDetailLoading ? '正在加载编排任务...' : '该计划暂无编排任务，可在创建时定义 Job 列表'}
+                  />
+                ),
+              }}
+            />
           </div>
         )}
       </Drawer>
+
+      {/* 复制发布计划 Modal (R4-A2) */}
+      <Modal
+        title={`复制发布计划: ${copyTarget?.name || ''}`}
+        open={copyModalOpen}
+        onOk={handleCopyPlan}
+        onCancel={() => {
+          setCopyModalOpen(false);
+          setCopyTarget(null);
+        }}
+        confirmLoading={copying}
+        okText="确认复制"
+        cancelText="取消"
+        width={480}
+      >
+        <div style={{ paddingTop: 16 }}>
+          <Text style={{ display: 'block', marginBottom: 8 }}>新计划名称:</Text>
+          <Input
+            placeholder="输入新发布计划名称"
+            value={copyName}
+            onChange={(e) => setCopyName(e.target.value)}
+          />
+        </div>
+      </Modal>
+
+      {/* 发布计划操作日志 Modal (R4-A2) */}
+      <Modal
+        title={`发布计划操作日志${activePlan ? `: ${activePlan.name}` : ''}`}
+        open={logsModalOpen}
+        onCancel={() => setLogsModalOpen(false)}
+        footer={[
+          <Button key="close" type="primary" onClick={() => setLogsModalOpen(false)}>
+            关闭
+          </Button>,
+        ]}
+        width={640}
+      >
+        <Spin spinning={logsLoading}>
+          {planLogs.length > 0 ? (
+            <Timeline
+              style={{ marginTop: 16 }}
+              items={planLogs.map((log, idx) => ({
+                key: idx,
+                children: (
+                  <div>
+                    <Text strong>{String(log?.username || log?.user_name || log?.user || '-')}</Text>
+                    <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+                      {log?.time ? new Date(typeof log.time === 'number' ? log.time * 1000 : log.time).toLocaleString() : ''}
+                    </Text>
+                    <div>
+                      <Text style={{ fontSize: 13 }}>{String(log?.content || log?.message || JSON.stringify(log))}</Text>
+                    </div>
+                  </div>
+                ),
+              }))}
+            />
+          ) : (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无操作日志" style={{ padding: '24px 0' }} />
+          )}
+        </Spin>
+      </Modal>
 
       {/* Hook Settings Modal */}
       <Modal

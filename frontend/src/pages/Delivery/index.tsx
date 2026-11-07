@@ -133,8 +133,12 @@ export const DeliveryPage: React.FC = () => {
         });
       });
       setServiceImages(list);
-    } catch {
+    } catch (err: unknown) {
       setServiceImages([]);
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '版本镜像清单获取失败';
+      feedback.message.error(msg);
     } finally {
       setServiceImagesLoading(false);
     }
@@ -206,8 +210,12 @@ export const DeliveryPage: React.FC = () => {
         }
       });
       setVersionDetailImages(list);
-    } catch {
+    } catch (err: unknown) {
       setVersionDetail(null);
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '版本详情获取失败';
+      feedback.message.error(msg);
     } finally {
       setVersionDetailLoading(false);
     }
@@ -255,14 +263,13 @@ export const DeliveryPage: React.FC = () => {
   const handleRetryDelivery = async (record: ReleaseVersionItem) => {
     if (!record.id || !record.product_name) return;
     try {
-      await http.post(
-        `/api/aslan/delivery/releases/retry?projectName=${encodeURIComponent(record.product_name)}&id=${encodeURIComponent(record.id)}`,
-        {}
-      );
+      // R4-A8: 重试逻辑下沉至 API 层（POST /delivery/releases/retry body 传参）
+      await deliveryApi.retryDeliveryVersion({ id: record.id, project_name: record.product_name });
       feedback.message.success(`已下发版本 [${record.version}] 的重新交付与构建调度任务！`);
       fetchData();
     } catch (err: unknown) {
-      const msg = (err as Error)?.message || '重试交付失败，请检查网络或权限';
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '重试交付失败，请检查网络或权限');
       feedback.message.error(msg);
     }
   };
@@ -297,9 +304,13 @@ export const DeliveryPage: React.FC = () => {
           : [];
         setReleases(list);
       }
-    } catch {
+    } catch (err: unknown) {
       if (activeTab === 'artifacts') setArtifacts([]);
       else setReleases([]);
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || (activeTab === 'artifacts' ? '交付物列表获取失败' : '发布版本列表获取失败');
+      feedback.message.error(msg);
     } finally {
       setLoading(false);
     }
@@ -351,9 +362,12 @@ export const DeliveryPage: React.FC = () => {
       );
       feedback.message.success(`已向环境 [${batchDeployEnv}] 成功下发版本 [${versionDetail.version}] 批量交付任务！`);
       setBatchDeployModalOpen(false);
-    } catch {
-      feedback.message.success(`已向环境 [${batchDeployEnv}] 成功下发版本 [${versionDetail.version}] 批量部署任务！`);
-      setBatchDeployModalOpen(false);
+    } catch (err: unknown) {
+      // R4-A3: 失败绝不可伪造成功提示
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '批量部署任务下发失败，请确认目标环境配置';
+      feedback.message.error(msg);
     } finally {
       setBatchDeploying(false);
     }
@@ -586,6 +600,28 @@ export const DeliveryPage: React.FC = () => {
               下载 Chart
             </Button>
           )}
+          <Popconfirm
+            title={`确定删除发布版本 [${record.version}]？`}
+            description="删除后该版本快照与镜像清单记录将不可恢复。"
+            onConfirm={async () => {
+              try {
+                await deliveryApi.deleteDeliveryVersion(record.id || '', record.product_name);
+                feedback.message.success(`发布版本 [${record.version}] 已删除`);
+                fetchData();
+              } catch (err: unknown) {
+                const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+                  || (err instanceof Error ? err.message : '删除发布版本失败');
+                feedback.message.error(msg);
+              }
+            }}
+            okText="删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+          >
+            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+              删除版本
+            </Button>
+          </Popconfirm>
         </Space>
       ),
     },

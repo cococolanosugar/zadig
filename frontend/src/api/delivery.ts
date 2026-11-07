@@ -162,6 +162,21 @@ export const deliveryApi = {
       window.open(url, '_blank');
     }
   },
+
+  /** 重试发布版本交付 (R4-A8 下沉)
+   * POST /api/aslan/delivery/releases/retry
+   * 后端: pkg/microservice/aslan/core/delivery/handler/router.go:43 (RetryDeliveryVersion)
+   */
+  async retryDeliveryVersion(payload: { id: string; project_name: string }): Promise<unknown> {
+    return http.post('/api/aslan/delivery/releases/retry', payload, { skipErrorHandler: true });
+  },
+
+  /** 按镜像获取制品信息
+   * GET /api/aslan/delivery/artifacts/image?image=
+   */
+  async getArtifactByImage(image: string): Promise<any> {
+    return http.get<any>(`/api/aslan/delivery/artifacts/image?image=${encodeURIComponent(image)}`);
+  },
 };
 
 export default deliveryApi;
