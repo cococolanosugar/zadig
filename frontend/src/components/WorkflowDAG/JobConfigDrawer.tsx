@@ -284,10 +284,14 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         .getAvailableTriggerWorkflows(projectName)
         .then((wfs) => {
           setTriggerableWorkflows(
-            wfs.map((w) => ({
-              label: w.workflow_name,
-              value: w.workflow_name,
-            }))
+            wfs.map((w) => {
+              const wfName = w.name || w.workflow_name || '';
+              const title = w.display_name && w.display_name !== wfName ? `${w.display_name} (${wfName})` : wfName;
+              return {
+                label: title,
+                value: wfName,
+              };
+            })
           );
         })
         .catch(() => setTriggerableWorkflows([]));

@@ -732,17 +732,35 @@ export const serviceApi = {
 
   /**
    * 服务级标签元数据创建：POST /api/aslan/service/labels
-   * 后端: pkg/microservice/aslan/core/service/handler/service.go:1052 (AddServiceLabel)
+   * 后端: pkg/microservice/aslan/core/service/handler/service.go:1037 (addServiceLabelReq)
    */
-  createServiceLabel(payload: { project_key: string; service_name: string; key: string; value: string; production?: boolean }) {
-    return http.post<{ id?: string; message?: string }>('/api/aslan/service/labels', payload);
+  createServiceLabel(payload: {
+    label_id: string;
+    project_key: string;
+    service_name: string;
+    value: string;
+    production?: string | boolean;
+    key?: string;
+  }) {
+    const body = {
+      label_id: payload.label_id,
+      project_key: payload.project_key,
+      service_name: payload.service_name,
+      value: payload.value,
+      production: String(payload.production ?? false),
+    };
+    return http.post<{ id?: string; message?: string }>('/api/aslan/service/labels', body);
   },
 
   /**
    * 服务级标签修改：PUT /api/aslan/service/labels/:id
+   * 后端: pkg/microservice/aslan/core/service/handler/service.go:1120 (updateServiceLabelReq)
    */
-  updateServiceLabel(id: string, payload: { key: string; value: string }) {
-    return http.put<{ message?: string }>(`/api/aslan/service/labels/${encodeURIComponent(id)}`, payload);
+  updateServiceLabel(id: string, payload: { value: string; key?: string }) {
+    const body = {
+      value: payload.value,
+    };
+    return http.put<{ message?: string }>(`/api/aslan/service/labels/${encodeURIComponent(id)}`, body);
   },
 
   /**

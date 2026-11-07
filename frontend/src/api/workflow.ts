@@ -930,49 +930,52 @@ export const workflowApi = {
   /**
    * 获取可触发的工作流列表清单
    * GET /api/aslan/workflow/v4/trigger?projectName=
-   * (pkg/microservice/aslan/core/workflow/handler/router.go:73)
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:73, workflow_v4.go:791-796)
    */
-  getAvailableTriggerWorkflows(projectName?: string) {
+  async getAvailableTriggerWorkflows(projectName?: string) {
     const query = projectName ? `?projectName=${encodeURIComponent(projectName)}` : '';
-    return http.get<Array<{
-      workflow_name: string;
+    const res = await http.get<Array<{
+      name?: string;
+      workflow_name?: string;
+      display_name?: string;
       project_name?: string;
       params?: Array<{ name: string; type?: string; value?: string; default_value?: string; desc?: string }>;
     }>>(`/api/aslan/workflow/v4/trigger${query}`);
+    if (!Array.isArray(res)) return [];
+    return res.map((w) => {
+      const name = w.name || w.workflow_name || '';
+      return {
+        ...w,
+        name,
+        workflow_name: name,
+      };
+    });
   },
 
   /**
    * 获取指定 Jenkins 任务的动态构建参数配置
-   * GET /api/aslan/workflow/v4/jenkins/:jenkinsId/:jobName
-   * (pkg/microservice/aslan/core/workflow/handler/router.go:78)
+   * GET /api/aslan/workflow/v4/jenkins/:jenkinsId/*jobName
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:122)
    */
-  getJenkinsJobParams(jenkinsId: string, jobName: string) {
+  getJenkinsJobParams(jenkinsId: string | number, jobName: string) {
+    const cleanJob = jobName.startsWith('/') ? jobName.slice(1) : jobName;
     return http.get<Array<{
       name: string;
       type: string;
       desc?: string;
       default_value?: unknown;
       choices?: string[];
-    }>>(`/api/aslan/workflow/v4/jenkins/${encodeURIComponent(jenkinsId)}/${encodeURIComponent(jobName)}`);
+    }>>(`/api/aslan/workflow/v4/jenkins/${encodeURIComponent(jenkinsId)}/${cleanJob}`);
   },
 
   /**
-   * 提交工作流任务的人工审批动作 (Approve / Reject)
-   * POST /api/aslan/workflow/v4/check/:workflowName/:taskId
-   * (pkg/microservice/aslan/core/workflow/handler/router.go:154)
+   * 校验工作流审批发起人/审批权限
+   * POST /api/aslan/workflow/v4/check/:workflowName
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:75, workflow_v4.go:630-635)
    */
-  checkWorkflowApproval(
-    workflowName: string,
-    taskId: number | string,
-    payload: {
-      stage_name: string;
-      approve: boolean;
-      comment?: string;
-    }
-  ) {
-    return http.post<{ message: string }>(
-      `/api/aslan/workflow/v4/check/${encodeURIComponent(workflowName)}/${taskId}`,
-      payload
+  checkWorkflowApproval(workflowName: string) {
+    return http.post<{ message?: string }>(
+      `/api/aslan/workflow/v4/check/${encodeURIComponent(workflowName)}`
     );
   },
 
@@ -990,16 +993,19 @@ export const workflowApi = {
   /**
    * 获取工作流 V4 测试任务工作空间产物与文件列表
    * GET /api/aslan/testing/workspace/workflowv4/:workflowName/taskId/:taskId/job/:jobName?projectName=
-   * (pkg/microservice/aslan/core/stat/handler/router.go)
+   * (pkg/microservice/aslan/core/workflow/testing/service/workspace.go:43-46)
    */
-  getTestWorkspaceFiles(workflowName: string, taskId: number | string, jobName: string, projectName: string) {
-    return http.get<Array<{
-      name: string;
-      dir: boolean;
-      size: number;
-    }>>(
+  async getTestWorkspaceFiles(workflowName: string, taskId: number | string, jobName: string, projectName: string) {
+    const res = await http.get<any>(
       `/api/aslan/testing/workspace/workflowv4/${encodeURIComponent(workflowName)}/taskId/${taskId}/job/${encodeURIComponent(jobName)}?projectName=${encodeURIComponent(projectName)}`
     );
+    if (Array.isArray(res)) {
+      return { file_names: res.map((f: any) => (typeof f === 'string' ? f : f?.name || '')) };
+    }
+    if (res && Array.isArray(res.file_names)) {
+      return res as { file_names: string[]; not_history_file_flag?: boolean };
+    }
+    return { file_names: [] };
   },
 
   /**
@@ -1021,10 +1027,11 @@ export const workflowApi = {
 
   /**
    * 新增工作流 Jira Webhook 触发配置
-   * POST /api/aslan/workflow/v4/jirahook/
+   * POST /api/aslan/workflow/v4/jirahook/:workflowName
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:96)
    */
-  addJiraHook(payload: any) {
-    return http.post<any>('/api/aslan/workflow/v4/jirahook/', payload);
+  addJiraHook(workflowName: string, payload: any) {
+    return http.post<any>(`/api/aslan/workflow/v4/jirahook/${encodeURIComponent(workflowName)}`, payload);
   },
 
   /**
@@ -1061,10 +1068,11 @@ export const workflowApi = {
 
   /**
    * 新增工作流飞书/Meego Webhook 触发配置
-   * POST /api/aslan/workflow/v4/meegohook/
+   * POST /api/aslan/workflow/v4/meegohook/:workflowName
+   * (pkg/microservice/aslan/core/workflow/handler/router.go:101)
    */
-  addLarkHook(payload: any) {
-    return http.post<any>('/api/aslan/workflow/v4/meegohook/', payload);
+  addLarkHook(workflowName: string, payload: any) {
+    return http.post<any>(`/api/aslan/workflow/v4/meegohook/${encodeURIComponent(workflowName)}`, payload);
   },
 
   /**

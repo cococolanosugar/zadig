@@ -38,7 +38,6 @@ import {
   BarChartOutlined,
   FolderOpenOutlined,
   FileOutlined,
-  FolderOutlined,
 } from '@ant-design/icons';
 import { workflowApi, type WorkflowTaskExecution } from '../../api/workflow';
 import { useProjectStore } from '../../stores/project';
@@ -179,7 +178,7 @@ export const PipelineExecutionPage: React.FC = () => {
   const [loadingJunit, setLoadingJunit] = useState(false);
 
   const [workspaceFilesVisible, setWorkspaceFilesVisible] = useState(false);
-  const [workspaceFiles, setWorkspaceFiles] = useState<Array<{ name: string; dir: boolean; size: number }>>([]);
+  const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
 
   const loadJunitReport = async () => {
@@ -201,8 +200,8 @@ export const PipelineExecutionPage: React.FC = () => {
     setWorkspaceFilesVisible(true);
     setLoadingFiles(true);
     try {
-      const files = await workflowApi.getTestWorkspaceFiles(effWorkflowName, effTaskId, selectedJob, activeProject);
-      setWorkspaceFiles(Array.isArray(files) ? files : []);
+      const res = await workflowApi.getTestWorkspaceFiles(effWorkflowName, effTaskId, selectedJob, activeProject);
+      setWorkspaceFiles(res.file_names || []);
     } catch {
       setWorkspaceFiles([]);
     } finally {
@@ -1020,9 +1019,9 @@ export const PipelineExecutionPage: React.FC = () => {
                 padding: '8px 12px',
               }}
             >
-              {workspaceFiles.map((item, idx) => (
+              {workspaceFiles.map((fileName, idx) => (
                 <div
-                  key={`${item.name}-${idx}`}
+                  key={`${fileName}-${idx}`}
                   style={{
                     padding: '8px 4px',
                     borderBottom: idx < workspaceFiles.length - 1 ? '1px solid #f5f5f5' : 'none',
@@ -1031,17 +1030,8 @@ export const PipelineExecutionPage: React.FC = () => {
                   }}
                 >
                   <Space orientation="horizontal" size={10}>
-                    {item.dir ? (
-                      <FolderOutlined style={{ color: '#faad14' }} />
-                    ) : (
-                      <FileOutlined style={{ color: '#1677ff' }} />
-                    )}
-                    <Text strong>{item.name}</Text>
-                    {!item.dir && (
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        ({(item.size / 1024).toFixed(1)} KB)
-                      </Text>
-                    )}
+                    <FileOutlined style={{ color: '#1677ff' }} />
+                    <Text strong>{fileName}</Text>
                   </Space>
                 </div>
               ))}
