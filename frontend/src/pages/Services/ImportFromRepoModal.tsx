@@ -123,6 +123,8 @@ export const ImportFromRepoModal: React.FC<ImportFromRepoModalProps> = ({
     try {
       const res = await serviceApi.getCodehostNamespaces(hostId);
       setNamespaces(res);
+    } catch (err: unknown) {
+      message.error(err instanceof Error ? err.message : '组织/命名空间列表获取失败，请检查代码源配置');
     } finally {
       setLoadingNamespaces(false);
     }
@@ -143,6 +145,8 @@ export const ImportFromRepoModal: React.FC<ImportFromRepoModalProps> = ({
     try {
       const res = await serviceApi.getCodehostRepos(hostId, owner, host?.type || 'gitlab');
       setRepos(res);
+    } catch (err: unknown) {
+      message.error(err instanceof Error ? err.message : '仓库列表获取失败，请检查代码源配置');
     } finally {
       setLoadingRepos(false);
     }
@@ -162,6 +166,8 @@ export const ImportFromRepoModal: React.FC<ImportFromRepoModalProps> = ({
     try {
       const res = await serviceApi.getCodehostBranches(hostId, owner, repoName);
       setBranches(res);
+    } catch (err: unknown) {
+      message.error(err instanceof Error ? err.message : '分支列表获取失败，请检查代码源配置');
     } finally {
       setLoadingBranches(false);
     }

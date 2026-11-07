@@ -17,6 +17,7 @@ import {
   Popconfirm,
   Select,
   Dropdown,
+  Popover,
 } from 'antd';
 import {
   PlusOutlined,
@@ -35,6 +36,9 @@ import {
   ControlOutlined,
   DesktopOutlined,
   HeartOutlined,
+  DeleteOutlined,
+  MoreOutlined,
+  TagsOutlined,
 } from '@ant-design/icons';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/project';
@@ -120,6 +124,15 @@ export const ServicesPage: React.FC = () => {
   const { userInfo } = useAuthStore();
   const [serviceLocks, setServiceLocks] = useState<Record<string, { isLocked: boolean; lockedBy: string }>>({});
   const [syncingRemote, setSyncingRemote] = useState<boolean>(false);
+
+  // 服务标签（R1-A2：GET/POST/DELETE /api/aslan/service/labels 接线）
+  const [serviceLabels, setServiceLabels] = useState<Array<{ id: string; key: string; value: string }>>([]);
+  const [labelsLoading, setLabelsLoading] = useState(false);
+  const [labelSettings, setLabelSettings] = useState<Array<{ id: string; key: string; description?: string }>>([]);
+  const [labelPopoverOpen, setLabelPopoverOpen] = useState(false);
+  const [labelSaving, setLabelSaving] = useState(false);
+  const [newLabelId, setNewLabelId] = useState<string | undefined>(undefined);
+  const [newLabelValue, setNewLabelValue] = useState('');
 
   const currentUserName = userInfo?.name || userInfo?.account || '当前用户';
   const isLockedByOther = Boolean(
@@ -219,6 +232,7 @@ export const ServicesPage: React.FC = () => {
       setServiceDetail(detail);
     } catch {
       setServiceDetail(null);
+      feedback.message.error('服务详情加载失败');
     }
   }, [activeProject, isProduction]);
 
@@ -229,6 +243,115 @@ export const ServicesPage: React.FC = () => {
       setServiceDetail(null);
     }
   }, [selectedService, loadServiceDetail]);
+
+  // --- 服务标签（R1-A2 接线） ---
+  const loadServiceLabels = useCallback(async () => {
+    if (!selectedService || !activeProject) {
+      setServiceLabels([]);
+      return;
+    }
+    setLabelsLoading(true);
+    try {
+      const list = await serviceApi.getServiceLabels(selectedService, activeProject, isProduction);
+      setServiceLabels(Array.isArray(list) ? list : []);
+    } catch (err: unknown) {
+      setServiceLabels([]);
+      feedback.message.error(err instanceof Error ? err.message : '服务标签加载失败');
+    } finally {
+      setLabelsLoading(false);
+    }
+  }, [selectedService, activeProject, isProduction]);
+
+  useEffect(() => {
+    loadServiceLabels();
+    setLabelPopoverOpen(false);
+    setNewLabelId(undefined);
+    setNewLabelValue('');
+  }, [loadServiceLabels]);
+
+  // 标签键注册表：Popover 首次展开时懒加载（GET /api/aslan/system/labels）
+  const openLabelPopover = async (nextOpen: boolean) => {
+    setLabelPopoverOpen(nextOpen);
+    if (nextOpen && labelSettings.length === 0) {
+      try {
+        const list = await serviceApi.getLabelSettings();
+        setLabelSettings(Array.isArray(list) ? list : []);
+      } catch (err: unknown) {
+        feedback.message.error(err instanceof Error ? err.message : '标签键注册表获取失败');
+      }
+    }
+  };
+
+  const handleAddLabel = async () => {
+    if (!selectedService || !activeProject || !newLabelId) {
+      feedback.message.warning('请选择标签键');
+      return;
+    }
+    const setting = labelSettings.find((s) => s.id === newLabelId);
+    setLabelSaving(true);
+    try {
+      await serviceApi.createServiceLabel({
+        label_id: newLabelId,
+        project_key: activeProject,
+        service_name: selectedService,
+        value: newLabelValue,
+        production: isProduction,
+        key: setting?.key,
+      });
+      feedback.message.success('服务标签已添加');
+      setLabelPopoverOpen(false);
+      setNewLabelId(undefined);
+      setNewLabelValue('');
+      loadServiceLabels();
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : '服务标签添加失败');
+    } finally {
+      setLabelSaving(false);
+    }
+  };
+
+  const handleDeleteLabel = async (label: { id: string; key: string; value: string }) => {
+    try {
+      await serviceApi.deleteServiceLabel(label.id);
+      feedback.message.success(`标签 [${label.key}] 已移除`);
+      loadServiceLabels();
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : '服务标签删除失败');
+    }
+  };
+
+  // --- 服务删除（R1-A1 P0 闭环） ---
+  const handleDeleteService = (serviceName: string) => {
+    if (!serviceName || !activeProject) return;
+    const svcType = serviceDetail?.service_name === serviceName
+      ? serviceDetail?.type || 'k8s'
+      : services.find((s) => s.service_name === serviceName)?.type || 'k8s';
+    feedback.modal?.confirm({
+      title: '确认删除服务？',
+      content: `确定删除服务 [${serviceName}] 吗？删除后该服务的 YAML 配置与组件将被移除。`,
+      okText: '删除服务',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await serviceApi.deleteService(serviceName, svcType, activeProject, isProduction);
+          feedback.message.success('服务已成功删除');
+          if (selectedService === serviceName) {
+            setSelectedService(null);
+            setYamlContent('');
+            setOriginalYaml('');
+            setServiceDetail(null);
+            setServiceLabels([]);
+          }
+          loadServices();
+        } catch (err: unknown) {
+          const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+            || (err instanceof Error ? err.message : '服务删除失败');
+          feedback.message.error(msg);
+        }
+      },
+    });
+  };
 
   const handleSaveYaml = async () => {
     if (!selectedService || !activeProject) return;
@@ -314,6 +437,7 @@ export const ServicesPage: React.FC = () => {
       setVersions(Array.isArray(res) ? res : []);
     } catch {
       setVersions([]);
+      feedback.message.error('服务版本历史加载失败');
     } finally {
       setVersionLoading(false);
     }
@@ -586,6 +710,14 @@ spec:
                 浏览代码库
               </Button>
               <Button
+                danger
+                icon={<DeleteOutlined />}
+                disabled={!selectedService}
+                onClick={() => selectedService && handleDeleteService(selectedService)}
+              >
+                删除服务
+              </Button>
+              <Button
                 type="primary"
                 icon={<SaveOutlined />}
                 onClick={handleSaveYaml}
@@ -694,13 +826,39 @@ spec:
                         <CodeOutlined style={{ color: isSelected ? '#0066ff' : '#8c8c8c' }} />
                         <Text strong={isSelected}>{item.service_name}</Text>
                       </Space>
-                      {item.type === 'pm' ? (
-                        <Tag color="purple">PM</Tag>
-                      ) : item.type === 'helm' ? (
-                        <Tag color="blue">Helm</Tag>
-                      ) : (
-                        <Tag color="cyan">K8s</Tag>
-                      )}
+                      <Space orientation="horizontal" size={4}>
+                        {item.type === 'pm' ? (
+                          <Tag color="purple">PM</Tag>
+                        ) : item.type === 'helm' ? (
+                          <Tag color="blue">Helm</Tag>
+                        ) : (
+                          <Tag color="cyan">K8s</Tag>
+                        )}
+                        <Dropdown
+                          trigger={['click']}
+                          menu={{
+                            items: [
+                              {
+                                key: 'delete',
+                                icon: <DeleteOutlined />,
+                                label: '删除服务',
+                                danger: true,
+                                onClick: ({ domEvent }) => {
+                                  domEvent.stopPropagation();
+                                  handleDeleteService(item.service_name);
+                                },
+                              },
+                            ],
+                          }}
+                        >
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<MoreOutlined style={{ color: '#8c8c8c' }} />}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </Dropdown>
+                      </Space>
                     </div>
                   );
                 })}
@@ -750,6 +908,76 @@ spec:
           >
             {selectedService ? (
               <>
+                {/* 服务标签（R1-A2 接线：展示 + 快捷增删） */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    flexWrap: 'wrap',
+                    marginBottom: 12,
+                    padding: '6px 0',
+                  }}
+                >
+                  <TagsOutlined style={{ color: '#8c8c8c' }} />
+                  <Text type="secondary" style={{ fontSize: 12 }}>服务标签</Text>
+                  {labelsLoading ? (
+                    <Spin size="small" />
+                  ) : serviceLabels.length > 0 ? (
+                    serviceLabels.map((label) => (
+                      <Tag
+                        key={label.id}
+                        color="blue"
+                        closable
+                        onClose={(e) => {
+                          e.preventDefault();
+                          handleDeleteLabel(label);
+                        }}
+                      >
+                        {label.key}{label.value ? `: ${label.value}` : ''}
+                      </Tag>
+                    ))
+                  ) : (
+                    <Text type="secondary" style={{ fontSize: 12 }}>暂无标签</Text>
+                  )}
+                  <Popover
+                    title="添加服务标签"
+                    trigger="click"
+                    open={labelPopoverOpen}
+                    onOpenChange={openLabelPopover}
+                    content={
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 260 }}>
+                        <Select
+                          placeholder="选择标签键（系统标签注册表）"
+                          value={newLabelId}
+                          onChange={setNewLabelId}
+                          options={labelSettings.map((s) => ({
+                            label: s.description ? `${s.key} (${s.description})` : s.key,
+                            value: s.id,
+                          }))}
+                          notFoundContent="暂无可用标签键，请先在系统设置-标签中创建"
+                        />
+                        <Input
+                          placeholder="标签值（可选）"
+                          value={newLabelValue}
+                          onChange={(e) => setNewLabelValue(e.target.value)}
+                        />
+                        <Button
+                          type="primary"
+                          size="small"
+                          loading={labelSaving}
+                          onClick={handleAddLabel}
+                        >
+                          添加标签
+                        </Button>
+                      </div>
+                    }
+                  >
+                    <Button type="dashed" size="small" icon={<PlusOutlined />}>
+                      添加标签
+                    </Button>
+                  </Popover>
+                </div>
                 <CollaborationAwarenessBar
                   serviceName={selectedService}
                   isLocked={Boolean(serviceLocks[selectedService]?.isLocked)}

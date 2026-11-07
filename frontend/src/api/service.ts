@@ -219,6 +219,21 @@ export const serviceApi = {
     );
   },
 
+  /**
+   * 删除服务模板（R1-A1 P0 闭环）
+   * DELETE /api/aslan/service/services/:name/:type?projectName=&production=
+   * 后端: pkg/microservice/aslan/core/service/handler/router.go:56 (k8s.DELETE("/:name/:type", DeleteServiceTemplate))
+   */
+  async deleteService(serviceName: string, type = 'k8s', projectName = '', production = false): Promise<unknown> {
+    const q = new URLSearchParams();
+    if (projectName) q.set('projectName', projectName);
+    if (production) q.set('production', 'true');
+    return http.delete(
+      `/api/aslan/service/services/${encodeURIComponent(serviceName)}/${encodeURIComponent(type)}?${q.toString()}`,
+      { skipErrorHandler: true }
+    );
+  },
+
   async updateServiceVariable(
     serviceName: string,
     projectName: string,
@@ -310,49 +325,40 @@ export const serviceApi = {
   },
 
   // 代码源辅助接口
+  // R1-A4: HTTP 故障异常上抛（由调用方呈现错误提示），仅对成功响应做防御性解析
   async getCodehostNamespaces(id: number, key = ''): Promise<Array<{ name: string; path: string; kind?: string }>> {
-    try {
-      const res = await http.get<Array<{ name: string; path: string; kind?: string }>>(
-        `/api/aslan/code/codehost/${id}/namespaces?key=${encodeURIComponent(key)}`,
-        { skipErrorHandler: true }
-      );
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<Array<{ name: string; path: string; kind?: string }>>(
+      `/api/aslan/code/codehost/${id}/namespaces?key=${encodeURIComponent(key)}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
   },
 
+  // R1-A4: HTTP 故障异常上抛
   async getCodehostRepos(
     id: number,
     repoOwner: string,
     type = 'gitlab',
     key = ''
   ): Promise<Array<{ name: string; namespace?: string }>> {
-    try {
-      const res = await http.get<Array<{ name: string; namespace?: string }>>(
-        `/api/aslan/code/codehost/${id}/repos?repoOwner=${encodeURIComponent(repoOwner)}&type=${encodeURIComponent(type)}&page=1&per_page=200&key=${encodeURIComponent(key)}`,
-        { skipErrorHandler: true }
-      );
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<Array<{ name: string; namespace?: string }>>(
+      `/api/aslan/code/codehost/${id}/repos?repoOwner=${encodeURIComponent(repoOwner)}&type=${encodeURIComponent(type)}&page=1&per_page=200&key=${encodeURIComponent(key)}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
   },
 
+  // R1-A4: HTTP 故障异常上抛
   async getCodehostBranches(
     id: number,
     repoOwner: string,
     repoName: string
   ): Promise<Array<{ name: string }>> {
-    try {
-      const res = await http.get<Array<{ name: string }>>(
-        `/api/aslan/code/codehost/${id}/branches?repoOwner=${encodeURIComponent(repoOwner)}&repoName=${encodeURIComponent(repoName)}&page=1&per_page=200`,
-        { skipErrorHandler: true }
-      );
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    const res = await http.get<Array<{ name: string }>>(
+      `/api/aslan/code/codehost/${id}/branches?repoOwner=${encodeURIComponent(repoOwner)}&repoName=${encodeURIComponent(repoName)}&page=1&per_page=200`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
   },
 
   // --- 2. Template (从模板加载/同步) ---
@@ -393,31 +399,25 @@ export const serviceApi = {
   },
 
   // 获取 YAML 模板列表与详情
+  // R1-A4: HTTP 故障异常上抛（由调用方呈现错误提示），仅对成功响应做防御性解析
   async getYamlTemplates(projectName = ''): Promise<Array<{ id: string; name: string }>> {
-    try {
-      const res = await http.get<{ yaml_template?: Array<{ id: string; name: string }>; total?: number }>(
-        `/api/aslan/template/yaml?projectName=${encodeURIComponent(projectName)}`,
-        { skipErrorHandler: true }
-      );
-      if (res && Array.isArray(res.yaml_template)) {
-        return res.yaml_template;
-      }
-      return [];
-    } catch {
-      return [];
+    const res = await http.get<{ yaml_template?: Array<{ id: string; name: string }>; total?: number }>(
+      `/api/aslan/template/yaml?projectName=${encodeURIComponent(projectName)}`,
+      { skipErrorHandler: true }
+    );
+    if (res && Array.isArray(res.yaml_template)) {
+      return res.yaml_template;
     }
+    return [];
   },
 
+  // R1-A4: HTTP 故障异常上抛
   async getYamlTemplateDetail(id: string): Promise<YamlTemplateDetail | null> {
-    try {
-      const res = await http.get<YamlTemplateDetail>(
-        `/api/aslan/template/yaml/${encodeURIComponent(id)}`,
-        { skipErrorHandler: true }
-      );
-      return res || null;
-    } catch {
-      return null;
-    }
+    const res = await http.get<YamlTemplateDetail>(
+      `/api/aslan/template/yaml/${encodeURIComponent(id)}`,
+      { skipErrorHandler: true }
+    );
+    return res || null;
   },
 
   // --- 3. Modules (手工与自动服务模块) ---
@@ -728,6 +728,16 @@ export const serviceApi = {
     if (Array.isArray(res)) return res;
     if (res && 'labels' in res && Array.isArray(res.labels)) return res.labels;
     return [];
+  },
+
+  /**
+   * 系统标签键注册表（服务标签快捷添加的可选键来源）：GET /api/aslan/system/labels
+   * 后端: pkg/microservice/aslan/core/system/handler/router.go:558-560 (ListServiceLabelSettings)
+   * 返回 models.Label: {id, key, description}
+   */
+  async getLabelSettings(): Promise<Array<{ id: string; key: string; description?: string }>> {
+    const res = await http.get<Array<{ id: string; key: string; description?: string }>>('/api/aslan/system/labels');
+    return Array.isArray(res) ? res : [];
   },
 
   /**

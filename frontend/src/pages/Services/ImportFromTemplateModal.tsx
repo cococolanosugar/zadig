@@ -72,12 +72,13 @@ export const ImportFromTemplateModal: React.FC<ImportFromTemplateModalProps> = (
     try {
       const list = await serviceApi.getYamlTemplates(projectName);
       setTemplates(list);
-    } catch {
+    } catch (err: unknown) {
       setTemplates([]);
+      message.error(err instanceof Error ? err.message : 'YAML 模板列表获取失败');
     } finally {
       setLoadingTemplates(false);
     }
-  }, [projectName]);
+  }, [projectName, message]);
 
   useEffect(() => {
     if (open) {
