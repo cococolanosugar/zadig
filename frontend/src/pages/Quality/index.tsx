@@ -280,8 +280,13 @@ export const QualityCenterPage: React.FC = () => {
         { skipErrorHandler: true }
       );
       setTestTasks(Array.isArray(res?.tasks) ? res.tasks : []);
-    } catch {
+    } catch (err: unknown) {
       setTestTasks([]);
+      // 任务6轮: 任务历史加载失败不再静默，透出真实错误
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '测试任务列表加载失败';
+      feedback.message.error(msg);
     } finally {
       setDetailLoading(false);
     }
@@ -452,6 +457,43 @@ export const QualityCenterPage: React.FC = () => {
         feedback.message.error(msg);
       }
     },
+    [detailTest, projectName]
+  );
+
+  // 任务1: 取消测试任务 (CancelTestTaskV3, test_task.go:157)
+  // 契约: DELETE /api/aslan/testing/testtask?projectName=&testName=&taskID=
+  const [cancellingTask, setCancellingTask] = useState<string | null>(null);
+  const handleCancelTask = useCallback(
+    async (task: Record<string, unknown>) => {
+      const taskId = String(task.task_id ?? task.id ?? '');
+      const projName = String(
+        task.projectName ?? task.product_name ?? detailTest?.product_name ?? projectName ?? ''
+      );
+      const testName = String(task.testName ?? detailTest?.name ?? '');
+      if (!taskId || !projName || !testName) {
+        feedback.message.warning('缺少任务标识，无法取消该测试任务');
+        return;
+      }
+      setCancellingTask(taskId);
+      try {
+        await http.delete(
+          `/api/aslan/testing/testtask?projectName=${encodeURIComponent(projName)}&testName=${encodeURIComponent(testName)}&taskID=${taskId}`,
+          { skipErrorHandler: true }
+        );
+        feedback.message.success('已取消测试任务');
+        if (detailTest) {
+          openTestDetail(detailTest);
+        }
+      } catch (err: unknown) {
+        const msg = (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data?.message
+          || (err instanceof Error ? err.message : '')
+          || '取消测试任务失败';
+        feedback.message.error(msg);
+      } finally {
+        setCancellingTask(null);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [detailTest, projectName]
   );
 
@@ -768,7 +810,7 @@ export const QualityCenterPage: React.FC = () => {
           <Card variant="borderless" style={{ borderRadius: 8, border: '1px solid #ebeef5' }}>
             <Statistic
               title="最近执行成功率"
-              value={tests.length > 0 && stats.pass_rate !== undefined ? `${stats.pass_rate}%` : (tests.length > 0 ? '100%' : '-')}
+              value={tests.length > 0 && stats.pass_rate !== undefined && stats.pass_rate !== null ? `${stats.pass_rate}%` : '-'}
               prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
               styles={{ content: { color: '#52c41a', fontWeight: 600 } }}
             />
@@ -1773,7 +1815,7 @@ export const QualityCenterPage: React.FC = () => {
             </Title>
             <Table
               dataSource={testTasks}
-              rowKey={(r) => String(r.task_id || r.id || Math.random())}
+              rowKey={(r, index) => String(r.task_id || r.id || `${r.test_name || 'test'}-${r.create_time || index}`)}
               rowClassName={(record) => (routeTaskId && String(record.task_id ?? record.id) === routeTaskId ? 'ant-table-row-selected' : '')}
               pagination={{ pageSize: 8, hideOnSinglePage: true }}
               size="small"
@@ -1835,6 +1877,20 @@ export const QualityCenterPage: React.FC = () => {
                       <Button type="link" size="small" onClick={() => handleDownloadTestArtifact(r)}>
                         产物
                       </Button>
+                      {r.status === 'running' && (
+                        <Popconfirm
+                          title="确定取消该测试任务吗？"
+                          description="取消后任务将终止执行，已产出结果保留。"
+                          onConfirm={() => handleCancelTask(r)}
+                          okText="取消任务"
+                          cancelText="返回"
+                          okButtonProps={{ danger: true }}
+                        >
+                          <Button type="link" size="small" danger loading={cancellingTask === String(r.task_id ?? r.id ?? '')}>
+                            取消
+                          </Button>
+                        </Popconfirm>
+                      )}
                     </Space>
                   ),
                 },

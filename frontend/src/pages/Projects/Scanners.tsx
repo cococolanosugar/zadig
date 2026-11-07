@@ -349,8 +349,13 @@ export const ScannersPage: React.FC = () => {
           { skipErrorHandler: true }
         );
         setTaskEvents(Array.isArray(res) ? res : []);
-      } catch {
+      } catch (err: unknown) {
         setTaskEvents([]);
+        // R6 任务4: 事件加载失败不再静默
+        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+          || (err instanceof Error ? err.message : '')
+          || '扫描任务事件加载失败';
+        feedback.message.error(msg);
       } finally {
         setTaskEventsLoading(false);
       }
@@ -360,8 +365,13 @@ export const ScannersPage: React.FC = () => {
           { skipErrorHandler: true }
         );
         setArtifactFiles(res?.file_names || []);
-      } catch {
+      } catch (err: unknown) {
         setArtifactFiles([]);
+        // R6 任务4: 产物清单加载失败不再静默（任务未产出产物时后端可能报错，属预期场景按提示呈现）
+        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+          || (err instanceof Error ? err.message : '')
+          || '扫描产物清单加载失败（任务可能尚未产出产物）';
+        feedback.message.error(msg);
       } finally {
         setArtifactLoading(false);
       }
