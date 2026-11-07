@@ -45,6 +45,8 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
   const [clusterOptions, setClusterOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [serviceOptions, setServiceOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [customDeploySource, setCustomDeploySource] = useState<'runtime' | 'fromjob'>('runtime');
+  // R12 任务三: zadig-deploy 镜像来源（fromjob = 来自上游构建 Job / runtime = 运行时指定镜像）
+  const [deployImageSource, setDeployImageSource] = useState<'fromjob' | 'runtime'>('runtime');
   const [istioStrategyType, setIstioStrategyType] = useState<'weight' | 'header'>('weight');
   const [fetchingBgYamlIndex, setFetchingBgYamlIndex] = useState<number | null>(null);
   const [notificationWebhookType, setNotificationWebhookType] = useState<string>('dingding');
@@ -69,6 +71,9 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
       setVmDeploySource(vmSrc);
       const cdSrc = (job.spec?.source as 'runtime' | 'fromjob') || 'runtime';
       setCustomDeploySource(cdSrc);
+      // R12 任务三: 初始化 zadig-deploy 镜像来源（Wizard 生成的流水线默认 fromjob）
+      const deployImgSrc = (job.spec?.source as 'fromjob' | 'runtime') || 'runtime';
+      setDeployImageSource(deployImgSrc);
       const notifType = (job.spec?.webhook_type as string) || 'dingding';
       setNotificationWebhookType(notifType);
       const bgSrc = (job.spec?.source as 'runtime' | 'fixed') || 'runtime';
@@ -551,6 +556,10 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         // zadig-vm-deploy
         source: values.source as string,
         job_name: values.source === 'fromjob' ? (values.job_name as string) : undefined,
+        // R12 任务三: zadig-deploy fromjob 模式下注入部署内容（镜像）
+        ...(job.type === 'zadig-deploy' && values.source === 'fromjob'
+          ? { deploy_contents: ['image'] as string[] }
+          : {}),
         service_and_vm_deploys: values.service_and_vm_deploys as any[],
         // custom-deploy
         ...(job.type === 'custom-deploy'
@@ -810,6 +819,28 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
                 ]}
               />
             </Form.Item>
+
+            {/* R12 任务三: 镜像来源 — fromjob 使上游构建 Job 产出的镜像无缝流入部署阶段 */}
+            <Form.Item name="source" label="镜像来源" initialValue="runtime">
+              <Radio.Group
+                onChange={(e) => setDeployImageSource(e.target.value)}
+                options={[
+                  { label: '来自上游构建 Job (fromjob)', value: 'fromjob' },
+                  { label: '运行时指定镜像 (runtime)', value: 'runtime' },
+                ]}
+              />
+            </Form.Item>
+
+            {deployImageSource === 'fromjob' && (
+              <Form.Item
+                name="job_name"
+                label="关联构建 Job"
+                rules={[{ required: true, message: '请输入上游构建 Job 名称' }]}
+                extra="填写同流水线内构建任务的名称（如向导生成的默认构建 Job：build），部署时自动注入其产出镜像。"
+              >
+                <Input placeholder="例如: build" />
+              </Form.Item>
+            )}
 
             <Form.Item
               name="env"

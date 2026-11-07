@@ -117,9 +117,30 @@ export const projectApi = {
 
   /**
    * Create a new project
+   * R12 任务一: 后端强制 product_name 与 product_feature 必填，payload 始终完整组装
    */
-  async createProject(payload: { project_name: string; alias?: string; desc?: string }): Promise<unknown> {
-    return http.post('/api/aslan/project/products', payload);
+  async createProject(data: {
+    project_name: string;
+    product_name?: string;
+    alias?: string;
+    desc?: string;
+    product_feature?: {
+      basic_facility?: string;
+      deploy_type?: string;
+      create_env_type?: string;
+    };
+  }): Promise<ProjectItem> {
+    const payload = {
+      product_name: data.product_name || data.project_name,
+      project_name: data.alias || data.project_name,
+      desc: data.desc || '',
+      product_feature: data.product_feature || {
+        basic_facility: 'kubernetes',
+        deploy_type: 'k8s',
+        create_env_type: 'system',
+      },
+    };
+    return http.post<ProjectItem>('/api/aslan/project/products', payload);
   },
 
   /**

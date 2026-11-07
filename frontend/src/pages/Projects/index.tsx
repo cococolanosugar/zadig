@@ -87,15 +87,25 @@ export const ProjectsPage: React.FC = () => {
 
   const handleCreate = async (values: Record<string, unknown>) => {
     try {
+      // R12 任务一: 透传 deploy_type 供 product_feature 组装（缺省 k8s）
       await projectApi.createProject({
         project_name: values.project_name as string,
         alias: values.alias as string,
         desc: values.desc as string,
+        product_feature: {
+          basic_facility: (values.basic_facility as string) || 'kubernetes',
+          deploy_type: (values.deploy_type as string) || 'k8s',
+          create_env_type: 'system',
+        },
       });
       feedback.message.success('项目创建成功！');
       fetchProjects();
       return true;
-    } catch {
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '项目创建失败，请检查项目唯一标识';
+      feedback.message.error(msg);
       return false;
     }
   };

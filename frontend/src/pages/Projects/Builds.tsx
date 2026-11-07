@@ -42,6 +42,7 @@ import dayjs from 'dayjs';
 import type { ColumnsType } from 'antd/es/table';
 import http from '../../api/client';
 import workflowApi from '../../api/workflow';
+import { settingsApi } from '../../api/settings';
 import { feedback } from '../../utils/feedback';
 import { WorkspaceBrowserDrawer } from '../../components/Workspace/WorkspaceBrowserDrawer';
 
@@ -106,6 +107,19 @@ export const BuildsPage: React.FC = () => {
   const [editingBuild, setEditingBuild] = useState<BuildItem | null>(null);
   const [form] = Form.useForm();
   const [execForm] = Form.useForm();
+  // R12 任务四: 镜像仓库选择下拉（构建产物推送目标）
+  const [registryOptions, setRegistryOptions] = useState<Array<{ label: string; value: string }>>([]);
+
+  useEffect(() => {
+    settingsApi
+      .getRegistries()
+      .then((list) => {
+        setRegistryOptions(
+          (list || []).map((r) => ({ label: `${r.reg_addr}${r.namespace ? ` / ${r.namespace}` : ''}`, value: r.id || r.reg_addr }))
+        );
+      })
+      .catch(() => setRegistryOptions([]));
+  }, []);
 
   const cacheEnable = Form.useWatch('cache_enable', form);
   const cacheDirType = Form.useWatch('cache_dir_type', form);
@@ -134,6 +148,10 @@ export const BuildsPage: React.FC = () => {
       cache_user_dir: '',
       enable_privileged_mode: false,
       outputs: [],
+      // R12 任务四: Dockerfile 路径 / 构建上下文 / 镜像仓库缺省值
+      docker_file: './Dockerfile',
+      build_context: './',
+      registry_id: undefined,
     });
     setModalVisible(true);
   }, [form]);
@@ -246,6 +264,10 @@ export const BuildsPage: React.FC = () => {
           image_id: values.image_id || 'golang:1.20-alpine',
         },
         scripts: values.scripts || '',
+        // R12 任务四: Dockerfile 路径 / 构建上下文 / 镜像仓库随构建配置一并提交
+        docker_file: values.docker_file || './Dockerfile',
+        build_context: values.build_context || './',
+        registry_id: values.registry_id || '',
         cache_enable: !!values.cache_enable,
         cache_dir_type: values.cache_dir_type || 'workspace',
         cache_user_dir: values.cache_user_dir || '',
@@ -507,6 +529,10 @@ export const BuildsPage: React.FC = () => {
                   Array.isArray(fullRecord.outputs) && fullRecord.outputs.length > 0
                     ? fullRecord.outputs
                     : [{ name: '', description: '' }],
+                // R12 任务四: Dockerfile 路径 / 构建上下文 / 镜像仓库回填
+                docker_file: (fullRecord as { docker_file?: string }).docker_file || './Dockerfile',
+                build_context: (fullRecord as { build_context?: string }).build_context || './',
+                registry_id: (fullRecord as { registry_id?: string }).registry_id || undefined,
               });
               setModalVisible(true);
             }}
@@ -731,6 +757,34 @@ export const BuildsPage: React.FC = () => {
                             <Option value="docker:24.0-dind">Docker in Docker</Option>
                             <Option value="ubuntu:22.04">Ubuntu 22.04 LTS</Option>
                           </Select>
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Row gutter={16}>
+                      <Col span={8}>
+                        <Form.Item name="docker_file" label="Dockerfile 路径" initialValue="./Dockerfile">
+                          <Input placeholder="./Dockerfile" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={8}>
+                        <Form.Item name="build_context" label="构建上下文路径" initialValue="./">
+                          <Input placeholder="./" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={8}>
+                        <Form.Item
+                          name="registry_id"
+                          label="镜像仓库"
+                          extra="构建产物镜像推送目标仓库（可在系统设置-镜像仓库中维护）"
+                        >
+                          <Select
+                            placeholder="选择镜像仓库"
+                            allowClear
+                            showSearch={{ optionFilterProp: 'label' }}
+                            options={registryOptions}
+                            notFoundContent="暂无镜像仓库配置，可在系统设置-镜像仓库中添加"
+                          />
                         </Form.Item>
                       </Col>
                     </Row>

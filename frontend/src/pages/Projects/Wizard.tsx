@@ -241,7 +241,14 @@ spec:
                   {
                     name: 'deploy',
                     type: 'zadig-deploy',
-                    spec: { service_name: serviceName.trim(), env: selectedEnvs[0] },
+                    // R12 任务三: 绑定上游构建 Job 产出镜像（fromjob），使构建产物无缝流入部署阶段
+                    spec: {
+                      source: 'fromjob',
+                      job_name: 'build',
+                      deploy_contents: ['image'],
+                      service_name: serviceName.trim(),
+                      env: selectedEnvs[0],
+                    },
                   },
                 ],
               },

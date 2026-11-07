@@ -159,6 +159,16 @@ export const PipelineExecutionPage: React.FC = () => {
     }
   }, [effWorkflowName, effTaskId, activeProject]);
 
+  // R12 任务五: 运行中/待审批/等待状态 3s 自动轮询，终态自动停止
+  useEffect(() => {
+    const activeStatuses = ['running', 'wait_for_approval', 'waiting'];
+    if (!task || !activeStatuses.includes(task.status)) return;
+    const timer = setInterval(() => {
+      loadTask();
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [task, loadTask]);
+
   const sseStreamUrl = useMemo(() => {
     if (!effWorkflowName || !effTaskId || !selectedJob) return undefined;
     return `/api/logs/sse/v4/workflow/${encodeURIComponent(effWorkflowName)}/${effTaskId}/${encodeURIComponent(selectedJob)}/1000`;

@@ -154,9 +154,9 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
       onClose();
 
       const taskId = res?.task_id || 1;
-      // R2-A8: 优先项目深链，保持项目上下文；无项目上下文时回落全局执行页
+      // R12 任务二: 触发后直达执行页 — 标准路径需带 /v1 前缀，否则被根路由诚实 404 捕获
       const targetUrl = projectName
-        ? `/projects/detail/${projectName}/pipelines/custom/${workflowName}/task/${taskId}`
+        ? `/v1/projects/detail/${projectName}/pipelines/custom/${workflowName}/${taskId}`
         : `/v1/pipelines/${workflowName}/task/${taskId}`;
       navigate(targetUrl);
     } catch (err: unknown) {
