@@ -1,8 +1,8 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { ProTable, ModalForm, ProFormText, ProFormSwitch } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Button, Tag, Space, Popconfirm, Typography } from 'antd';
-import { PlusOutlined, DeleteOutlined, DatabaseOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, DatabaseOutlined, CheckCircleOutlined, ApiOutlined, FlagOutlined } from '@ant-design/icons';
 import { settingsApi, type StorageItem } from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
 
@@ -10,14 +10,54 @@ const { Text } = Typography;
 
 export const StoragePage: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
+  const [testingConn, setTestingConn] = useState(false);
+
+  // R5 任务4: 对象存储连通性测试（POST /s3storage/validate）
+  const handleTestConnection = async (values: Record<string, unknown>) => {
+    setTestingConn(true);
+    try {
+      await settingsApi.validateStorage({
+        endpoint: values.endpoint as string,
+        bucket: values.bucket as string,
+        ak: values.ak as string,
+        sk: values.sk as string,
+        insecure: values.insecure as boolean,
+      });
+      feedback.message.success('对象存储连通性测试通过！凭据与 Bucket 验证正常');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '连接测试失败，请检查 Endpoint 与密钥';
+      feedback.message.error(`连接测试失败: ${msg}`);
+    } finally {
+      setTestingConn(false);
+    }
+  };
+
+  // R5 任务4: 设为默认对象存储（PUT /s3storage/:id 携带 is_default）
+  const handleSetDefault = async (record: StorageItem) => {
+    try {
+      await settingsApi.updateStorage(record.id || '', { ...record, is_default: true });
+      feedback.message.success(`已将 [${record.endpoint || record.id}] 设为默认对象存储`);
+      actionRef.current?.reload();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '设置默认对象存储失败';
+      feedback.message.error(msg);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     try {
       await settingsApi.deleteStorage(id);
       feedback.message.success('对象存储配置已成功删除');
       actionRef.current?.reload();
-    } catch {
-      // Handled
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '删除对象存储配置失败（可能仍被工作流引用）';
+      feedback.message.error(msg);
     }
   };
 
@@ -34,7 +74,11 @@ export const StoragePage: React.FC = () => {
       feedback.message.success('对象存储接入成功！');
       actionRef.current?.reload();
       return true;
-    } catch {
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '对象存储接入失败，请检查配置与权限';
+      feedback.message.error(msg);
       return false;
     }
   };
@@ -77,6 +121,18 @@ export const StoragePage: React.FC = () => {
       valueType: 'option',
       key: 'option',
       render: (_, record) => [
+        ...(!record.is_default
+          ? [
+              <Button
+                key="set-default"
+                type="link"
+                icon={<FlagOutlined />}
+                onClick={() => handleSetDefault(record)}
+              >
+                设为默认
+              </Button>,
+            ]
+          : []),
         <Popconfirm
           key="delete"
           title="确定移除该对象存储？"
@@ -122,6 +178,22 @@ export const StoragePage: React.FC = () => {
             }
             width={560}
             onFinish={handleCreate}
+            submitter={{
+              render: (props, dom) => [
+                ...dom,
+                <Button
+                  key="test-conn"
+                  icon={<ApiOutlined />}
+                  loading={testingConn}
+                  onClick={async () => {
+                    const values = (await props.form?.validateFields()) || {};
+                    await handleTestConnection(values as Record<string, unknown>);
+                  }}
+                >
+                  测试连接
+                </Button>,
+              ],
+            }}
           >
             <ProFormText
               name="endpoint"

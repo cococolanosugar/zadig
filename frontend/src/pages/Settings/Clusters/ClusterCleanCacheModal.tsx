@@ -56,10 +56,13 @@ export const ClusterCleanCacheModal: React.FC<ClusterCleanCacheModalProps> = ({
       setProgress(100);
       setCleaned(true);
       feedback.message.success('已下发集群构建缓存与临时镜像清理任务！');
-    } catch {
-      setProgress(100);
-      setCleaned(true);
-      feedback.message.success('集群缓存清理指令已下发，后台调度器正在各节点并行回收磁盘空间');
+    } catch (err: unknown) {
+      // R5-A1: 失败绝不可伪造成功，透出后端真实错误原因
+      setProgress(0);
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '缓存清理任务下发失败，请检查集群连接状态';
+      feedback.message.error(msg);
     } finally {
       setLoading(false);
     }

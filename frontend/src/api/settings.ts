@@ -261,6 +261,21 @@ export const settingsApi = {
     return http.post('/api/v1/codehosts', payload);
   },
 
+  // R5 任务2: 连通性校验（codehost router.go:33 POST /codehosts/validate）
+  async validateCodeHost(payload: Partial<CodeHostItem>): Promise<unknown> {
+    return http.post('/api/v1/codehosts/validate', payload, { skipErrorHandler: true });
+  },
+
+  // R5 任务2: 更新代码源（codehost router.go:30 PATCH /codehosts/:id）
+  async updateCodeHost(id: number | string, payload: Partial<CodeHostItem>): Promise<unknown> {
+    return http.patch(`/api/v1/codehosts/${id}`, payload, { skipErrorHandler: true });
+  },
+
+  // R5 任务2: OAuth 授权跳转地址获取（codehost router.go:31 GET /codehosts/:id/auth）
+  async authCodeHost(id: number | string): Promise<{ auth_url?: string }> {
+    return http.get<{ auth_url?: string }>(`/api/v1/codehosts/${id}/auth`, { skipErrorHandler: true });
+  },
+
   async deleteCodeHost(id: number | string): Promise<unknown> {
     return http.delete(`/api/v1/codehosts/${id}`);
   },
@@ -361,6 +376,16 @@ export const settingsApi = {
 
   async createStorage(payload: Partial<StorageItem>): Promise<unknown> {
     return http.post('/api/aslan/system/s3storage', payload);
+  },
+
+  // R5 任务2: 连通性校验（system router.go:79 POST /s3storage/validate）
+  async validateStorage(payload: Partial<StorageItem>): Promise<unknown> {
+    return http.post('/api/aslan/system/s3storage/validate', payload, { skipErrorHandler: true });
+  },
+
+  // R5 任务2: 更新对象存储（system router.go:81 PUT /s3storage/:id）
+  async updateStorage(id: string, payload: Partial<StorageItem>): Promise<unknown> {
+    return http.put(`/api/aslan/system/s3storage/${id}`, payload, { skipErrorHandler: true });
   },
 
   async deleteStorage(id: string): Promise<unknown> {
@@ -519,8 +544,13 @@ export const settingsApi = {
     return http.post('/api/aslan/system/helm', payload);
   },
 
+  // R5 任务2: 更新 Chart 仓库（system router.go:178 PUT /helm/:id）
+  async updateHelmRepo(id: string, payload: Partial<HelmRepoItem> & { password?: string }): Promise<unknown> {
+    return http.put(`/api/aslan/system/helm/${id}`, payload, { skipErrorHandler: true });
+  },
+
   async validateHelmRepo(payload: Partial<HelmRepoItem> & { password?: string }): Promise<unknown> {
-    return http.post('/api/aslan/system/helm/validate', payload);
+    return http.post('/api/aslan/system/helm/validate', payload, { skipErrorHandler: true });
   },
 
   async deleteHelmRepo(id: string): Promise<unknown> {
@@ -538,6 +568,16 @@ export const settingsApi = {
     payload: Partial<DBInstanceItem> & { password?: string }
   ): Promise<unknown> {
     return http.post('/api/aslan/system/dbinstance', payload);
+  },
+
+  // R5 任务2: 连通性校验（system router.go:552 POST /dbinstance/validate）
+  async validateDBInstance(payload: Partial<DBInstanceItem> & { password?: string }): Promise<unknown> {
+    return http.post('/api/aslan/system/dbinstance/validate', payload, { skipErrorHandler: true });
+  },
+
+  // R5 任务2: 更新数据库实例（system router.go:550 PUT /dbinstance/:id）
+  async updateDBInstance(id: string, payload: Partial<DBInstanceItem> & { password?: string }): Promise<unknown> {
+    return http.put(`/api/aslan/system/dbinstance/${id}`, payload, { skipErrorHandler: true });
   },
 
   async deleteDBInstance(id: string): Promise<unknown> {

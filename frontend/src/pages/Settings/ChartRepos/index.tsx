@@ -1,8 +1,8 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { ProTable, ModalForm, ProFormText } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Button, Tag, Space, Popconfirm, Typography } from 'antd';
-import { PlusOutlined, DeleteOutlined, AppstoreOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, AppstoreOutlined, ApiOutlined } from '@ant-design/icons';
 import { settingsApi, type HelmRepoItem } from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
 
@@ -10,14 +10,39 @@ const { Text } = Typography;
 
 export const ChartReposPage: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
+  const [testingConn, setTestingConn] = useState(false);
+
+  // R5 任务4: Chart 仓库连通性测试（POST /helm/validate）
+  const handleTestConnection = async (values: Record<string, unknown>) => {
+    setTestingConn(true);
+    try {
+      await settingsApi.validateHelmRepo({
+        repo_name: values.repo_name as string,
+        url: values.url as string,
+        username: values.username as string,
+        password: values.password as string,
+      });
+      feedback.message.success('Chart 仓库连通性测试通过！索引拉取验证正常');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '连接测试失败，请检查仓库地址与凭据';
+      feedback.message.error(`连接测试失败: ${msg}`);
+    } finally {
+      setTestingConn(false);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     try {
       await settingsApi.deleteHelmRepo(id);
       feedback.message.success('Chart 仓库已成功删除');
       actionRef.current?.reload();
-    } catch {
-      // Handled
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '删除 Chart 仓库失败（可能仍被服务引用）';
+      feedback.message.error(msg);
     }
   };
 
@@ -33,7 +58,11 @@ export const ChartReposPage: React.FC = () => {
       feedback.message.success('Chart 仓库配置已成功添加！');
       actionRef.current?.reload();
       return true;
-    } catch {
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || 'Chart 仓库添加失败，请检查配置与权限';
+      feedback.message.error(msg);
       return false;
     }
   };
@@ -133,6 +162,22 @@ export const ChartReposPage: React.FC = () => {
             }
             width={560}
             onFinish={handleCreate}
+            submitter={{
+              render: (props, dom) => [
+                ...dom,
+                <Button
+                  key="test-conn"
+                  icon={<ApiOutlined />}
+                  loading={testingConn}
+                  onClick={async () => {
+                    const values = (await props.form?.validateFields()) || {};
+                    await handleTestConnection(values as Record<string, unknown>);
+                  }}
+                >
+                  测试连接
+                </Button>,
+              ],
+            }}
           >
             <ProFormText
               name="repo_name"

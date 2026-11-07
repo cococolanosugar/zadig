@@ -1,8 +1,8 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { ProTable, ModalForm, ProFormText, ProFormSelect, ProFormRadio } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Button, Tag, Space, Popconfirm, Typography } from 'antd';
-import { PlusOutlined, DeleteOutlined, CodeOutlined, GithubOutlined, GitlabOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, CodeOutlined, GithubOutlined, GitlabOutlined, ApiOutlined } from '@ant-design/icons';
 import { settingsApi, type CodeHostItem } from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
 
@@ -10,14 +10,41 @@ const { Text } = Typography;
 
 export const CodeHostsPage: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
+  const [testingConn, setTestingConn] = useState(false);
+
+  // R5 任务3: 代码源连通性测试（POST /codehosts/validate）
+  const handleTestConnection = async (values: Record<string, unknown>) => {
+    setTestingConn(true);
+    try {
+      await settingsApi.validateCodeHost({
+        type: values.type as string,
+        address: values.address as string,
+        auth_type: values.auth_type as string,
+        access_token: values.access_token as string,
+        application_id: values.application_id as string,
+        client_secret: values.client_secret as string,
+      });
+      feedback.message.success('代码源连通性测试通过！凭据与服务验证正常');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '连接测试失败，请检查地址与凭据';
+      feedback.message.error(`连接测试失败: ${msg}`);
+    } finally {
+      setTestingConn(false);
+    }
+  };
 
   const handleDelete = async (id: number) => {
     try {
       await settingsApi.deleteCodeHost(id);
       feedback.message.success('代码源配置已删除');
       actionRef.current?.reload();
-    } catch {
-      // Handled
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '删除代码源配置失败（可能仍被项目引用）';
+      feedback.message.error(msg);
     }
   };
 
@@ -35,7 +62,11 @@ export const CodeHostsPage: React.FC = () => {
       feedback.message.success('代码源集成成功！');
       actionRef.current?.reload();
       return true;
-    } catch {
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '代码源集成失败，请检查配置与权限';
+      feedback.message.error(msg);
       return false;
     }
   };
@@ -130,6 +161,22 @@ export const CodeHostsPage: React.FC = () => {
             }
             width={560}
             onFinish={handleCreate}
+            submitter={{
+              render: (props, dom) => [
+                ...dom,
+                <Button
+                  key="test-conn"
+                  icon={<ApiOutlined />}
+                  loading={testingConn}
+                  onClick={async () => {
+                    const values = (await props.form?.validateFields()) || {};
+                    await handleTestConnection(values as Record<string, unknown>);
+                  }}
+                >
+                  测试连接
+                </Button>,
+              ],
+            }}
           >
             <ProFormSelect
               name="type"

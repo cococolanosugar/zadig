@@ -71,8 +71,11 @@ export const RegistriesPage: React.FC = () => {
       await settingsApi.deleteRegistry(id);
       feedback.message.success('镜像仓库已成功删除');
       actionRef.current?.reload();
-    } catch {
-      // Handled
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '删除镜像仓库失败（默认仓库或仍被引用时不可删除）';
+      feedback.message.error(msg);
     }
   };
 
@@ -98,7 +101,11 @@ export const RegistriesPage: React.FC = () => {
       feedback.message.success('镜像仓库配置已成功添加！');
       actionRef.current?.reload();
       return true;
-    } catch {
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '镜像仓库配置添加失败，请检查配置与权限';
+      feedback.message.error(msg);
       return false;
     }
   };

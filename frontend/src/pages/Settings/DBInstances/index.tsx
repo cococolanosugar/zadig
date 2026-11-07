@@ -1,8 +1,8 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { ProTable, ModalForm, ProFormText, ProFormSelect } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Button, Tag, Space, Popconfirm, Typography } from 'antd';
-import { PlusOutlined, DeleteOutlined, DatabaseOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, DatabaseOutlined, ApiOutlined } from '@ant-design/icons';
 import { settingsApi, type DBInstanceItem } from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
 
@@ -10,14 +10,41 @@ const { Text } = Typography;
 
 export const DBInstancesPage: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
+  const [testingConn, setTestingConn] = useState(false);
+
+  // R5 任务4: 数据库实例连通性测试（POST /dbinstance/validate）
+  const handleTestConnection = async (values: Record<string, unknown>) => {
+    setTestingConn(true);
+    try {
+      await settingsApi.validateDBInstance({
+        name: values.name as string,
+        type: values.type as string,
+        host: values.host as string,
+        port: String(values.port ?? ''),
+        username: values.username as string,
+        password: values.password as string,
+      });
+      feedback.message.success('数据库连通性测试通过！主机与凭据验证正常');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '连接测试失败，请检查主机、端口与凭据';
+      feedback.message.error(`连接测试失败: ${msg}`);
+    } finally {
+      setTestingConn(false);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     try {
       await settingsApi.deleteDBInstance(id);
       feedback.message.success('数据库实例已成功删除');
       actionRef.current?.reload();
-    } catch {
-      // Handled
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '删除数据库实例失败（可能仍被项目引用）';
+      feedback.message.error(msg);
     }
   };
 
@@ -35,7 +62,11 @@ export const DBInstancesPage: React.FC = () => {
       feedback.message.success('数据库实例配置已成功添加！');
       actionRef.current?.reload();
       return true;
-    } catch {
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '数据库实例添加失败，请检查配置与权限';
+      feedback.message.error(msg);
       return false;
     }
   };
@@ -139,6 +170,22 @@ export const DBInstancesPage: React.FC = () => {
             }
             width={560}
             onFinish={handleCreate}
+            submitter={{
+              render: (props, dom) => [
+                ...dom,
+                <Button
+                  key="test-conn"
+                  icon={<ApiOutlined />}
+                  loading={testingConn}
+                  onClick={async () => {
+                    const values = (await props.form?.validateFields()) || {};
+                    await handleTestConnection(values as Record<string, unknown>);
+                  }}
+                >
+                  测试连接
+                </Button>,
+              ],
+            }}
           >
             <ProFormSelect
               name="type"

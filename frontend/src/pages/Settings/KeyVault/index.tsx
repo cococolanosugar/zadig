@@ -30,8 +30,11 @@ export const KeyVaultPage: React.FC = () => {
       await http.delete(`/api/aslan/system/keyvault/items/${id}`);
       feedback.message.success('共享变量已删除');
       actionRef.current?.reload();
-    } catch {
-      // Handled
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '删除共享变量失败，请检查权限';
+      feedback.message.error(msg);
     }
   };
 

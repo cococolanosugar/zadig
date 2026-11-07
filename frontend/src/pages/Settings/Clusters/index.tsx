@@ -81,8 +81,11 @@ export const ClustersPage: React.FC = () => {
       await settingsApi.deleteCluster(id);
       feedback.message.success('集群已成功删除');
       actionRef.current?.reload();
-    } catch {
-      // Handled by api interceptor
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '删除集群失败（本地集群或仍被环境引用时不可删除）';
+      feedback.message.error(msg);
     }
   };
 
@@ -98,7 +101,11 @@ export const ClustersPage: React.FC = () => {
       feedback.message.success('集群接入成功！');
       actionRef.current?.reload();
       return true;
-    } catch {
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '集群接入失败，请检查 KubeConfig 与权限';
+      feedback.message.error(msg);
       return false;
     }
   };
