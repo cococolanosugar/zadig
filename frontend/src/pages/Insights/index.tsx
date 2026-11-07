@@ -21,6 +21,7 @@ import {
   Tooltip,
   Segmented,
   Alert,
+  Spin,
 } from 'antd';
 import {
   CheckCircleOutlined,
@@ -29,6 +30,7 @@ import {
   DeploymentUnitOutlined,
   ReloadOutlined,
   RobotOutlined,
+  BulbOutlined,
   SettingOutlined,
   PlusOutlined,
   DeleteOutlined,
@@ -127,7 +129,7 @@ const INDICATOR_PRESETS: Record<
 export const InsightsPage: React.FC = () => {
   const { currentProject } = useProjectStore();
   const navigate = useNavigate();
-  const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('7d');
+  const [timeRange, setTimeRange] = useState<'7d' | '14d' | '30d' | '90d'>('7d');
   const [loading, setLoading] = useState<boolean>(false);
   const [aiDrawerOpen, setAiDrawerOpen] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'overview' | 'dashboard'>('overview');
@@ -157,7 +159,7 @@ export const InsightsPage: React.FC = () => {
   const fetchInsightData = useCallback(async () => {
     setLoading(true);
     try {
-      const daysCount = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
+      const daysCount = timeRange === '7d' ? 7 : timeRange === '14d' ? 14 : timeRange === '30d' ? 30 : 90;
       const endDate = Math.floor(Date.now() / 1000);
       const startDate = endDate - daysCount * 86400;
 
@@ -223,7 +225,8 @@ export const InsightsPage: React.FC = () => {
         activeServices: serviceList.length,
       });
     } catch {
-      // Handled
+      // R7 任务3: 静默失败治理
+      feedback.message.error('加载效能概览数据失败');
     } finally {
       setLoading(false);
     }
@@ -235,13 +238,15 @@ export const InsightsPage: React.FC = () => {
       setDashboardConfigs(list);
     } catch {
       setDashboardConfigs([]);
+      // R7 任务3: 静默失败治理
+      feedback.message.error('获取自定义看板配置列表失败');
     }
   }, []);
 
   const fetchDashboardV2 = useCallback(async () => {
     setDashboardLoading(true);
     try {
-      const daysCount = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
+      const daysCount = timeRange === '7d' ? 7 : timeRange === '14d' ? 14 : timeRange === '30d' ? 30 : 90;
       const endDate = Math.floor(Date.now() / 1000);
       const startDate = endDate - daysCount * 86400;
 
@@ -256,11 +261,41 @@ export const InsightsPage: React.FC = () => {
         setDashboardGeneral(genRes.value);
       }
     } catch {
-      // Handled
+      // R7 任务3: 静默失败治理
+      feedback.message.error('加载多项目效能大盘数据失败');
     } finally {
       setDashboardLoading(false);
     }
   }, [timeRange]);
+
+  // ---------- R7 任务1: 月度效能关注 ----------
+  const [attentionModalOpen, setAttentionModalOpen] = useState(false);
+  const [monthAttention, setMonthAttention] = useState<any>(null);
+  const [attentionLoading, setAttentionLoading] = useState(false);
+
+  const fetchMonthAttention = useCallback(async () => {
+    const daysCount = timeRange === '7d' ? 7 : timeRange === '14d' ? 14 : timeRange === '30d' ? 30 : 90;
+    const endDate = Math.floor(Date.now() / 1000);
+    const startDate = endDate - daysCount * 86400;
+    setAttentionLoading(true);
+    try {
+      const res = await statApi.getMonthAttention(startDate, endDate, currentProject ? [currentProject] : undefined);
+      setMonthAttention(res || null);
+    } catch (err: unknown) {
+      setMonthAttention(null);
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '月度效能关注数据获取失败';
+      feedback.message.error(msg);
+    } finally {
+      setAttentionLoading(false);
+    }
+  }, [timeRange, currentProject]);
+
+  const handleOpenAttention = () => {
+    setAttentionModalOpen(true);
+    fetchMonthAttention();
+  };
 
   useEffect(() => {
     fetchInsightData();
@@ -298,6 +333,9 @@ export const InsightsPage: React.FC = () => {
       source: record.source,
       function: record.function,
       weight: record.weight,
+      // R7 任务2: 外源配置回填（queries 数组序列化为 key=value& 串）
+      api_path: record.api_config?.api_path || '',
+      queries: (record.api_config?.queries || []).map((q) => `${q.key}=${q.value}`).join('&'),
     });
     setConfigModalOpen(true);
   };
@@ -306,6 +344,25 @@ export const InsightsPage: React.FC = () => {
     try {
       const values = await configForm.validateFields();
       setConfigSubmitting(true);
+      // R7 任务2: 外源指标组装 api_config，避免外源配置丢失
+      let apiConfig: StatDashboardConfig['api_config'];
+      if ((values.source || 'zadig') === 'external') {
+        const queries = String(values.queries || '')
+          .split('&')
+          .map((pair) => pair.trim())
+          .filter(Boolean)
+          .map((pair) => {
+            const eq = pair.indexOf('=');
+            return eq === -1
+              ? { key: pair, value: '' }
+              : { key: pair.slice(0, eq), value: pair.slice(eq + 1) };
+          });
+        apiConfig = {
+          external_system_id: '',
+          api_path: String(values.api_path || '').trim(),
+          queries,
+        };
+      }
       const payload: StatDashboardConfig = {
         id: values.id.trim(),
         name: values.name.trim(),
@@ -313,6 +370,7 @@ export const InsightsPage: React.FC = () => {
         source: values.source || 'zadig',
         function: values.function.trim(),
         weight: Number(values.weight ?? 0),
+        ...(apiConfig ? { api_config: apiConfig } : {}),
       };
 
       if (editingConfig) {
@@ -605,12 +663,19 @@ export const InsightsPage: React.FC = () => {
                   { label: '部署洞察', value: 'deploy' },
                 ]}
               />
+              <Button
+                icon={<BulbOutlined />}
+                onClick={handleOpenAttention}
+              >
+                月度效能关注
+              </Button>
               <Radio.Group
                 value={timeRange}
                 onChange={(e) => setTimeRange(e.target.value)}
                 size="middle"
               >
                 <Radio.Button value="7d">近 7 天</Radio.Button>
+                <Radio.Button value="14d">近 14 天</Radio.Button>
                 <Radio.Button value="30d">近 30 天</Radio.Button>
                 <Radio.Button value="90d">近 90 天</Radio.Button>
               </Radio.Group>
@@ -689,7 +754,7 @@ export const InsightsPage: React.FC = () => {
             <Col xs={24} lg={16}>
               <Card
                 variant="borderless"
-                title={`构建与部署活动趋势 (${timeRange === '7d' ? '近 7 天' : timeRange === '30d' ? '近 30 天' : '近 90 天'})`}
+                title={`构建与部署活动趋势 (${timeRange === '7d' ? '近 7 天' : timeRange === '14d' ? '近 14 天' : timeRange === '30d' ? '近 30 天' : '近 90 天'})`}
                 style={{ borderRadius: 8 }}
               >
                 {trendData.length > 0 ? (
@@ -1010,7 +1075,82 @@ export const InsightsPage: React.FC = () => {
           >
             <InputNumber min={0} max={100} style={{ width: '100%' }} />
           </Form.Item>
+
+          {/* R7 任务2: 外源指标 api_config 配置（source === 'external' 时展开） */}
+          <Form.Item noStyle shouldUpdate={(p, c) => p.source !== c.source}>
+            {({ getFieldValue }) =>
+              getFieldValue('source') === 'external' ? (
+                <>
+                  <Alert
+                    type="info"
+                    showIcon
+                    title="外源指标配置"
+                    description="数据来自外部系统 API，保存后将随看板评分计算轮询获取。"
+                    style={{ marginBottom: 16, borderRadius: 6 }}
+                  />
+                  <Form.Item
+                    name="api_path"
+                    label="API 路径 (api_path)"
+                    rules={[{ required: true, message: '请输入外源 API 路径' }]}
+                    extra="相对外部系统根地址的路径，例如：/api/v1/metrics/build"
+                  >
+                    <Input placeholder="/api/v1/metrics/build" />
+                  </Form.Item>
+                  <Form.Item
+                    name="queries"
+                    label="查询参数 (queries)"
+                    extra="格式：key1=value1&key2=value2，保存时解析为键值对数组"
+                  >
+                    <Input placeholder="project=demo&interval=1d" />
+                  </Form.Item>
+                </>
+              ) : null
+            }
+          </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 月度效能关注 Modal (R7 任务1) */}
+      <Modal
+        title="月度效能关注 (AI Insights)"
+        open={attentionModalOpen}
+        onCancel={() => setAttentionModalOpen(false)}
+        footer={[
+          <Button key="close" type="primary" onClick={() => setAttentionModalOpen(false)}>
+            关闭
+          </Button>,
+        ]}
+        width={620}
+      >
+        <Spin spinning={attentionLoading}>
+          {monthAttention ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 8 }}>
+              {monthAttention.system_answer && (
+                <Alert
+                  type="info"
+                  showIcon
+                  title="系统判定关注事项"
+                  description={<span style={{ whiteSpace: 'pre-wrap' }}>{String(monthAttention.system_answer)}</span>}
+                  style={{ borderRadius: 6 }}
+                />
+              )}
+              {monthAttention.ai_answer && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  title="AI 综合关注事项"
+                  description={<span style={{ whiteSpace: 'pre-wrap' }}>{String(monthAttention.ai_answer)}</span>}
+                  style={{ borderRadius: 6 }}
+                />
+              )}
+              {!monthAttention.system_answer && !monthAttention.ai_answer && (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前统计周期内暂无关注事项" />
+              )}
+            </div>
+          ) : (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={attentionLoading ? '正在获取月度效能关注...' : '暂无数据'} />
+          )}
+        </Spin>
       </Modal>
     </div>
   );

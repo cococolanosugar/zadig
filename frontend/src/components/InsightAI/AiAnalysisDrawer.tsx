@@ -187,7 +187,8 @@ export const AiAnalysisDrawer: React.FC<AiAnalysisDrawerProps> = ({
       tokenNum: 768,
     };
     setMessages((prev) => [...prev, mockMsg]);
-    feedback.message.success('已展示模拟效能分析报告');
+    // R7 任务4: 明确提示为演示数据，防止与真实 LLM 响应混淆
+    feedback.message.info('已展示模拟演示效能报告（仅供格式参考）');
   };
 
   const handleClearMessages = () => {
@@ -316,6 +317,12 @@ export const AiAnalysisDrawer: React.FC<AiAnalysisDrawerProps> = ({
                   >
                     {m.role === 'user' ? '我的提问' : 'Zadig AI DevOps 专家'}
                   </Text>
+                  {/* R7 任务4: 模拟演示报告明确标注，防止与真实 LLM 响应混淆 */}
+                  {m.id?.startsWith('mock-') && (
+                    <Tag color="orange" style={{ fontSize: 10, margin: 0 }}>
+                      模拟演示报告
+                    </Tag>
+                  )}
                   {m.tokenNum && (
                     <Tag color="cyan" style={{ fontSize: 10, margin: 0 }}>
                       Tokens: {m.tokenNum}
@@ -367,7 +374,7 @@ export const AiAnalysisDrawer: React.FC<AiAnalysisDrawerProps> = ({
                     style={{ padding: 0, marginTop: 4 }}
                     onClick={handleApplyMockReport}
                   >
-                    查看模拟分析效果
+                    查看模拟演示报告（仅供格式参考）
                   </Button>
                 </div>
               }

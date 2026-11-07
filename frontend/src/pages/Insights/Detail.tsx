@@ -30,6 +30,7 @@ import {
 import { useParams, useNavigate } from 'react-router-dom';
 import { Line, Column } from '@ant-design/plots';
 import http from '../../api/client';
+import { feedback } from '../../utils/feedback';
 import statApi, {
   type DailyAverageDurationItem,
   type BuildTenDurationItem,
@@ -172,7 +173,12 @@ export const InsightDetailPage: React.FC = () => {
       );
     }
 
-    await Promise.all(requests);
+    // R7 任务3: 聚合加载后判定 — 全部维度请求均失败时透出错误，不再静默
+    const results = await Promise.allSettled(requests);
+    const allRejected = results.length > 0 && results.every((r) => r.status === 'rejected');
+    if (allRejected) {
+      feedback.message.error('加载项目度量详情数据失败，请检查网络或配置');
+    }
     setLoading(false);
   }, [currentProject, dimension, timeRange]);
 

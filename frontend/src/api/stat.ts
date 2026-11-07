@@ -336,6 +336,52 @@ export const statApi = {
   getDailyTestHealthTrend(body: { startDate: number; endDate: number; projects?: string[] }): Promise<unknown> {
     return http.post('/api/aslan/stat/v2/quality/test/dailyHealthTrend', body, { skipErrorHandler: true });
   },
+
+  // ---------- R7 任务1: L3 效能洞察 v2/ai 端点（stat/handler/router.go:83-87，start_time/end_time 秒级） ----------
+  // 效能雷达 (GET /stat/v2/ai/radar)
+  getEfficiencyRadar(startTime: number, endTime: number, projects?: string[]): Promise<any> {
+    const q = new URLSearchParams();
+    q.set('start_time', String(startTime));
+    q.set('end_time', String(endTime));
+    if (projects) projects.forEach((p) => q.append('projects', p));
+    return http.get(`/api/aslan/stat/v2/ai/radar?${q.toString()}`, { skipErrorHandler: true });
+  },
+
+  // 月度效能关注 (GET /stat/v2/ai/attention)
+  getMonthAttention(startTime: number, endTime: number, projects?: string[]): Promise<any> {
+    const q = new URLSearchParams();
+    q.set('start_time', String(startTime));
+    q.set('end_time', String(endTime));
+    if (projects) projects.forEach((p) => q.append('projects', p));
+    return http.get(`/api/aslan/stat/v2/ai/attention?${q.toString()}`, { skipErrorHandler: true });
+  },
+
+  // 项目集效能概览 (GET /stat/v2/ai/overview)
+  getProjectsOverview(startTime: number, endTime: number, projects?: string[]): Promise<any> {
+    const q = new URLSearchParams();
+    q.set('start_time', String(startTime));
+    q.set('end_time', String(endTime));
+    if (projects) projects.forEach((p) => q.append('projects', p));
+    return http.get(`/api/aslan/stat/v2/ai/overview?${q.toString()}`, { skipErrorHandler: true });
+  },
+
+  // 近 30 天构建趋势 (GET /stat/v2/ai/build/trend)
+  get30DayBuildTrend(startTime: number, endTime: number, projects?: string[]): Promise<any> {
+    const q = new URLSearchParams();
+    q.set('start_time', String(startTime));
+    q.set('end_time', String(endTime));
+    if (projects) projects.forEach((p) => q.append('projects', p));
+    return http.get(`/api/aslan/stat/v2/ai/build/trend?${q.toString()}`, { skipErrorHandler: true });
+  },
+
+  // 需求研发/交付周期 (GET /stat/v2/ai/requirement/period)
+  getRequirementPeriod(startTime: number, endTime: number, projects?: string[]): Promise<any> {
+    const q = new URLSearchParams();
+    q.set('start_time', String(startTime));
+    q.set('end_time', String(endTime));
+    if (projects) projects.forEach((p) => q.append('projects', p));
+    return http.get(`/api/aslan/stat/v2/ai/requirement/period?${q.toString()}`, { skipErrorHandler: true });
+  },
 };
 
 export default statApi;
