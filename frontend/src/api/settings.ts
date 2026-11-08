@@ -532,6 +532,22 @@ export const settingsApi = {
     });
   },
 
+  // R16 任务1: 主机私钥连通性校验（system router.go:195 POST /privateKey/validate）
+  async validatePrivateKey(payload: Partial<VMItem>): Promise<unknown> {
+    return http.post('/api/aslan/system/privateKey/validate', payload, { skipErrorHandler: true });
+  },
+
+  // R16 任务1: 主机私钥批量创建（system router.go:193 POST /privateKey/batch）
+  async batchCreatePrivateKeys(payload: { option: 'skip' | 'overwrite'; data: Partial<VMItem>[] }): Promise<unknown> {
+    return http.post('/api/aslan/system/privateKey/batch', payload);
+  },
+
+  // R16 任务1: 主机私钥标签注册表（system router.go:191 GET /privateKey/labels）
+  async getPrivateKeyLabels(): Promise<string[]> {
+    const res = await http.get<string[]>('/api/aslan/system/privateKey/labels', { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
+  },
+
   async deleteHost(id: string): Promise<unknown> {
     return http.delete(`/api/aslan/system/privateKey/${id}`);
   },

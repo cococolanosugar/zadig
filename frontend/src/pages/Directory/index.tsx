@@ -71,6 +71,11 @@ export const DirectoryPage: React.FC = () => {
   const [fieldDrawerOpen, setFieldDrawerOpen] = useState(false);
   const [fieldDefinitions, setFieldDefinitions] = useState<ApplicationFieldDefinition[]>([]);
 
+  // R16 任务2: 应用批量导入（POST /applications/bulk）
+  const [batchImportOpen, setBatchImportOpen] = useState(false);
+  const [batchJson, setBatchJson] = useState('');
+  const [batchImporting, setBatchImporting] = useState(false);
+
   // Detail Drawer state
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<CatalogApplication | null>(null);
@@ -196,6 +201,41 @@ export const DirectoryPage: React.FC = () => {
     } catch (err: unknown) {
       // R11 任务五: 消除静默吞错
       feedback.message.error(err instanceof Error ? err.message : '删除应用目录失败');
+    }
+  };
+
+  // R16 任务2: 批量导入应用（JSON 数组 → POST /applications/bulk）
+  const handleBatchImport = async () => {
+    let items: Array<{ name: string; desc?: string; [key: string]: unknown }>;
+    try {
+      items = JSON.parse(batchJson.trim());
+      if (!Array.isArray(items) || items.length === 0) {
+        feedback.message.warning('导入内容需为非空的 JSON 应用数组');
+        return;
+      }
+      const invalid = items.find((it) => !it.name || !String(it.name).trim());
+      if (invalid) {
+        feedback.message.error('每条应用记录必须包含非空 name 字段');
+        return;
+      }
+    } catch {
+      feedback.message.error('JSON 解析失败，请检查格式（示例：[{"name":"app-1","desc":"示例应用"}]）');
+      return;
+    }
+    setBatchImporting(true);
+    try {
+      await applicationApi.bulkCreateApplications(items);
+      feedback.message.success(`批量导入完成，已提交 ${items.length} 个应用`);
+      setBatchImportOpen(false);
+      setBatchJson('');
+      loadApplications(1, pageSize, '');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '批量导入应用失败';
+      feedback.message.error(msg);
+    } finally {
+      setBatchImporting(false);
     }
   };
 
@@ -346,6 +386,15 @@ export const DirectoryPage: React.FC = () => {
           <Space orientation="horizontal" size={8}>
             <Button icon={<SettingOutlined />} onClick={() => setFieldDrawerOpen(true)}>
               字段定义管理
+            </Button>
+            <Button
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setBatchJson('[{ "name": "app-1", "desc": "示例应用" }]');
+                setBatchImportOpen(true);
+              }}
+            >
+              批量导入
             </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
               新建应用
@@ -524,6 +573,32 @@ export const DirectoryPage: React.FC = () => {
           loadApplications(page, pageSize, searchText.trim());
         }}
       />
+
+      {/* R16 任务2: 应用批量导入 Modal */}
+      <Modal
+        title="批量导入应用 (Batch Import)"
+        open={batchImportOpen}
+        onOk={handleBatchImport}
+        onCancel={() => setBatchImportOpen(false)}
+        confirmLoading={batchImporting}
+        destroyOnHidden
+        width={640}
+        okText="确认导入"
+        cancelText="取消"
+      >
+        <Input.TextArea
+          rows={12}
+          value={batchJson}
+          onChange={(e) => setBatchJson(e.target.value)}
+          style={{ fontFamily: 'monospace', fontSize: 12, marginTop: 16 }}
+          placeholder={`[
+  { "name": "app-1", "desc": "示例应用" }
+]`}
+        />
+        <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
+          JSON 数组格式，每条记录必须包含非空 name 字段，desc 为可选描述。
+        </Text>
+      </Modal>
     </div>
   );
 };

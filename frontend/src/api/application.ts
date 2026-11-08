@@ -50,6 +50,11 @@ export const applicationApi = {
   deleteFieldDefinition(id: string): Promise<void> {
     return http.delete(`/api/aslan/application/fields/${id}`);
   },
+
+  // R16 任务2: 批量创建应用（application/handler/router.go:29 POST /applications/bulk）
+  bulkCreateApplications(apps: Array<{ name: string; desc?: string; [key: string]: unknown }>): Promise<void> {
+    return http.post('/api/aslan/application/applications/bulk', apps);
+  },
 };
 
 export default applicationApi;

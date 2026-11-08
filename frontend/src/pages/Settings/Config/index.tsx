@@ -1637,6 +1637,39 @@ export const SystemConfigPage: React.FC = () => {
                   key: 'update_time',
                   render: (t) => (t ? new Date(t * 1000).toLocaleString('zh-CN') : '-'),
                 },
+                {
+                  title: '操作',
+                  key: 'pkg_action',
+                  width: 100,
+                  render: (_, r: InstallPackageItem) => (
+                    <Popconfirm
+                      title={`确定要删除软件包 [${r.name} ${r.version}] 吗？`}
+                      onConfirm={async () => {
+                        try {
+                          // R16 任务3: 工具链软件包删除写路径（system router.go:40 PUT /install/delete）
+                          await http.put('/api/aslan/system/install/delete', {
+                            name: r.name,
+                            version: r.version,
+                          });
+                          feedback.message.success(`软件包 [${r.name} ${r.version}] 已删除`);
+                          loadTabData('apps');
+                        } catch (err: unknown) {
+                          const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+                            || (err instanceof Error ? err.message : '')
+                            || '删除软件包失败';
+                          feedback.message.error(msg);
+                        }
+                      }}
+                      okText="删除"
+                      cancelText="取消"
+                      okButtonProps={{ danger: true }}
+                    >
+                      <Button type="link" danger size="small" icon={<DeleteOutlined />}>
+                        删除
+                      </Button>
+                    </Popconfirm>
+                  ),
+                },
               ]}
               pagination={{ pageSize: 10 }}
               locale={{

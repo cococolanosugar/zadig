@@ -73,6 +73,11 @@ export const VMsPage: React.FC = () => {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createForm] = Form.useForm();
+  // R16 任务1: 主机凭据连通性测试与批量导入
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
+  const [batchJson, setBatchJson] = useState('');
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
 
   // 升级命令弹窗
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
@@ -82,13 +87,22 @@ export const VMsPage: React.FC = () => {
   // 接入指南弹窗
   const [guideModalOpen, setGuideModalOpen] = useState(false);
 
-  // 加载标签列表
+  // 加载标签列表（R16 任务1: 优先私钥标签注册表，失败回退 VM 标签）
   const fetchLabels = useCallback(async () => {
     try {
-      const res = await settingsApi.getVMLabels();
-      setLabels(Array.isArray(res) ? res : []);
-    } catch {
+      const res = await settingsApi.getPrivateKeyLabels();
+      if (res.length > 0) {
+        setLabels(res);
+        return;
+      }
       setLabels([]);
+    } catch {
+      try {
+        const fallback = await settingsApi.getVMLabels();
+        setLabels(Array.isArray(fallback) ? fallback : []);
+      } catch {
+        setLabels([]);
+      }
     }
   }, []);
 
@@ -186,6 +200,66 @@ export const VMsPage: React.FC = () => {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '删除主机失败';
       message.error(msg);
+    }
+  };
+
+  // R16 任务1: 主机凭据连通性测试（校验必填项后调用 /privateKey/validate）
+  const handleTestConnection = async () => {
+    try {
+      const values = await createForm.validateFields();
+      setTestingConnection(true);
+      await settingsApi.validatePrivateKey({
+        name: values.name,
+        label: values.label,
+        ip: values.ip,
+      });
+      message.success('主机凭据与 SSH 连通性握手验证成功！');
+    } catch (err: any) {
+      if (!err?.errorFields) {
+        const msg = err?.response?.data?.message || err?.message || '连通性测试失败，请检查主机地址与凭据';
+        message.error(msg);
+      }
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  // R16 任务1: 批量导入主机（POST /privateKey/batch，option=skip）
+  const handleBatchImport = async () => {
+    let items: Array<Record<string, unknown>>;
+    try {
+      items = JSON.parse(batchJson.trim());
+      if (!Array.isArray(items) || items.length === 0) {
+        message.warning('导入内容需为非空的 JSON 主机数组');
+        return;
+      }
+    } catch {
+      message.error('JSON 解析失败，请检查格式（示例：[{"name":"host-1","label":"ci","ip":"192.168.1.10"}]）');
+      return;
+    }
+    setBatchSubmitting(true);
+    try {
+      await settingsApi.batchCreatePrivateKeys({
+        option: 'skip',
+        data: items.map((it) => ({
+          name: String(it.name || '').trim(),
+          label: String(it.label || '').trim(),
+          ip: String(it.ip || '').trim(),
+          user_name: String(it.user_name || 'root').trim(),
+        })),
+      });
+      message.success(`批量导入完成，已提交 ${items.length} 台主机（同名主机按 skip 策略跳过）`);
+      setBatchModalOpen(false);
+      setBatchJson('');
+      actionRef.current?.reload();
+      fetchLabels();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '批量导入失败，请检查 JSON 配置';
+      message.error(msg);
+    } finally {
+      setBatchSubmitting(false);
     }
   };
 
@@ -390,6 +464,16 @@ export const VMsPage: React.FC = () => {
               接入说明
             </Button>,
             <Button
+              key="batch-import"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setBatchJson('');
+                setBatchModalOpen(true);
+              }}
+            >
+              批量导入
+            </Button>,
+            <Button
               key="create"
               type="primary"
               icon={<PlusOutlined />}
@@ -450,6 +534,22 @@ export const VMsPage: React.FC = () => {
         width={560}
         okText="添加并获取命令"
         cancelText="取消"
+        footer={[
+          <Button key="cancel" onClick={() => setCreateModalOpen(false)}>
+            取消
+          </Button>,
+          <Button key="test-conn" loading={testingConnection} onClick={handleTestConnection}>
+            测试连接
+          </Button>,
+          <Button
+            key="submit"
+            type="primary"
+            loading={createSubmitting}
+            onClick={handleCreateHostSubmit}
+          >
+            添加并获取命令
+          </Button>,
+        ]}
       >
         <Form
           form={createForm}
@@ -493,6 +593,39 @@ export const VMsPage: React.FC = () => {
             <Input placeholder="例如：192.168.1.100" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* R16 任务1: 批量导入主机 Modal */}
+      <Modal
+        title="批量导入主机 (Batch Import)"
+        open={batchModalOpen}
+        onOk={handleBatchImport}
+        onCancel={() => setBatchModalOpen(false)}
+        confirmLoading={batchSubmitting}
+        destroyOnHidden
+        width={640}
+        okText="确认导入"
+        cancelText="取消"
+      >
+        <Alert
+          type="info"
+          showIcon
+          title="JSON 数组格式，字段：name（必填）、label、ip、user_name（默认 root）"
+          style={{ margin: '16px 0 12px', borderRadius: 6 }}
+        />
+        <Input.TextArea
+          rows={12}
+          value={batchJson}
+          onChange={(e) => setBatchJson(e.target.value)}
+          style={{ fontFamily: 'monospace', fontSize: 12 }}
+          placeholder={`[
+  { "name": "build_node_02", "label": "ci-worker", "ip": "192.168.1.101", "user_name": "root" },
+  { "name": "build_node_03", "label": "ci-worker", "ip": "192.168.1.102", "user_name": "root" }
+]`}
+        />
+        <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
+          导入策略为 skip：同名主机将被跳过，不会覆盖已有配置。
+        </Text>
       </Modal>
 
       {/* 接入命令展示 Modal */}

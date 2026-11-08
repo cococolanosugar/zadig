@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ProTable,
   ModalForm,
@@ -24,6 +24,7 @@ import {
   type RoleItem,
 } from '../../../api/settings';
 import { rbacApi } from '../../../api/rbac';
+import { authApi } from '../../../api/auth';
 import { feedback } from '../../../utils/feedback';
 import { useAuthStore } from '../../../stores/auth';
 import { GroupMembersDrawer } from './GroupMembersDrawer';
@@ -34,6 +35,8 @@ export const UsersPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('users');
   const userActionRef = useRef<ActionType>(null);
   const groupActionRef = useRef<ActionType>(null);
+  // R16 任务4: 系统用户总数统计（GET /api/v1/users/count，异常时静默降级不影响表格）
+  const [userCount, setUserCount] = useState<number | null>(null);
   const userInfo = useAuthStore((state) => state.userInfo);
   const currentAccount = userInfo?.account || '';
 
@@ -42,6 +45,17 @@ export const UsersPage: React.FC = () => {
   const [membersDrawerOpen, setMembersDrawerOpen] = useState<boolean>(false);
   const [editingGroup, setEditingGroup] = useState<UserGroupItem | null>(null);
   const [editGroupModalVisible, setEditGroupModalVisible] = useState<boolean>(false);
+
+  // R16 任务4: 拉取系统用户总数统计（接口异常时保持 null 不展示，不影响表格）
+  useEffect(() => {
+    authApi
+      .getUserCount()
+      .then((res) => {
+        const total = Number(res?.total_user);
+        setUserCount(Number.isFinite(total) ? total : null);
+      })
+      .catch(() => setUserCount(null));
+  }, []);
 
   const handleCreateGroup = async (values: Record<string, unknown>) => {
     try {
@@ -444,6 +458,14 @@ export const UsersPage: React.FC = () => {
                   };
                 }}
                 columns={userColumns}
+                headerTitle={
+                  <Space size={8}>
+                    <span>用户账号管理</span>
+                    {userCount !== null && (
+                      <Tag color="blue">系统用户总数：{userCount}</Tag>
+                    )}
+                  </Space>
+                }
                 toolBarRender={() => [
                   <ModalForm
                     key="add-user"

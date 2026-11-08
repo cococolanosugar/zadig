@@ -61,6 +61,14 @@ export const authApi = {
   },
 
   /**
+   * R16 任务4: 系统用户总数统计
+   * GET /api/v1/users/count (pkg/microservice/user/core/handler/router.go:50, CountSystemUsers)
+   */
+  async getUserCount(): Promise<{ total_user?: number; active_user?: number; [key: string]: unknown }> {
+    return http.get('/api/v1/users/count', { skipErrorHandler: true });
+  },
+
+  /**
    * Authenticate user credentials with envelope encryption.
    */
   async login(
