@@ -91,6 +91,18 @@ export interface ServiceModule {
   update_time?: number;
 }
 
+/** GET /api/aslan/build/build/serviceModule 返回项 */
+export interface ServiceModuleBuildBinding {
+  service_name: string;
+  service_module: string;
+  image_name?: string;
+  module_builds?: Array<{
+    id?: string;
+    name: string;
+    productName?: string;
+  }>;
+}
+
 export interface ManualModuleCreateReq {
   service_name: string;
   name: string;
@@ -822,6 +834,20 @@ export const serviceApi = {
     return http.get<any>(
       `/api/aslan/build/deploy/serviceModule?projectName=${encodeURIComponent(projectName)}&serviceName=${encodeURIComponent(serviceName)}`
     );
+  },
+
+  /**
+   * 按服务组件查询关联构建模块
+   * GET /api/aslan/build/build/serviceModule?projectName=
+   */
+  async listBuildModulesByServiceModule(
+    projectName: string
+  ): Promise<ServiceModuleBuildBinding[]> {
+    const res = await http.get<ServiceModuleBuildBinding[]>(
+      `/api/aslan/build/build/serviceModule?projectName=${encodeURIComponent(projectName)}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
   },
 };
 

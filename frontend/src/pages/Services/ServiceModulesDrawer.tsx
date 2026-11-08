@@ -21,7 +21,9 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
+  BuildOutlined,
 } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import { serviceApi, ServiceModule } from '../../api/service';
 
 const { Text } = Typography;
@@ -44,6 +46,7 @@ export const ServiceModulesDrawer: React.FC<ServiceModulesDrawerProps> = ({
   containers,
 }) => {
   const { message } = App.useApp();
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<'auto' | 'manual'>('auto');
 
@@ -55,6 +58,10 @@ export const ServiceModulesDrawer: React.FC<ServiceModulesDrawerProps> = ({
   // 手工模块
   const [manualModules, setManualModules] = useState<ServiceModule[]>([]);
   const [loadingManual, setLoadingManual] = useState(false);
+
+  // 组件 → 关联构建名（来自 ListBuildModulesByServiceModule）
+  const [moduleBuildMap, setModuleBuildMap] = useState<Record<string, string[]>>({});
+  const [loadingBuilds, setLoadingBuilds] = useState(false);
 
   // 手工模块创建/编辑弹窗
   const [modalVisible, setModalVisible] = useState(false);
@@ -90,12 +97,68 @@ export const ServiceModulesDrawer: React.FC<ServiceModulesDrawerProps> = ({
     }
   }, [serviceName, projectName, isProduction]);
 
+  // 加载服务组件关联的构建名称
+  const loadModuleBuilds = useCallback(async () => {
+    if (!serviceName || !projectName) return;
+    setLoadingBuilds(true);
+    try {
+      const list = await serviceApi.listBuildModulesByServiceModule(projectName);
+      const map: Record<string, string[]> = {};
+      (list || []).forEach((item) => {
+        if (item.service_name !== serviceName) return;
+        const key = item.service_module || item.service_name;
+        const names = (item.module_builds || [])
+          .map((b) => b.name)
+          .filter((n): n is string => !!n);
+        if (key && names.length > 0) {
+          map[key] = Array.from(new Set([...(map[key] || []), ...names]));
+        }
+      });
+      setModuleBuildMap(map);
+    } catch {
+      setModuleBuildMap({});
+    } finally {
+      setLoadingBuilds(false);
+    }
+  }, [serviceName, projectName]);
+
   useEffect(() => {
     if (open && serviceName && projectName) {
       loadAutoModules();
       loadManualModules();
+      loadModuleBuilds();
     }
-  }, [open, serviceName, projectName, loadAutoModules, loadManualModules]);
+  }, [open, serviceName, projectName, loadAutoModules, loadManualModules, loadModuleBuilds]);
+
+  const openBuildDetail = (buildName: string) => {
+    onClose();
+    navigate(
+      `/v1/projects/detail/${encodeURIComponent(projectName)}/builds/detail/${encodeURIComponent(buildName)}`
+    );
+  };
+
+  const renderBuildNames = (moduleName: string) => {
+    const builds = moduleBuildMap[moduleName] || [];
+    if (builds.length === 0) {
+      return <Text type="secondary">未关联</Text>;
+    }
+    return (
+      <Space size={4} wrap>
+        {builds.map((name) => (
+          <Button
+            key={name}
+            type="link"
+            size="small"
+            icon={<BuildOutlined />}
+            style={{ paddingInline: 0 }}
+            onClick={() => openBuildDetail(name)}
+          >
+            {name}
+          </Button>
+        ))}
+      </Space>
+    );
+  };
 
   // 重新识别自动模块
   const handleRecognize = async () => {
@@ -222,6 +285,12 @@ export const ServiceModulesDrawer: React.FC<ServiceModulesDrawerProps> = ({
       render: (inName: string) => <Text type="secondary">{inName || '-'}</Text>,
     },
     {
+      title: '关联构建',
+      key: 'build',
+      width: 180,
+      render: (_: unknown, record: ServiceModule) => renderBuildNames(record.name),
+    },
+    {
       title: '操作',
       key: 'actions',
       width: 100,
@@ -264,6 +333,12 @@ export const ServiceModulesDrawer: React.FC<ServiceModulesDrawerProps> = ({
       dataIndex: 'image_name',
       key: 'image_name',
       render: (inName: string) => <Text type="secondary">{inName || '-'}</Text>,
+    },
+    {
+      title: '关联构建',
+      key: 'build',
+      width: 180,
+      render: (_: unknown, record: ServiceModule) => renderBuildNames(record.name),
     },
     {
       title: '操作',
@@ -311,9 +386,11 @@ export const ServiceModulesDrawer: React.FC<ServiceModulesDrawerProps> = ({
           <Button
             size="small"
             icon={<ReloadOutlined />}
+            loading={loadingBuilds}
             onClick={() => {
               loadAutoModules();
               loadManualModules();
+              loadModuleBuilds();
             }}
           >
             刷新

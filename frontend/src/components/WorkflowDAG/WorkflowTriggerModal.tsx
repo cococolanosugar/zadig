@@ -14,6 +14,8 @@ import {
   Radio,
   Tag,
   Empty,
+  Checkbox,
+  Alert,
 } from 'antd';
 import {
   PlayCircleOutlined,
@@ -21,6 +23,7 @@ import {
   BranchesOutlined,
   CloudServerOutlined,
   TagOutlined,
+  BugOutlined,
 } from '@ant-design/icons';
 import {
   workflowApi,
@@ -169,6 +172,7 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
 }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [debugLoading, setDebugLoading] = useState(false);
   const [presetLoading, setPresetLoading] = useState(false);
   const [preset, setPreset] = useState<Record<string, unknown> | null>(null);
   const [params, setParams] = useState<WorkflowParam[]>([]);
@@ -179,6 +183,10 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
   const [branchOptions, setBranchOptions] = useState<Record<string, string[]>>({});
   const [tagOptions, setTagOptions] = useState<Record<string, string[]>>({});
   const [refLoading, setRefLoading] = useState<Record<string, boolean>>({});
+  const [presetError, setPresetError] = useState<{ message: string; isRegistry: boolean } | null>(
+    null
+  );
+  const [resetCache, setResetCache] = useState(false);
   const navigate = useNavigate();
 
   const hydrateRuntimeEdits = useCallback((stages: WorkflowStage[] | undefined) => {
@@ -305,6 +313,9 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
       setDeployEdits([]);
       setBranchOptions({});
       setTagOptions({});
+      setPresetError(null);
+      setResetCache(false);
+      form.setFieldsValue({ remark: '' });
       workflowApi
         .getWorkflowPreset(workflowName)
         .then((res) => {
@@ -313,7 +324,7 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
             setPreset(rawPreset);
             const pList = res.params || [];
             setParams(pList);
-            const initialValues: Record<string, unknown> = {};
+            const initialValues: Record<string, unknown> = { remark: '' };
             pList.forEach((p) => {
               if (p.type === 'repo' && p.repo) {
                 initialValues[`${p.name}__mode`] = p.repo.tag
@@ -338,7 +349,24 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
             });
           }
         })
-        .catch(() => feedback.message.error('获取工作流执行参数失败'))
+        .catch((err: unknown) => {
+          const errData = (
+            err as { response?: { data?: { message?: string; description?: string } } }
+          )?.response?.data;
+          const desc = errData?.description || '';
+          const msg =
+            errData?.message || (err instanceof Error ? err.message : '') || '获取工作流执行参数失败';
+          const fullMsg = desc ? `${msg}: ${desc}` : msg;
+          const combined = `${msg} ${desc}`.toLowerCase();
+          const isRegistry =
+            combined.includes('registry') ||
+            combined.includes('镜像仓库') ||
+            combined.includes('default registry');
+          setPresetError({ message: fullMsg, isRegistry });
+          if (!isRegistry) {
+            feedback.message.error(fullMsg);
+          }
+        })
         .finally(() => setPresetLoading(false));
     }
   }, [visible, workflowName, form, renderDynamicVar, hydrateRuntimeEdits]);
@@ -468,9 +496,10 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
     }));
   };
 
-  const handleExecute = async () => {
+  const handleExecute = async (debug = false) => {
     if (!preset) return;
-    setLoading(true);
+    if (debug) setDebugLoading(true);
+    else setLoading(true);
     try {
       const values = await form.validateFields();
       const updatedParams = params.map((p) => {
@@ -523,11 +552,18 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
         name: workflowName || (preset.name as string),
         params: updatedParams,
         stages,
+        remark: (values.remark as string) || '',
+        // V4 后端字段为 ignore_cache；reset_cache 兼容旧契约与规格命名
+        ignore_cache: resetCache,
+        reset_cache: resetCache,
+        debug,
       });
 
       const res = await workflowApi.triggerWorkflow(payload);
 
-      feedback.message.success(`工作流 ${workflowName} 已成功启动！`);
+      feedback.message.success(
+        debug ? `工作流 ${workflowName} 已以调试模式启动！` : `工作流 ${workflowName} 已成功启动！`
+      );
       onClose();
 
       const taskId = res?.task_id;
@@ -547,6 +583,7 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
       feedback.message.error(`触发失败: ${msg}`);
     } finally {
       setLoading(false);
+      setDebugLoading(false);
     }
   };
 
@@ -607,7 +644,8 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
   };
 
   const hasRuntimeSections = repoEdits.length > 0 || deployEdits.length > 0;
-  const canSubmit = !presetLoading && !!preset;
+  const canSubmit = !presetLoading && !!preset && !presetError?.isRegistry;
+  const busy = loading || debugLoading;
 
   const envSelectOptions = useMemo(
     () =>
@@ -641,12 +679,21 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
           取消
         </Button>,
         <Button
+          key="debug"
+          icon={<BugOutlined />}
+          loading={debugLoading}
+          disabled={!canSubmit || busy}
+          onClick={() => handleExecute(true)}
+        >
+          调试执行
+        </Button>,
+        <Button
           key="run"
           type="primary"
           icon={<PlayCircleOutlined />}
           loading={loading}
-          disabled={!canSubmit}
-          onClick={() => form.submit()}
+          disabled={!canSubmit || busy}
+          onClick={() => handleExecute(false)}
         >
           立即执行
         </Button>,
@@ -659,8 +706,46 @@ export const WorkflowTriggerModal: React.FC<WorkflowTriggerModalProps> = ({
           <Spin size="large" />
           <div style={{ marginTop: 16, color: '#64748b' }}>正在获取工作流执行参数...</div>
         </div>
+      ) : presetError ? (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginTop: 8 }}
+          title={
+            presetError.isRegistry
+              ? '当前项目尚未配置默认镜像仓库，构建任务需指定镜像仓库'
+              : '获取工作流执行参数失败'
+          }
+          description={
+            <Space orientation="vertical" size={8} style={{ width: '100%' }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {presetError.message}
+              </Text>
+              {presetError.isRegistry && (
+                <Button
+                  type="primary"
+                  onClick={() => {
+                    onClose();
+                    navigate('/v1/system/integration');
+                  }}
+                >
+                  前往系统集成配置镜像仓库
+                </Button>
+              )}
+            </Space>
+          }
+        />
       ) : (
-        <Form form={form} layout="vertical" onFinish={handleExecute} style={{ marginTop: 8 }}>
+        <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
+          <Form.Item name="remark" label="执行备注">
+            <Input.TextArea rows={2} placeholder="请输入执行备注" maxLength={500} showCount />
+          </Form.Item>
+          <Form.Item style={{ marginBottom: 16 }}>
+            <Checkbox checked={resetCache} onChange={(e) => setResetCache(e.target.checked)}>
+              不使用缓存
+            </Checkbox>
+          </Form.Item>
+
           {params.length > 0 && (
             <>
               <Title level={5} style={{ marginTop: 0 }}>

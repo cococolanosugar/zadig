@@ -511,16 +511,25 @@ export const PipelinesPage: React.FC = () => {
           running: { color: 'processing', text: '执行中' },
           failed: { color: 'error', text: '失败' },
           waiting: { color: 'warning', text: '等待审批' },
+          wait_for_approval: { color: 'warning', text: '等待审批' },
+          pause: { color: 'warning', text: '挂起' },
           cancelled: { color: 'default', text: '已取消' },
           timeout: { color: 'error', text: '超时' },
         };
         const m = map[String(recent.status)] || { color: 'default', text: String(recent.status) };
+        const projectKey = record.project || activeProject || '';
         return (
           <Button
             type="link"
             size="small"
             style={{ padding: 0 }}
-            onClick={() => navigate(`/v1/pipelines/${record.name}/task/${recent.task_id}`)}
+            onClick={() =>
+              navigate(
+                projectKey
+                  ? `/v1/projects/detail/${encodeURIComponent(projectKey)}/pipelines/custom/${encodeURIComponent(record.name)}/${recent.task_id}`
+                  : `/v1/pipelines/${record.name}/task/${recent.task_id}`
+              )
+            }
           >
             <Tag color={m.color} style={{ margin: 0 }}>
               #{recent.task_id} {m.text}
@@ -761,22 +770,27 @@ export const PipelinesPage: React.FC = () => {
                     title: '工作流',
                     dataIndex: 'workflow_display_name',
                     key: 'workflow_name',
-                    render: (_, record) => (
-                      <Space orientation="horizontal">
-                        <BranchesOutlined style={{ color: '#0066ff' }} />
-                        <Button
-                          type="link"
-                          style={{ padding: 0, fontWeight: 600 }}
-                          onClick={() =>
-                            navigate(
-                              `/v1/pipelines/${record.workflow_name}/task/${record.task_id}`
-                            )
-                          }
-                        >
-                          {record.workflow_display_name || record.workflow_name} #{record.task_id}
-                        </Button>
-                      </Space>
-                    ),
+                    render: (_, record) => {
+                      const projectKey = record.project_name || activeProject || '';
+                      return (
+                        <Space orientation="horizontal">
+                          <BranchesOutlined style={{ color: '#0066ff' }} />
+                          <Button
+                            type="link"
+                            style={{ padding: 0, fontWeight: 600 }}
+                            onClick={() =>
+                              navigate(
+                                projectKey
+                                  ? `/v1/projects/detail/${encodeURIComponent(projectKey)}/pipelines/custom/${encodeURIComponent(record.workflow_name)}/${record.task_id}`
+                                  : `/v1/pipelines/${record.workflow_name}/task/${record.task_id}`
+                              )
+                            }
+                          >
+                            {record.workflow_display_name || record.workflow_name} #{record.task_id}
+                          </Button>
+                        </Space>
+                      );
+                    },
                   },
                   {
                     title: '所属项目',
@@ -794,12 +808,26 @@ export const PipelinesPage: React.FC = () => {
                         running: { color: 'processing', text: '执行中' },
                         failed: { color: 'error', text: '失败' },
                         waiting: { color: 'warning', text: '等待审批' },
+                        wait_for_approval: { color: 'warning', text: '等待审批' },
+                        pause: { color: 'warning', text: '挂起' },
                         cancelled: { color: 'default', text: '已取消' },
                         timeout: { color: 'error', text: '超时' },
                       };
                       const m = map[String(s)] || { color: 'default', text: String(s || '未知') };
                       return <Tag color={m.color}>{m.text}</Tag>;
                     },
+                  },
+                  {
+                    title: '备注',
+                    dataIndex: 'remark',
+                    key: 'remark',
+                    ellipsis: true,
+                    render: (r) =>
+                      r ? (
+                        <Text type="secondary">{String(r)}</Text>
+                      ) : (
+                        <Text type="secondary">-</Text>
+                      ),
                   },
                   {
                     title: '触发人',
@@ -814,19 +842,45 @@ export const PipelinesPage: React.FC = () => {
                     render: (t) => (t ? new Date(Number(t) * 1000).toLocaleString() : '-'),
                   },
                   {
+                    title: '持续时间',
+                    key: 'duration',
+                    width: 110,
+                    render: (_, record) => {
+                      if (!record.start_time) return <Text type="secondary">-</Text>;
+                      const end = record.end_time || Math.floor(Date.now() / 1000);
+                      const sec = Math.max(0, Number(end) - Number(record.start_time));
+                      if (sec < 60) return <Text type="secondary">{sec}s</Text>;
+                      const m = Math.floor(sec / 60);
+                      const s = sec % 60;
+                      if (m < 60) return <Text type="secondary">{m}m {s}s</Text>;
+                      return (
+                        <Text type="secondary">
+                          {Math.floor(m / 60)}h {m % 60}m
+                        </Text>
+                      );
+                    },
+                  },
+                  {
                     title: '操作',
                     key: 'action',
-                    render: (_, record) => (
-                      <Button
-                        type="link"
-                        size="small"
-                        onClick={() =>
-                          navigate(`/v1/pipelines/${record.workflow_name}/task/${record.task_id}`)
-                        }
-                      >
-                        查看详情
-                      </Button>
-                    ),
+                    render: (_, record) => {
+                      const projectKey = record.project_name || activeProject || '';
+                      return (
+                        <Button
+                          type="link"
+                          size="small"
+                          onClick={() =>
+                            navigate(
+                              projectKey
+                                ? `/v1/projects/detail/${encodeURIComponent(projectKey)}/pipelines/custom/${encodeURIComponent(record.workflow_name)}/${record.task_id}`
+                                : `/v1/pipelines/${record.workflow_name}/task/${record.task_id}`
+                            )
+                          }
+                        >
+                          查看详情
+                        </Button>
+                      );
+                    },
                   },
                 ]}
                 cardBordered={false}

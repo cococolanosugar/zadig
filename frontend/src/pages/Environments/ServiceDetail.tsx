@@ -410,9 +410,10 @@ export const ServiceDetailPage: React.FC = () => {
       render: (status, record) => {
         const s = String(status || '');
         let color: string = 'default';
+        // 对齐规格：Running=success, Pending/Terminating=warning, CrashLoop/ImagePull=error, Completed=default
         if (s === 'Running') color = 'success';
-        else if (s === 'Pending' || s === 'ContainerCreating') color = 'processing';
-        else if (s === 'Succeeded' || s === 'Completed') color = 'blue';
+        else if (s === 'Pending' || s === 'ContainerCreating' || s === 'Terminating') color = 'warning';
+        else if (s === 'Completed' || s === 'Succeeded') color = 'default';
         else if (
           s === 'CrashLoopBackOff' ||
           s === 'Error' ||
@@ -438,13 +439,13 @@ export const ServiceDetailPage: React.FC = () => {
       render: (_, record) => (
         <Space orientation="horizontal" size={0}>
           <Button type="link" size="small" icon={<FileTextOutlined />} onClick={() => openLogs(record)}>
-            日志
+            查看日志
           </Button>
           <Button type="link" size="small" icon={<CodeOutlined />} onClick={() => {
             setTerminalPod({ pod: record.name, container: record.container_name });
             setTerminalVisible(true);
           }}>
-            终端
+            进入终端
           </Button>
           <Button type="link" size="small" icon={<FileSearchOutlined />} onClick={() => openPodDetail(record)}>
             详情
