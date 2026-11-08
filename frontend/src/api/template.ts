@@ -167,7 +167,7 @@ export const templateApi = {
     return http.get(`/api/aslan/template/charts/${encodeURIComponent(chartName)}/variables`);
   },
 
-  async saveChartTemplateVariables(chartName: string, payload: any): Promise<any> {
+  async saveChartTemplateVariables(chartName: string, payload: Array<{ key: string; value: string }>): Promise<any> {
     return http.put(`/api/aslan/template/charts/${encodeURIComponent(chartName)}/variables`, payload);
   },
 
@@ -229,6 +229,17 @@ export interface ScanningTemplatePayload {
 }
 
 export const templateCrudApi = {
+  // ---------- YAML 模板（router.go:65-74） ----------
+  async getYamlTemplate(id: string): Promise<{
+    id: string;
+    name: string;
+    content: string;
+    variable_yaml?: string;
+    variables?: Array<{ key: string; value?: string }>;
+    service_variable_kvs?: Array<{ key: string; value?: string }>;
+  }> {
+    return http.get(`/api/aslan/template/yaml/${encodeURIComponent(id)}`, { skipErrorHandler: true });
+  },
   async createYamlTemplate(payload: { name: string; content: string; variable_yaml?: string }): Promise<unknown> {
     return http.post('/api/aslan/template/yaml', payload, { skipErrorHandler: true });
   },
@@ -237,6 +248,16 @@ export const templateCrudApi = {
   },
   async deleteYamlTemplate(id: string): Promise<unknown> {
     return http.delete(`/api/aslan/template/yaml/${id}`, { skipErrorHandler: true });
+  },
+
+  // ---------- Dockerfile 模板（router.go:54-58） ----------
+  async getDockerfileTemplate(id: string): Promise<{
+    id: string;
+    name: string;
+    content: string;
+    variables?: Array<{ key: string; value?: string }>;
+  }> {
+    return http.get(`/api/aslan/template/dockerfile/${encodeURIComponent(id)}`, { skipErrorHandler: true });
   },
   async createDockerfileTemplate(payload: { name: string; content: string }): Promise<unknown> {
     return http.post('/api/aslan/template/dockerfile', payload, { skipErrorHandler: true });
@@ -341,5 +362,10 @@ export const templateCrudApi = {
 
   async deleteReleasePlanTemplate(id: string): Promise<unknown> {
     return http.delete(`/api/aslan/template/release_plan/${encodeURIComponent(id)}`, { skipErrorHandler: true });
+  },
+
+  // ---------- 工作流模板删除（router.go:97） ----------
+  async deleteWorkflowTemplate(id: string, force?: boolean): Promise<unknown> {
+    return http.delete(`/api/aslan/template/workflow/${encodeURIComponent(id)}${force ? '?force=true' : ''}`, { skipErrorHandler: true });
   },
 };

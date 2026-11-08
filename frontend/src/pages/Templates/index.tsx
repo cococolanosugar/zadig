@@ -57,9 +57,60 @@ export const TemplateCenterPage: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   // 页面级错误通道：列表接口失败时展示错误与重试，不再以空数据误导（P1-05）
   const [listError, setListError] = useState<string | null>(null);
-  // 模板内容查看抽屉（对齐旧版「查看内容」）
-  const [viewing, setViewing] = useState<{ title: string; content: string; variables?: Array<{ key: string; value?: string }> } | null>(null);
+  // 模板内容查看抽屉（对齐旧版「查看内容」，支持异步拉取最新详情）
+  const [viewing, setViewing] = useState<{
+    title: string;
+    content: string;
+    variables?: Array<{ key: string; value?: string }>;
+    loading?: boolean;
+    kind?: string;
+  } | null>(null);
   const [viewingWorkflow, setViewingWorkflow] = useState<WorkflowTemplateItem | null>(null);
+
+  const openViewContent = async (kind: 'yaml' | 'dockerfile' | 'build' | 'scanning', id: string, name: string) => {
+    setViewing({ title: name, content: '', loading: true, kind });
+    try {
+      if (kind === 'yaml') {
+        const detail = await templateCrudApi.getYamlTemplate(id);
+        setViewing({
+          title: detail.name || name,
+          content: detail.content || '（无内容）',
+          variables: detail.variables,
+          loading: false,
+          kind,
+        });
+      } else if (kind === 'dockerfile') {
+        const detail = await templateCrudApi.getDockerfileTemplate(id);
+        setViewing({
+          title: detail.name || name,
+          content: detail.content || '（无内容）',
+          variables: detail.variables,
+          loading: false,
+          kind,
+        });
+      } else if (kind === 'build') {
+        const detail = await templateCrudApi.getBuildTemplate(id);
+        setViewing({
+          title: detail.name || name,
+          content: detail.scripts || '（无脚本）',
+          loading: false,
+          kind,
+        });
+      } else if (kind === 'scanning') {
+        const detail = await templateCrudApi.getScanningTemplate(id);
+        const text = `工具类型: ${detail.scanner_type || 'sonar'}\n启用 Sonar: ${detail.enable_scanner ? '是' : '否'}\n参数:\n${detail.parameter || '-'}\n\n执行脚本:\n${detail.scripts || '-'}`;
+        setViewing({
+          title: detail.name || name,
+          content: text,
+          loading: false,
+          kind,
+        });
+      }
+    } catch (err: unknown) {
+      setViewing(null);
+      feedback.message.error(err instanceof Error ? err.message : '模板内容获取失败');
+    }
+  };
 
   // 模板新建/编辑：YAML/Dockerfile 内容型 + Chart 仓库源 + Build 脚本 + Scanning 配置（P1-02 写能力）
   const [editing, setEditing] = useState<
@@ -172,9 +223,10 @@ export const TemplateCenterPage: React.FC = () => {
   };
 
   // ---------- R9 任务四: Chart 模板 values 变量配置抽屉 ----------
+  type ChartVarRow = { key: string; value: string; description?: string };
   const [chartVarsOpen, setChartVarsOpen] = useState(false);
   const [chartVarsName, setChartVarsName] = useState('');
-  const [chartVarsContent, setChartVarsContent] = useState('');
+  const [chartVarsList, setChartVarsList] = useState<ChartVarRow[]>([]);
   const [chartVarsLoading, setChartVarsLoading] = useState(false);
   const [chartVarsSaving, setChartVarsSaving] = useState(false);
 
@@ -182,12 +234,20 @@ export const TemplateCenterPage: React.FC = () => {
     setChartVarsName(chartName);
     setChartVarsOpen(true);
     setChartVarsLoading(true);
-    setChartVarsContent('');
+    setChartVarsList([]);
     try {
       const res = await templateApi.getChartTemplateVariables(chartName);
-      // 后端返回 values yaml 内容（string 或 {content} 包裹），防御性归一
-      const content = typeof res === 'string' ? res : (res as { content?: string })?.content || JSON.stringify(res, null, 2);
-      setChartVarsContent(content);
+      if (Array.isArray(res)) {
+        setChartVarsList(
+          res.map((item: any) => ({
+            key: String(item.key || ''),
+            value: String(item.value ?? ''),
+            description: item.description,
+          }))
+        );
+      } else {
+        setChartVarsList([]);
+      }
     } catch (err: unknown) {
       feedback.message.error(err instanceof Error ? err.message : 'Chart 模板变量获取失败');
     } finally {
@@ -199,13 +259,24 @@ export const TemplateCenterPage: React.FC = () => {
     if (!chartVarsName) return;
     setChartVarsSaving(true);
     try {
-      await templateApi.saveChartTemplateVariables(chartVarsName, { content: chartVarsContent });
+      const payload = chartVarsList.map((v) => ({ key: v.key, value: v.value }));
+      await templateApi.saveChartTemplateVariables(chartVarsName, payload);
       feedback.message.success('Chart 模板变量已更新');
       setChartVarsOpen(false);
     } catch (err: unknown) {
       feedback.message.error(err instanceof Error ? err.message : 'Chart 模板变量保存失败');
     } finally {
       setChartVarsSaving(false);
+    }
+  };
+
+  const handleDeleteWorkflowTemplate = async (id: string, name?: string) => {
+    try {
+      await templateCrudApi.deleteWorkflowTemplate(id);
+      feedback.message.success('工作流模板已删除');
+      setWorkflowTemplates((prev) => prev.filter((t) => t.id !== id));
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : `删除工作流模板 [${name || id}] 失败`);
     }
   };
 
@@ -264,17 +335,37 @@ export const TemplateCenterPage: React.FC = () => {
     setEditing({ kind, name: '' } as NonNullable<typeof editing>);
   };
 
-  const openEditTemplate = async (kind: 'yaml' | 'dockerfile' | 'chart' | 'build' | 'scanning', id: string | undefined, name: string, content?: string) => {
+  const openEditTemplate = async (kind: 'yaml' | 'dockerfile' | 'chart' | 'build' | 'scanning', id: string | undefined, name: string) => {
     setEditing({ kind, id, name } as NonNullable<typeof editing>);
     setExtractedVars([]);
-    if (kind === 'yaml' || kind === 'dockerfile') {
-      editingForm.setFieldsValue({ name, content: content || '' });
-      return;
-    }
-    // Chart/Build/Scanning：先拉取详情回填（GET /template/charts/:name | /build/:id | /scanning/:id）
     setDetailLoading(true);
     try {
-      if (kind === 'chart' && name) {
+      if (kind === 'yaml' && id) {
+        const detail = await templateCrudApi.getYamlTemplate(id);
+        editingForm.setFieldsValue({
+          name: detail.name || name,
+          content: detail.content || '',
+        });
+        if (detail.variables && detail.variables.length > 0) {
+          setExtractedVars(detail.variables);
+        } else if (detail.content) {
+          try {
+            const vars = await templateApi.extractYamlVariables({ content: detail.content });
+            setExtractedVars(Array.isArray(vars) ? vars : []);
+          } catch {
+            // ignore
+          }
+        }
+      } else if (kind === 'dockerfile' && id) {
+        const detail = await templateCrudApi.getDockerfileTemplate(id);
+        editingForm.setFieldsValue({
+          name: detail.name || name,
+          content: detail.content || '',
+        });
+        if (detail.variables && detail.variables.length > 0) {
+          setExtractedVars(detail.variables);
+        }
+      } else if (kind === 'chart' && name) {
         const detail = await templateCrudApi.getChartTemplate(name);
         editingForm.setFieldsValue({
           name: detail.name || name,
@@ -763,7 +854,21 @@ export const TemplateCenterPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid #f0f2f5', display: 'flex', justifyContent: 'flex-end' }}>
+                      <div style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid #f0f2f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          {!item.build_in && (
+                            <Popconfirm
+                              title={`确定删除自定义工作流模板 [${displayName}]？`}
+                              onConfirm={() => handleDeleteWorkflowTemplate(item.id, displayName)}
+                              okText="删除"
+                              cancelText="取消"
+                            >
+                              <Button type="link" danger size="small" style={{ padding: 0 }}>
+                                删除
+                              </Button>
+                            </Popconfirm>
+                          )}
+                        </div>
                         <Button
                           type="link"
                           size="small"
@@ -794,22 +899,22 @@ export const TemplateCenterPage: React.FC = () => {
               },
               { title: '操作', key: 'action', render: (_, r: YamlTemplateItem) => (
                 <Space size={0}>
-                  <Button type="link" onClick={() => setViewing({ title: r.name, content: r.content || '', variables: r.variables })}>
-                    查看内容
-                  </Button>
-                  {r.id && (
+                  {r.id ? (
                     <>
+                      <Button type="link" onClick={() => openViewContent('yaml', r.id as string, r.name)}>
+                        查看内容
+                      </Button>
                       <Button type="link" onClick={() => openReferenceDrawer({ kind: 'yaml', id: r.id as string, name: r.name })}>
                         引用
                       </Button>
-                      <Button type="link" onClick={() => openEditTemplate('yaml', r.id as string, r.name, r.content || '')}>
+                      <Button type="link" onClick={() => openEditTemplate('yaml', r.id as string, r.name)}>
                         编辑
                       </Button>
                       <Popconfirm title={`确定删除模板 [${r.name}]？`} onConfirm={() => handleDeleteYamlTemplate(r.id as string)}>
                         <Button type="link" danger>删除</Button>
                       </Popconfirm>
                     </>
-                  )}
+                  ) : null}
                 </Space>
               ) },
             ]}
@@ -850,22 +955,22 @@ export const TemplateCenterPage: React.FC = () => {
               },
               { title: '操作', key: 'action', render: (_, r: DockerfileTemplateItem) => (
                 <Space size={0}>
-                  <Button type="link" onClick={() => setViewing({ title: r.name, content: r.content || '' })}>
-                    查看内容
-                  </Button>
-                  {r.id && (
+                  {r.id ? (
                     <>
+                      <Button type="link" onClick={() => openViewContent('dockerfile', r.id as string, r.name)}>
+                        查看内容
+                      </Button>
                       <Button type="link" onClick={() => openReferenceDrawer({ kind: 'dockerfile', id: r.id as string, name: r.name })}>
                         引用
                       </Button>
-                      <Button type="link" onClick={() => openEditTemplate('dockerfile', r.id as string, r.name, r.content || '')}>
+                      <Button type="link" onClick={() => openEditTemplate('dockerfile', r.id as string, r.name)}>
                         编辑
                       </Button>
                       <Popconfirm title={`确定删除模板 [${r.name}]？`} onConfirm={() => handleDeleteDockerfileTemplate(r.id as string)}>
                         <Button type="link" danger>删除</Button>
                       </Popconfirm>
                     </>
-                  )}
+                  ) : null}
                 </Space>
               ) },
             ]}
@@ -964,6 +1069,9 @@ export const TemplateCenterPage: React.FC = () => {
                   <Space size={0}>
                     {r.id && (
                       <>
+                        <Button type="link" onClick={() => openViewContent('build', r.id as string, r.name)}>
+                          查看脚本
+                        </Button>
                         <Button type="link" onClick={() => openReferenceDrawer({ kind: 'build', id: r.id as string, name: r.name })}>
                           引用
                         </Button>
@@ -1026,6 +1134,9 @@ export const TemplateCenterPage: React.FC = () => {
                   <Space size={0}>
                     {r.id && (
                       <>
+                        <Button type="link" onClick={() => openViewContent('scanning', r.id as string, r.name)}>
+                          查看配置
+                        </Button>
                         <Button type="link" onClick={() => openReferenceDrawer({ kind: 'scanning', id: r.id as string, name: r.name })}>
                           引用
                         </Button>
@@ -1282,7 +1393,7 @@ export const TemplateCenterPage: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* Template Content View Drawer (k8s-yamls / dockerfiles) */}
+      {/* Template Content View Drawer (k8s-yamls / dockerfiles / builds / scanners) */}
       <Drawer
         title={`模板内容: ${viewing?.title || ''}`}
         placement="right"
@@ -1290,35 +1401,37 @@ export const TemplateCenterPage: React.FC = () => {
         onClose={() => setViewing(null)}
         size="large"
       >
-        {viewing && (
-          <div>
-            {viewing.variables && viewing.variables.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <Text strong style={{ display: 'block', marginBottom: 8 }}>变量定义</Text>
-                <Space orientation="horizontal" size={4} wrap>
-                  {viewing.variables.map((v) => (
-                    <Tag key={v.key} color="geekblue">{v.key}</Tag>
-                  ))}
-                </Space>
-              </div>
-            )}
-            <pre
-              style={{
-                background: '#f5f7fa',
-                padding: 16,
-                borderRadius: 8,
-                fontSize: 12,
-                lineHeight: 1.8,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-all',
-                maxHeight: 520,
-                overflow: 'auto',
-              }}
-            >
-              {viewing.content || '（无内容）'}
-            </pre>
-          </div>
-        )}
+        <Spin spinning={!!viewing?.loading}>
+          {viewing && (
+            <div>
+              {viewing.variables && viewing.variables.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <Text strong style={{ display: 'block', marginBottom: 8 }}>变量定义</Text>
+                  <Space orientation="horizontal" size={4} wrap>
+                    {viewing.variables.map((v) => (
+                      <Tag key={v.key} color="geekblue">{v.key}</Tag>
+                    ))}
+                  </Space>
+                </div>
+              )}
+              <pre
+                style={{
+                  background: '#f5f7fa',
+                  padding: 16,
+                  borderRadius: 8,
+                  fontSize: 12,
+                  lineHeight: 1.8,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  maxHeight: 520,
+                  overflow: 'auto',
+                }}
+              >
+                {viewing.content || '（无内容）'}
+              </pre>
+            </div>
+          )}
+        </Spin>
       </Drawer>
 
       {/* Workflow Template Orchestration View Drawer */}
@@ -1482,30 +1595,79 @@ export const TemplateCenterPage: React.FC = () => {
         onClose={() => setChartVarsOpen(false)}
         size="large"
         extra={
-          <Button
-            type="primary"
-            size="small"
-            icon={<CheckCircleOutlined />}
-            loading={chartVarsSaving}
-            onClick={handleSaveChartVars}
-          >
-            保存变量
-          </Button>
+          chartVarsList.length > 0 ? (
+            <Button
+              type="primary"
+              size="small"
+              icon={<CheckCircleOutlined />}
+              loading={chartVarsSaving}
+              onClick={handleSaveChartVars}
+            >
+              保存变量
+            </Button>
+          ) : null
         }
       >
-        {chartVarsLoading ? (
-          <div style={{ textAlign: 'center', padding: '60px 0' }}>
-            <Spin size="large" />
-          </div>
-        ) : (
-          <Input.TextArea
-            rows={24}
-            value={chartVarsContent}
-            onChange={(e) => setChartVarsContent(e.target.value)}
-            style={{ fontFamily: 'monospace', fontSize: 13 }}
-            placeholder="Chart 模板 values 变量内容"
-          />
-        )}
+        <Spin spinning={chartVarsLoading}>
+          {chartVarsList.length > 0 ? (
+            <div>
+              <Alert
+                type="info"
+                showIcon
+                title="可针对该 Chart 模板定义的所有变量调整其默认值，保存后在基于该模板新建或渲染服务时生效。"
+                style={{ marginBottom: 16, borderRadius: 6 }}
+              />
+              <Table
+                dataSource={chartVarsList}
+                rowKey="key"
+                pagination={false}
+                size="small"
+                columns={[
+                  {
+                    title: '变量标识 (Key)',
+                    dataIndex: 'key',
+                    key: 'key',
+                    width: 220,
+                    render: (k) => <Text strong code>{k}</Text>,
+                  },
+                  {
+                    title: '默认值 (Value)',
+                    dataIndex: 'value',
+                    key: 'value',
+                    render: (val, _, idx) => (
+                      <Input
+                        value={val}
+                        placeholder="请输入变量默认值"
+                        size="small"
+                        onChange={(e) => {
+                          const nextVal = e.target.value;
+                          setChartVarsList((prev) => {
+                            const copy = [...prev];
+                            copy[idx] = { ...copy[idx], value: nextVal };
+                            return copy;
+                          });
+                        }}
+                      />
+                    ),
+                  },
+                  {
+                    title: '说明',
+                    dataIndex: 'description',
+                    key: 'description',
+                    width: 140,
+                    render: (d) => <Text type="secondary" style={{ fontSize: 12 }}>{d || '-'}</Text>,
+                  },
+                ]}
+              />
+            </div>
+          ) : (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description="该 Chart 模板暂无已提取的变量定义"
+              style={{ padding: '40px 0' }}
+            />
+          )}
+        </Spin>
       </Drawer>
 
       {/* R9 任务五: 发布计划模板详情抽屉 */}
