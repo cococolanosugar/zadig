@@ -75,7 +75,7 @@ import systemConfigApi, {
 } from '../../../api/systemConfig';
 import emailApi from '../../../api/email';
 import authApi from '../../../api/auth';
-import settingsApi, { type ProxyConfig } from '../../../api/settings';
+import settingsApi, { type ProxyConfig, type OperationLogItem } from '../../../api/settings';
 import workflowApi from '../../../api/workflow';
 import { feedback } from '../../../utils/feedback';
 
@@ -134,16 +134,6 @@ interface PluginRepoItem {
   update_time?: number;
   plugin_templates?: unknown[];
   [key: string]: unknown;
-}
-
-interface OperationLogItem {
-  id: string;
-  username: string;
-  product_name: string;
-  function: string;
-  method: string;
-  status: number;
-  created_at: number;
 }
 
 export interface LabelSettingItem {
@@ -219,6 +209,14 @@ export const SystemConfigPage: React.FC = () => {
   const [repoSaving, setRepoSaving] = useState(false);
   const [codehostOptions, setCodehostOptions] = useState<Array<{ label: string; value: number }>>([]);
   const [operationLogs, setOperationLogs] = useState<OperationLogItem[]>([]);
+  // LOOP9-A1: 审计日志服务端分页与筛选
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditPageSize, setAuditPageSize] = useState(20);
+  const [auditFilterForm] = Form.useForm();
+  const [auditDetailOpen, setAuditDetailOpen] = useState(false);
+  const [selectedAuditLog, setSelectedAuditLog] = useState<OperationLogItem | null>(null);
 
   // Modals
   const [imageModalVisible, setImageModalVisible] = useState(false);
@@ -279,6 +277,40 @@ export const SystemConfigPage: React.FC = () => {
   const [editingLabel, setEditingLabel] = useState<LabelSettingItem | null>(null);
   const [labelForm] = Form.useForm();
   const [savingLabel, setSavingLabel] = useState(false);
+
+  // LOOP9-A1: 拉取操作审计日志（支持筛选与服务端分页）
+  const fetchOperationLogs = useCallback(
+    async (overrides?: { page?: number; per_page?: number }) => {
+      setAuditLoading(true);
+      try {
+        const filters = auditFilterForm.getFieldsValue() as {
+          username?: string;
+          projectName?: string;
+          status?: number;
+        };
+        const page = overrides?.page ?? auditPage;
+        const per_page = overrides?.per_page ?? auditPageSize;
+        const res = await settingsApi.getOperationLogs({
+          page,
+          per_page,
+          status: filters.status ?? 0,
+          username: filters.username?.trim() || undefined,
+          projectName: filters.projectName?.trim() || undefined,
+        });
+        setOperationLogs(Array.isArray(res?.operation_logs) ? res.operation_logs : []);
+        setAuditTotal(Number(res?.total) || 0);
+        if (overrides?.page != null) setAuditPage(overrides.page);
+        if (overrides?.per_page != null) setAuditPageSize(overrides.per_page);
+      } catch {
+        setOperationLogs([]);
+        setAuditTotal(0);
+        feedback.message.error('加载操作审计日志失败');
+      } finally {
+        setAuditLoading(false);
+      }
+    },
+    [auditFilterForm, auditPage, auditPageSize]
+  );
 
   const loadTabData = useCallback(async (tab: string) => {
     setLoading(true);
@@ -362,13 +394,8 @@ export const SystemConfigPage: React.FC = () => {
           });
         }
       } else if (tab === 'auditlog') {
-        const res = await http.get<{ operation_logs?: OperationLogItem[] }>(
-          '/api/aslan/system/operation?status=0&per_page=50&page=1',
-          { skipErrorHandler: true }
-        );
-        if (res && Array.isArray(res.operation_logs)) {
-          setOperationLogs(res.operation_logs);
-        }
+        // LOOP9-A1: 切换到审计 Tab 时按当前筛选拉取
+        await fetchOperationLogs({ page: 1, per_page: auditPageSize });
       } else if (tab === 'aiCodeReview') {
         const [cfgRes, llmRes] = await Promise.all([
           http.get<Record<string, unknown>>('/api/aslan/system/ai/review', { skipErrorHandler: true }),
@@ -508,7 +535,7 @@ export const SystemConfigPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [emailForm, concurrencyForm, proxyForm, aiReviewForm, cronForm, securityForm, serverUrlForm, workflowHookForm, navForm]);
+  }, [emailForm, concurrencyForm, proxyForm, aiReviewForm, cronForm, securityForm, serverUrlForm, workflowHookForm, navForm, fetchOperationLogs, auditPageSize]);
 
   useEffect(() => {
     loadTabData(activeTab);
@@ -3233,32 +3260,189 @@ export const SystemConfigPage: React.FC = () => {
             </Modal>
           </div>
         ) : (
-          <Table
-            dataSource={operationLogs}
-            rowKey="id"
-            columns={[
-              { title: '操作账号', dataIndex: 'username', key: 'username', render: (u) => <Text strong>{u}</Text> },
-              { title: '所属项目', dataIndex: 'product_name', key: 'product_name', render: (p) => <Tag color="blue">{p || '系统'}</Tag> },
-              { title: '功能模块', dataIndex: 'function', key: 'function', render: (f) => f || '-' },
-              { title: '操作行为', dataIndex: 'method', key: 'method', render: (m) => <Tag color="cyan">{m}</Tag> },
-              {
-                title: '执行结果',
-                dataIndex: 'status',
-                key: 'status',
-                render: (s) => <Tag color={s === 200 || s === 0 ? 'green' : 'red'}>{s === 200 || s === 0 ? '成功' : '失败'}</Tag>,
-              },
-              {
-                title: '操作时间',
-                dataIndex: 'created_at',
-                key: 'created_at',
-                render: (t) => (t ? new Date(t * 1000).toLocaleString('zh-CN') : '-'),
-              },
-            ]}
-            pagination={{ pageSize: 15 }}
-            locale={{
-              emptyText: <Empty description="暂无操作审计日志记录" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
-            }}
-          />
+          <div>
+            {/* LOOP9-A1: 多维筛选 + 服务端分页 + 详情抽屉 */}
+            <Form
+              form={auditFilterForm}
+              layout="inline"
+              style={{ marginBottom: 16, gap: 8, flexWrap: 'wrap' }}
+              initialValues={{ status: 0 }}
+              onFinish={() => fetchOperationLogs({ page: 1 })}
+            >
+              <Form.Item name="username" label="操作账号">
+                <Input allowClear placeholder="用户名" style={{ width: 160 }} />
+              </Form.Item>
+              <Form.Item name="projectName" label="项目名">
+                <Input allowClear placeholder="projectName" style={{ width: 160 }} />
+              </Form.Item>
+              <Form.Item name="status" label="执行状态">
+                <Select
+                  style={{ width: 120 }}
+                  options={[
+                    { label: '全部', value: 0 },
+                    { label: '成功', value: 200 },
+                    { label: '失败', value: 500 },
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item>
+                <Space>
+                  <Button type="primary" htmlType="submit" icon={<FileSearchOutlined />} loading={auditLoading}>
+                    搜索
+                  </Button>
+                  <Button
+                    icon={<ReloadOutlined />}
+                    onClick={() => {
+                      auditFilterForm.resetFields();
+                      fetchOperationLogs({ page: 1 });
+                    }}
+                  >
+                    重置
+                  </Button>
+                </Space>
+              </Form.Item>
+            </Form>
+            <Table
+              loading={auditLoading || loading}
+              dataSource={operationLogs}
+              rowKey={(r) => r.id || `${r.username}-${r.created_at}`}
+              columns={[
+                { title: '操作账号', dataIndex: 'username', key: 'username', render: (u) => <Text strong>{u}</Text> },
+                {
+                  title: '所属项目',
+                  dataIndex: 'product_name',
+                  key: 'product_name',
+                  render: (p) => <Tag color="blue">{p || '系统'}</Tag>,
+                },
+                { title: '功能模块', dataIndex: 'function', key: 'function', render: (f) => f || '-' },
+                {
+                  title: '操作行为',
+                  dataIndex: 'method',
+                  key: 'method',
+                  render: (m) => <Tag color="cyan">{m}</Tag>,
+                },
+                {
+                  title: '执行结果',
+                  dataIndex: 'status',
+                  key: 'status',
+                  render: (s) => (
+                    <Tag color={s === 200 || s === 0 ? 'green' : 'red'}>
+                      {s === 200 || s === 0 ? '成功' : '失败'}
+                    </Tag>
+                  ),
+                },
+                {
+                  title: '操作时间',
+                  dataIndex: 'created_at',
+                  key: 'created_at',
+                  render: (t) => (t ? new Date(t * 1000).toLocaleString('zh-CN') : '-'),
+                },
+                {
+                  title: '操作',
+                  key: 'action',
+                  width: 90,
+                  render: (_, record) => (
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<EyeOutlined />}
+                      onClick={() => {
+                        setSelectedAuditLog(record);
+                        setAuditDetailOpen(true);
+                      }}
+                    >
+                      详情
+                    </Button>
+                  ),
+                },
+              ]}
+              pagination={{
+                current: auditPage,
+                pageSize: auditPageSize,
+                total: auditTotal,
+                showSizeChanger: true,
+                showTotal: (total) => `共 ${total} 条`,
+                onChange: (page, pageSize) => {
+                  fetchOperationLogs({ page, per_page: pageSize });
+                },
+              }}
+              locale={{
+                emptyText: <Empty description="暂无操作审计日志记录" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+              }}
+            />
+            <Drawer
+              title="操作审计详情"
+              open={auditDetailOpen}
+              onClose={() => {
+                setAuditDetailOpen(false);
+                setSelectedAuditLog(null);
+              }}
+              size="large"
+              destroyOnHidden
+            >
+              {selectedAuditLog && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <Descriptions bordered column={1} size="small">
+                    <Descriptions.Item label="操作账号">{selectedAuditLog.username || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="项目名">{selectedAuditLog.product_name || '系统'}</Descriptions.Item>
+                    <Descriptions.Item label="功能模块">{selectedAuditLog.function || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="操作方式">
+                      <Tag color="cyan">{selectedAuditLog.method || '-'}</Tag>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="执行状态">
+                      <Tag color={selectedAuditLog.status === 200 || selectedAuditLog.status === 0 ? 'green' : 'red'}>
+                        {selectedAuditLog.status === 200 || selectedAuditLog.status === 0 ? '成功' : '失败'}
+                        {` (${selectedAuditLog.status})`}
+                      </Tag>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="创建时间">
+                      {selectedAuditLog.created_at
+                        ? new Date(selectedAuditLog.created_at * 1000).toLocaleString('zh-CN')
+                        : '-'}
+                    </Descriptions.Item>
+                  </Descriptions>
+                  <div>
+                    <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                      操作目标
+                    </Text>
+                    {selectedAuditLog.targets && selectedAuditLog.targets.length > 0 ? (
+                      <Space size={[4, 4]} wrap>
+                        {selectedAuditLog.targets.map((t) => (
+                          <Tag key={t}>{t}</Tag>
+                        ))}
+                      </Space>
+                    ) : (
+                      <Text type="secondary">无目标清单</Text>
+                    )}
+                  </div>
+                  <div>
+                    <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                      请求体
+                    </Text>
+                    {selectedAuditLog.request_body ? (
+                      <pre
+                        style={{
+                          margin: 0,
+                          padding: 12,
+                          background: '#f5f5f5',
+                          borderRadius: 6,
+                          fontSize: 12,
+                          maxHeight: 420,
+                          overflow: 'auto',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-all',
+                        }}
+                      >
+                        {selectedAuditLog.request_body}
+                      </pre>
+                    ) : (
+                      <Empty description="无请求体" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                    )}
+                  </div>
+                </div>
+              )}
+            </Drawer>
+          </div>
         )}
       </Card>
 

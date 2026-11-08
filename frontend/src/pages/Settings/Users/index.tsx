@@ -46,6 +46,12 @@ export const UsersPage: React.FC = () => {
   const [editingGroup, setEditingGroup] = useState<UserGroupItem | null>(null);
   const [editGroupModalVisible, setEditGroupModalVisible] = useState<boolean>(false);
 
+  // LOOP9-A2: 编辑用户
+  const [editUserModalVisible, setEditUserModalVisible] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserManagementItem | null>(null);
+  const [editUserForm] = Form.useForm();
+  const [editUserSubmitting, setEditUserSubmitting] = useState(false);
+
   // R16 任务4: 拉取系统用户总数统计（接口异常时保持 null 不展示，不影响表格）
   useEffect(() => {
     authApi
@@ -111,6 +117,43 @@ export const UsersPage: React.FC = () => {
         || (err instanceof Error ? err.message : '')
         || '删除用户失败，请检查权限';
       feedback.message.error(msg);
+    }
+  };
+
+  // LOOP9-A2: 打开编辑用户弹窗
+  const handleOpenEditUser = (record: UserManagementItem) => {
+    setEditingUser(record);
+    editUserForm.setFieldsValue({
+      name: record.name || '',
+      email: record.email || '',
+      phone: record.phone || '',
+    });
+    setEditUserModalVisible(true);
+  };
+
+  const handleUpdateUser = async () => {
+    if (!editingUser) return;
+    try {
+      const values = await editUserForm.validateFields();
+      setEditUserSubmitting(true);
+      await settingsApi.updateUser(editingUser.uid, {
+        name: values.name,
+        email: values.email,
+        phone: values.phone,
+      });
+      feedback.message.success(`用户 [${editingUser.account}] 信息已更新`);
+      setEditUserModalVisible(false);
+      setEditingUser(null);
+      userActionRef.current?.reload();
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'errorFields' in err) return;
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        (err instanceof Error ? err.message : '') ||
+        '更新用户信息失败';
+      feedback.message.error(msg);
+    } finally {
+      setEditUserSubmitting(false);
     }
   };
 
@@ -198,12 +241,14 @@ export const UsersPage: React.FC = () => {
       title: '电子邮箱',
       dataIndex: 'email',
       key: 'email',
+      search: false,
       render: (text) => <Text type="secondary">{String(text || '-')}</Text>,
     },
     {
       title: '账号来源',
       dataIndex: 'identity_type',
       key: 'identity_type',
+      search: false,
       render: (text) => (
         <Tag color="blue">{String(text || 'system')}</Tag>
       ),
@@ -212,8 +257,18 @@ export const UsersPage: React.FC = () => {
       title: '操作',
       valueType: 'option',
       key: 'option',
-      width: 240,
+      search: false,
+      width: 300,
       render: (_, record) => [
+        <Button
+          key="edit"
+          type="link"
+          size="small"
+          icon={<EditOutlined />}
+          onClick={() => handleOpenEditUser(record)}
+        >
+          编辑
+        </Button>,
         <Button
           key="reset-pwd"
           type="link"
@@ -446,15 +501,20 @@ export const UsersPage: React.FC = () => {
               <ProTable<UserManagementItem>
                 actionRef={userActionRef}
                 rowKey="uid"
-                search={false}
+                search={{ labelWidth: 'auto' }}
                 cardBordered={false}
                 options={{ density: false, fullScreen: true, reload: true, setting: false }}
-                request={async () => {
-                  const list = await settingsApi.getUsers();
+                request={async (params) => {
+                  // LOOP9-A2: 服务端分页 + 姓名/账号关键词检索
+                  const res = await settingsApi.getUsersPaged({
+                    page: params.current || 1,
+                    per_page: params.pageSize || 20,
+                    name: (params.name as string) || (params.account as string) || undefined,
+                  });
                   return {
-                    data: list,
+                    data: res.users,
                     success: true,
-                    total: list.length,
+                    total: res.total,
                   };
                 }}
                 columns={userColumns}
@@ -651,6 +711,43 @@ export const UsersPage: React.FC = () => {
             ]}
           >
             <Input.Password placeholder="再次输入新密码" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* LOOP9-A2: 编辑用户信息 Modal */}
+      <Modal
+        title={`编辑用户: ${editingUser?.account || ''}`}
+        open={editUserModalVisible}
+        onCancel={() => {
+          setEditUserModalVisible(false);
+          setEditingUser(null);
+        }}
+        onOk={handleUpdateUser}
+        confirmLoading={editUserSubmitting}
+        okText="保存"
+        cancelText="取消"
+        destroyOnHidden
+      >
+        <Form form={editUserForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item
+            name="name"
+            label="显示姓名"
+            rules={[{ required: true, message: '请输入显示姓名' }]}
+          >
+            <Input placeholder="用户显示名称" />
+          </Form.Item>
+          <Form.Item
+            name="email"
+            label="工作邮箱"
+            rules={[
+              { type: 'email', message: '请输入合法的邮箱地址' },
+            ]}
+          >
+            <Input placeholder="user@example.com" />
+          </Form.Item>
+          <Form.Item name="phone" label="联系电话">
+            <Input placeholder="可选，手机号或座机" />
           </Form.Item>
         </Form>
       </Modal>

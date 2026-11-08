@@ -161,6 +161,41 @@ export interface UserManagementItem {
   created_at?: number;
 }
 
+/** LOOP9-A1: 系统操作审计日志 */
+export interface OperationLogItem {
+  id: string;
+  username: string;
+  product_name: string;
+  function: string;
+  method: string;
+  scene?: string;
+  targets?: string[];
+  name?: string;
+  name_en?: string;
+  request_body?: string;
+  body_type?: string;
+  status: number;
+  created_at: number;
+}
+
+export interface OperationLogResp {
+  operation_logs: OperationLogItem[];
+  total: number;
+  i18n?: {
+    method_i18_map?: Record<string, string>;
+    function_i18_map?: Record<string, string>;
+  };
+}
+
+export interface GetOperationLogsParams {
+  page?: number;
+  per_page?: number;
+  status?: number;
+  username?: string;
+  projectName?: string;
+  function?: string;
+}
+
 export interface UserGroupItem {
   id: string;
   group_id?: string;
@@ -476,8 +511,33 @@ export const settingsApi = {
     return [];
   },
 
+  /** LOOP9-A2: 服务端分页用户检索 */
+  async getUsersPaged(
+    params: { page?: number; per_page?: number; name?: string } = {}
+  ): Promise<{ users: UserManagementItem[]; total: number }> {
+    const res = await http.post<{ users?: UserManagementItem[]; total_count?: number } | UserManagementItem[]>(
+      '/api/v1/users/search',
+      {
+        page: params.page || 1,
+        per_page: params.per_page || 20,
+        name: params.name || undefined,
+      },
+      { skipErrorHandler: true }
+    );
+    if (Array.isArray(res)) return { users: res, total: res.length };
+    if (res && 'users' in res && Array.isArray(res.users)) {
+      return { users: res.users, total: res.total_count ?? res.users.length };
+    }
+    return { users: [], total: 0 };
+  },
+
   async createUser(payload: Partial<UserManagementItem> & { password?: string }): Promise<unknown> {
     return http.post('/api/v1/users', payload);
+  },
+
+  /** LOOP9-A2: 更新用户基本信息 */
+  async updateUser(uid: string, payload: { name?: string; email?: string; phone?: string }): Promise<void> {
+    return http.put(`/api/v1/users/${uid}`, payload);
   },
 
   // R8 任务3: 重置用户密码（PUT /users/:uid/password，后端 permission.Password 契约
@@ -498,6 +558,18 @@ export const settingsApi = {
 
   async deleteUser(uid: string): Promise<unknown> {
     return http.delete(`/api/v1/users/${uid}`);
+  },
+
+  /** LOOP9-A1: 系统操作审计日志多维检索 */
+  async getOperationLogs(params: GetOperationLogsParams = {}): Promise<OperationLogResp> {
+    const query = new URLSearchParams();
+    query.set('status', String(params.status ?? 0));
+    query.set('page', String(params.page ?? 1));
+    query.set('per_page', String(params.per_page ?? 20));
+    if (params.username) query.set('username', params.username);
+    if (params.projectName) query.set('projectName', params.projectName);
+    if (params.function) query.set('function', params.function);
+    return http.get(`/api/aslan/system/operation?${query.toString()}`);
   },
 
   // P1-E1: HTTP 故障异常上抛
