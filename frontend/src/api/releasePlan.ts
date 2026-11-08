@@ -93,6 +93,16 @@ export const releasePlanApi = {
   async updateHookSettings(payload: ReleasePlanHookSettings): Promise<void> {
     await http.put('/api/aslan/release_plan/v1/hook/setting', payload);
   },
+
+  /**
+   * LOOP6-B2: 定时/预约执行发布计划
+   * POST /api/aslan/release_plan/plan/:id/schedule_execute
+   */
+  async scheduleExecuteReleasePlan(id: string, scheduleExecuteTime: number): Promise<any> {
+    return http.post(`/api/aslan/release_plan/plan/${encodeURIComponent(id)}/schedule_execute`, {
+      schedule_execute_time: scheduleExecuteTime,
+    });
+  },
 };
 
 export interface ReleasePlanHookSettings {

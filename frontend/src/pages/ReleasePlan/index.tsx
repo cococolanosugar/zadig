@@ -342,16 +342,36 @@ export const ReleasePlanPage: React.FC = () => {
       key: 'status',
       width: 140,
       render: (status) => {
-        switch (status) {
-          case 'success':
-            return <Badge status="success" text={<Text style={{ color: '#52c41a' }}>已完成</Text>} />;
-          case 'executing':
-            return <Badge status="processing" text={<Text style={{ color: '#0066ff' }}>发布中</Text>} />;
-          case 'failed':
-            return <Badge status="error" text={<Text style={{ color: '#ff4d4f' }}>异常挂起</Text>} />;
-          default:
-            return <Badge status="default" text={<Text type="secondary">规划中</Text>} />;
+        // LOOP6-B1: 全量发布计划状态机映射（对齐 consts.go 16 种合法状态）
+        const s = String(status || '');
+        if (s === 'success') {
+          return <Badge status="success" text={<Text style={{ color: '#52c41a' }}>已完成</Text>} />;
         }
+        if (s === 'executing') {
+          return <Badge status="processing" text={<Text style={{ color: '#0066ff' }}>发布中</Text>} />;
+        }
+        if (s === 'failed') {
+          return <Badge status="error" text={<Text style={{ color: '#ff4d4f' }}>执行失败</Text>} />;
+        }
+        if (s === 'denied') {
+          return <Badge status="error" text={<Text style={{ color: '#cf1322' }}>审批驳回</Text>} />;
+        }
+        if (s === 'timeout') {
+          return <Badge status="warning" text={<Text style={{ color: '#fa8c16' }}>窗口超时</Text>} />;
+        }
+        if (s === 'cancel') {
+          return <Badge status="default" text={<Text type="secondary">已终止</Text>} />;
+        }
+        if (s === 'finish_planning') {
+          return <Badge status="processing" text={<Text style={{ color: '#13c2c2' }}>待执行</Text>} />;
+        }
+        if (s === 'wait_for_approval') {
+          return <Badge status="warning" text={<Text style={{ color: '#faad14' }}>待审批</Text>} />;
+        }
+        if (s.startsWith('wait_for_')) {
+          return <Badge status="warning" text={<Text style={{ color: '#faad14' }}>外部确认中</Text>} />;
+        }
+        return <Badge status="default" text={<Text type="secondary">规划中</Text>} />;
       },
     },
     {
@@ -570,7 +590,25 @@ export const ReleasePlanPage: React.FC = () => {
             <Descriptions bordered column={1} size="small" style={{ marginBottom: 24 }}>
               <Descriptions.Item label="计划名称">{planDetail?.name || activePlan.name}</Descriptions.Item>
               <Descriptions.Item label="当前状态">
-                <Tag color="blue">{planDetail?.status || activePlan.status || 'planning'}</Tag>
+                {(() => {
+                  // LOOP6-B1: 详情顶部状态 Tag 全量映射，避免驳回/终止误显为 planning
+                  const s = String(planDetail?.status || activePlan.status || 'planning');
+                  const map: Record<string, { color: string; label: string }> = {
+                    success: { color: 'success', label: '已完成' },
+                    executing: { color: 'processing', label: '发布中' },
+                    failed: { color: 'error', label: '执行失败' },
+                    denied: { color: 'error', label: '审批驳回' },
+                    timeout: { color: 'warning', label: '窗口超时' },
+                    cancel: { color: 'default', label: '已终止' },
+                    finish_planning: { color: 'cyan', label: '待执行' },
+                    wait_for_approval: { color: 'warning', label: '待审批' },
+                    planning: { color: 'default', label: '规划中' },
+                  };
+                  const hit = map[s] || (s.startsWith('wait_for_')
+                    ? { color: 'warning', label: '外部确认中' }
+                    : { color: 'default', label: '规划中' });
+                  return <Tag color={hit.color}>{hit.label}</Tag>;
+                })()}
               </Descriptions.Item>
               <Descriptions.Item label="责任人">{planDetail?.manager || activePlan.manager || '-'}</Descriptions.Item>
               <Descriptions.Item label="发布窗口">{planDetail?.release_time || activePlan.release_time || '-'}</Descriptions.Item>
@@ -634,8 +672,10 @@ export const ReleasePlanPage: React.FC = () => {
                   key: 'status',
                   width: 110,
                   render: (s) => {
+                    // LOOP6-B1: Job 状态增加 timeout / cancel
                     switch (s) {
                       case 'success':
+                      case 'done':
                         return <Tag color="success">成功</Tag>;
                       case 'failed':
                         return <Tag color="error">失败</Tag>;
@@ -644,6 +684,11 @@ export const ReleasePlanPage: React.FC = () => {
                         return <Tag color="processing">执行中</Tag>;
                       case 'skipped':
                         return <Tag color="default">已跳过</Tag>;
+                      case 'timeout':
+                        return <Tag color="warning">超时</Tag>;
+                      case 'cancel':
+                      case 'cancelled':
+                        return <Tag color="default">终止</Tag>;
                       case 'wait_for_approval':
                         return <Tag color="warning">待审批</Tag>;
                       default:

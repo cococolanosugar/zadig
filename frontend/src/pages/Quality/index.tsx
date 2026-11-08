@@ -1481,6 +1481,7 @@ export const QualityCenterPage: React.FC = () => {
             script_type: 'shell',
             repos: [{ repo_name: '', branch: 'main', checkout_path: '' }],
             test_result_path: 'report.xml',
+            threshold: 100,
             junit_test_result_pass_rate: 100,
             test_report_path: 'report.html',
             artifact_paths: [{ path: 'test-results/' }],

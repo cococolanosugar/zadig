@@ -177,6 +177,14 @@ export const deliveryApi = {
   async getArtifactByImage(image: string): Promise<any> {
     return http.get<any>(`/api/aslan/delivery/artifacts/image?image=${encodeURIComponent(image)}`);
   },
+
+  /**
+   * LOOP6-B4: 获取交付物/制品富元数据详情 (镜像 digest/架构/分层等)
+   * GET /api/aslan/delivery/artifacts/:id
+   */
+  async getDeliveryArtifactDetail(id: string): Promise<any> {
+    return http.get(`/api/aslan/delivery/artifacts/${encodeURIComponent(id)}`);
+  },
 };
 
 export default deliveryApi;
