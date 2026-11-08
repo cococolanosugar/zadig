@@ -45,6 +45,7 @@ import {
   ReloadOutlined,
   StarOutlined,
   StarFilled,
+  ClockCircleOutlined,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
@@ -287,6 +288,11 @@ export const EnvironmentsPage: React.FC = () => {
 
   const handleRestartPod = async (pod: PodItem) => {
     if (!activeProject || !currentEnv) return;
+    // LOOP2-B1: 睡眠态防呆 — Pod 副本已降为 0，禁止重启
+    if (currentEnvIsSleeping) {
+      feedback.message.warning('环境处于睡眠状态，请先唤醒环境后再操作');
+      return;
+    }
     try {
       await environmentApi.restartPod({
         projectName: activeProject,
@@ -616,6 +622,11 @@ export const EnvironmentsPage: React.FC = () => {
 
   const handleScaleReplicas = async () => {
     if (!activeProject || !currentEnv) return;
+    // LOOP2-B1: 睡眠态防呆 — 睡眠环境禁止副本伸缩
+    if (currentEnvIsSleeping) {
+      feedback.message.warning('环境处于睡眠状态，请先唤醒环境后再操作');
+      return;
+    }
     if (!scaleServiceName) {
       feedback.message.warning('请填写要伸缩的服务/工作负载名称');
       return;
@@ -773,22 +784,30 @@ export const EnvironmentsPage: React.FC = () => {
         >
           查看日志
         </Button>,
-        <Popconfirm
+        <Tooltip
           key="restart"
-          title={`确认重启 Pod [${record.name}]？`}
-          description="将触发 Kubernetes 销毁当前 Pod 实例并重新调度拉起新实例。"
-          onConfirm={() => handleRestartPod(record)}
-          okText="重启"
-          cancelText="取消"
+          title={currentEnvIsSleeping ? '环境处于睡眠状态，请先唤醒环境后再操作' : undefined}
         >
-          <Button
-            type="link"
-            danger
-            icon={<ReloadOutlined />}
-          >
-            重启 Pod
-          </Button>
-        </Popconfirm>,
+          <span>
+            <Popconfirm
+              title={`确认重启 Pod [${record.name}]？`}
+              description="将触发 Kubernetes 销毁当前 Pod 实例并重新调度拉起新实例。"
+              onConfirm={() => handleRestartPod(record)}
+              okText="重启"
+              cancelText="取消"
+              disabled={currentEnvIsSleeping}
+            >
+              <Button
+                type="link"
+                danger
+                icon={<ReloadOutlined />}
+                disabled={currentEnvIsSleeping}
+              >
+                重启 Pod
+              </Button>
+            </Popconfirm>
+          </span>
+        </Tooltip>,
         ...(currentEnvObj?.share_env_is_base || currentEnvObj?.istio_grayscale_is_base
           ? [
               <Button
@@ -884,6 +903,24 @@ export const EnvironmentsPage: React.FC = () => {
                   {currentEnvObj?.istio_grayscale_base_env && (
                     <Tag color="cyan">灰度·子环境 (基准: {currentEnvObj.istio_grayscale_base_env})</Tag>
                   )}
+                  {/* LOOP2-C1: 环境租约到期回收预警（剩余 ≤3 天） */}
+                  {(() => {
+                    const recycleDay = currentEnvObj?.recycle_day || 0;
+                    if (recycleDay <= 0) return null;
+                    const remainingDays = Math.max(
+                      0,
+                      Math.ceil(
+                        recycleDay -
+                          (Date.now() / 1000 - (currentEnvObj?.update_time || Date.now() / 1000)) / 86400
+                      )
+                    );
+                    if (remainingDays > 3) return null;
+                    return (
+                      <Tag color="warning" icon={<ClockCircleOutlined />}>
+                        回收预警：剩余 {remainingDays} 天
+                      </Tag>
+                    );
+                  })()}
                 </Space>
               </div>
             </Space>
@@ -906,39 +943,66 @@ export const EnvironmentsPage: React.FC = () => {
               >
                 变更记录
               </Button>
-              <Button
-                icon={<ControlOutlined />}
-                onClick={() => {
-                  // 以首个 Pod 名推导预填（用户可改），不再作为静默硬编码
-                  const derived = (pods[0]?.name || '').replace(/-[a-z0-9]+(-[a-z0-9]+)?$/, '') || pods[0]?.name || '';
-                  setScaleServiceName(derived);
-                  setScaleModalVisible(true);
-                }}
-                disabled={!currentEnv}
+              <Tooltip
+                title={
+                  currentEnvIsSleeping ? '环境处于睡眠状态，请先唤醒环境后再操作' : undefined
+                }
               >
-                副本伸缩
-              </Button>
-              <Button
-                icon={<EditOutlined />}
-                onClick={() => {
-                  setGvRows([]);
-                  setGvModalOpen(true);
-                  loadGlobalVariables();
-                }}
-                disabled={!currentEnv}
+                <span>
+                  <Button
+                    icon={<ControlOutlined />}
+                    onClick={() => {
+                      // 以首个 Pod 名推导预填（用户可改），不再作为静默硬编码
+                      const derived =
+                        (pods[0]?.name || '').replace(/-[a-z0-9]+(-[a-z0-9]+)?$/, '') ||
+                        pods[0]?.name ||
+                        '';
+                      setScaleServiceName(derived);
+                      setScaleModalVisible(true);
+                    }}
+                    disabled={!currentEnv || currentEnvIsSleeping}
+                  >
+                    副本伸缩
+                  </Button>
+                </span>
+              </Tooltip>
+              <Tooltip
+                title={
+                  currentEnvIsSleeping ? '环境处于睡眠状态，请先唤醒环境后再操作' : undefined
+                }
               >
-                全局变量
-              </Button>
-              <Button
-                icon={<AppstoreOutlined />}
-                onClick={() => {
-                  setSvcModalOpen(true);
-                  loadServiceManagement();
-                }}
-                disabled={!currentEnv}
+                <span>
+                  <Button
+                    icon={<EditOutlined />}
+                    onClick={() => {
+                      setGvRows([]);
+                      setGvModalOpen(true);
+                      loadGlobalVariables();
+                    }}
+                    disabled={!currentEnv || currentEnvIsSleeping}
+                  >
+                    全局变量
+                  </Button>
+                </span>
+              </Tooltip>
+              <Tooltip
+                title={
+                  currentEnvIsSleeping ? '环境处于睡眠状态，请先唤醒环境后再操作' : undefined
+                }
               >
-                管理服务
-              </Button>
+                <span>
+                  <Button
+                    icon={<AppstoreOutlined />}
+                    onClick={() => {
+                      setSvcModalOpen(true);
+                      loadServiceManagement();
+                    }}
+                    disabled={!currentEnv || currentEnvIsSleeping}
+                  >
+                    管理服务
+                  </Button>
+                </span>
+              </Tooltip>
               <Button
                 icon={<ApartmentOutlined />}
                 onClick={() => setTopologyDrawerOpen(true)}

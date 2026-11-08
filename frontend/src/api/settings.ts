@@ -211,6 +211,15 @@ export const settingsApi = {
     return http.post('/api/aslan/cluster/clusters', payload);
   },
 
+  /**
+   * 获取外置集群 Agent 一键部署命令与 Token (POST /api/aslan/cluster/agent/:id/agent.yaml/token)
+   */
+  async getClusterAgentCommand(
+    clusterId: string
+  ): Promise<{ token?: string; command?: string; expires_at?: number }> {
+    return http.post(`/api/aslan/cluster/agent/${encodeURIComponent(clusterId)}/agent.yaml/token`, {});
+  },
+
   async validateCluster(payload: Partial<ClusterItem>): Promise<unknown> {
     return http.post('/api/aslan/cluster/clusters/validate', payload);
   },

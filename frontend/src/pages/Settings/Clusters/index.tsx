@@ -1,7 +1,15 @@
 import React, { useRef, useState } from 'react';
-import { ProTable, ModalForm, ProFormText, ProFormTextArea, ProFormRadio, ProFormSwitch } from '@ant-design/pro-components';
+import {
+  ProTable,
+  ModalForm,
+  ProFormText,
+  ProFormTextArea,
+  ProFormRadio,
+  ProFormSwitch,
+  ProFormDependency,
+} from '@ant-design/pro-components';
 import type { ActionType, ProColumns, ProFormInstance } from '@ant-design/pro-components';
-import { Button, Tag, Space, Popconfirm, Typography } from 'antd';
+import { Button, Tag, Space, Popconfirm, Typography, Modal, Alert, Input, Spin } from 'antd';
 import {
   PlusOutlined,
   DeleteOutlined,
@@ -13,6 +21,8 @@ import {
   FolderOpenOutlined,
   ClearOutlined,
   ApiOutlined,
+  CodeOutlined,
+  CopyOutlined,
 } from '@ant-design/icons';
 import { settingsApi, type ClusterItem } from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
@@ -21,7 +31,7 @@ import { ClusterCacheModal } from './ClusterCacheModal';
 import { ClusterShareStorageModal } from './ClusterShareStorageModal';
 import { ClusterCleanCacheModal } from './ClusterCleanCacheModal';
 
-const { Text } = Typography;
+const { Text, Paragraph } = Typography;
 
 export const ClustersPage: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
@@ -35,8 +45,60 @@ export const ClustersPage: React.FC = () => {
   const formRef = useRef<ProFormInstance>();
   const [validating, setValidating] = useState<boolean>(false);
 
+  // LOOP2-B2: Agent 一键部署脚本弹窗
+  const [agentScriptOpen, setAgentScriptOpen] = useState(false);
+  const [agentScriptLoading, setAgentScriptLoading] = useState(false);
+  const [agentScriptClusterName, setAgentScriptClusterName] = useState('');
+  const [agentCommand, setAgentCommand] = useState('');
+  const [agentExpiresAt, setAgentExpiresAt] = useState<number | undefined>();
+
+  const showAgentScriptModal = async (clusterId: string, clusterName?: string) => {
+    if (!clusterId) {
+      feedback.message.warning('集群 ID 缺失，无法生成接入脚本');
+      return;
+    }
+    setAgentScriptLoading(true);
+    setAgentScriptClusterName(clusterName || clusterId);
+    setAgentCommand('');
+    setAgentExpiresAt(undefined);
+    setAgentScriptOpen(true);
+    try {
+      const res = await settingsApi.getClusterAgentCommand(clusterId);
+      setAgentCommand(res?.command || '');
+      setAgentExpiresAt(res?.expires_at);
+      if (!res?.command) {
+        feedback.message.warning('未获取到有效的 kubectl apply 命令');
+      }
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data
+          ?.description ||
+        (err as Error)?.message ||
+        '获取 Agent 接入脚本失败';
+      feedback.message.error(msg);
+      setAgentScriptOpen(false);
+    } finally {
+      setAgentScriptLoading(false);
+    }
+  };
+
+  const handleCopyAgentCommand = async () => {
+    if (!agentCommand) return;
+    try {
+      await navigator.clipboard.writeText(agentCommand);
+      feedback.message.success('命令已复制到剪贴板');
+    } catch {
+      feedback.message.error('复制失败，请手动选中命令文本');
+    }
+  };
+
   const handleTestConnection = async () => {
     const values = formRef.current?.getFieldsValue();
+    const accessType = values?.access_type || 'kubeconfig';
+    if (accessType === 'agent') {
+      feedback.message.info('Agent 模式无需 KubeConfig 连通性测试，创建后请使用「接入脚本」在目标集群部署 Agent');
+      return;
+    }
     const kubeConfig = values?.kube_config?.trim();
     if (!kubeConfig) {
       feedback.message.warning('请先输入 KubeConfig 配置文本再进行连接测试');
@@ -47,7 +109,7 @@ export const ClustersPage: React.FC = () => {
       await settingsApi.validateCluster({
         name: values.name || 'test-probe',
         kube_config: kubeConfig,
-        type: values.access_type || 'kubeconfig',
+        type: accessType,
       });
       feedback.message.success('集群通信连通性测试通过！Kubernetes API 响应正常');
     } catch (err: unknown) {
@@ -90,16 +152,23 @@ export const ClustersPage: React.FC = () => {
   };
 
   const handleCreate = async (values: Record<string, unknown>) => {
+    const accessType = (values.access_type as string) || 'kubeconfig';
     try {
-      await settingsApi.createCluster({
+      const created = (await settingsApi.createCluster({
         name: values.name as string,
         description: values.description as string,
-        kube_config: values.kube_config as string,
+        // LOOP2-B2: Agent 模式无需 kube_config
+        kube_config: accessType === 'agent' ? '' : (values.kube_config as string),
         production: values.production as boolean,
-        type: values.access_type as string || 'kubeconfig',
-      });
-      feedback.message.success('集群接入成功！');
+        type: accessType,
+      })) as ClusterItem | undefined;
+      feedback.message.success(
+        accessType === 'agent' ? '集群记录创建成功！请按下方脚本在目标集群部署 Agent' : '集群接入成功！'
+      );
       actionRef.current?.reload();
+      if (accessType === 'agent' && created?.id) {
+        await showAgentScriptModal(created.id, created.name || (values.name as string));
+      }
       return true;
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -162,7 +231,7 @@ export const ClustersPage: React.FC = () => {
       title: '操作',
       valueType: 'option',
       key: 'option',
-      width: 280,
+      width: 340,
       render: (_, record) => [
         <Button
           key="strategy"
@@ -191,6 +260,18 @@ export const ClustersPage: React.FC = () => {
         >
           共享存储
         </Button>,
+        // LOOP2-B2: 外置集群均可生成 Agent 接入脚本（含 agent 类型 / 未连接状态）
+        !record.local ? (
+          <Button
+            key="agent-script"
+            type="link"
+            size="small"
+            icon={<CodeOutlined />}
+            onClick={() => showAgentScriptModal(record.id, record.name)}
+          >
+            接入脚本
+          </Button>
+        ) : null,
         !record.local ? (
           <Popconfirm
             key="delete"
@@ -281,13 +362,28 @@ export const ClustersPage: React.FC = () => {
               ]}
             />
 
-            <ProFormTextArea
-              name="kube_config"
-              label="KubeConfig 内容 (YAML)"
-              placeholder="粘贴包含 clusters, users, contexts 的 kubeconfig 配置文本..."
-              rules={[{ required: true, message: '请输入有效 kubeconfig 配置' }]}
-              fieldProps={{ rows: 6 }}
-            />
+            {/* LOOP2-B2: Agent 模式隐藏/免填 KubeConfig */}
+            <ProFormDependency name={['access_type']}>
+              {({ access_type }) =>
+                access_type === 'agent' ? (
+                  <Alert
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                    title="Agent 模式无需配置 KubeConfig，创建后将生成一键部署脚本"
+                    description="请在目标 Kubernetes 集群执行生成的 kubectl apply 命令完成 Agent 接入。"
+                  />
+                ) : (
+                  <ProFormTextArea
+                    name="kube_config"
+                    label="KubeConfig 内容 (YAML)"
+                    placeholder="粘贴包含 clusters, users, contexts 的 kubeconfig 配置文本..."
+                    rules={[{ required: true, message: '请输入有效 kubeconfig 配置' }]}
+                    fieldProps={{ rows: 6 }}
+                  />
+                )
+              }
+            </ProFormDependency>
 
             <ProFormSwitch
               name="production"
@@ -303,6 +399,44 @@ export const ClustersPage: React.FC = () => {
           </ModalForm>,
         ]}
       />
+
+      <Modal
+        title={`Agent 接入脚本${agentScriptClusterName ? ` · ${agentScriptClusterName}` : ''}`}
+        open={agentScriptOpen}
+        onCancel={() => setAgentScriptOpen(false)}
+        footer={[
+          <Button key="copy" type="primary" icon={<CopyOutlined />} onClick={handleCopyAgentCommand} disabled={!agentCommand}>
+            复制命令
+          </Button>,
+          <Button key="close" onClick={() => setAgentScriptOpen(false)}>
+            关闭
+          </Button>,
+        ]}
+        width={720}
+        destroyOnHidden
+      >
+        <Spin spinning={agentScriptLoading}>
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            title={
+              agentExpiresAt
+                ? `命令含短期 Token，请在过期前使用（expires_at: ${new Date(agentExpiresAt * 1000).toLocaleString()}）`
+                : '命令含短期 Token，请尽快在目标集群执行'
+            }
+          />
+          <Paragraph type="secondary" style={{ marginBottom: 8 }}>
+            在目标集群控制节点执行以下命令完成 Agent 部署：
+          </Paragraph>
+          <Input.TextArea
+            value={agentCommand}
+            readOnly
+            autoSize={{ minRows: 3, maxRows: 8 }}
+            style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}
+          />
+        </Spin>
+      </Modal>
 
       <ClusterStrategyDrawer
         open={strategyDrawerVisible}

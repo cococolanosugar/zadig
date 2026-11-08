@@ -242,4 +242,65 @@ cat zadig-ee-portal/static/version.json
 3. **SHA-256 零差异验收**：
    * 若需校验本地目录与镜像产物一致性，可通过临时容器导出至独立临时目录，遍历所有 382 个文件进行 SHA-256 哈希比对，必须达到 0 缺失、0 冗余、0 mismatch。
 
+---
+
+## 9. 本地部署访问与 gateway-proxy 端口转发调试方案 (Local Access & Port-Forward)
+
+在 Docker Desktop Kubernetes（kind 节点 `desktop-control-plane`，Node IP 为 WSL2 内部地址，如 `172.18.0.4`）上部署 Zadig 后，**NodePort 无法从 Windows 宿主机直接访问**；且 Kubernetes NodePort 默认范围为 30000–32767，不能分配 80 端口。宿主机侧统一通过 `kubectl port-forward` 暴露 `gateway-proxy`。
+
+### 9.1 gateway-proxy 服务拓扑
+
+* Service：`zadig/gateway-proxy`，NodePort 映射为 `80:30080/TCP`、`443:30443/TCP`，targetPort 为 `8080/8443`。
+* 集群内访问：`http://gateway-proxy.zadig.svc.cluster.local`（80 端口）或 `http://gateway-proxy.zadig`。
+* 入口网关为 Gloo/Envoy，`VirtualService` 将 `/`、`/api/*`、`/dex` 等路径路由到 zadig-portal、aslan、user 等微服务。
+* 不要直接访问 `http://172.18.0.4:30080`：该地址位于 WSL2 内部网络，Windows 宿主机无路由。
+
+### 9.2 标准访问命令
+
+```powershell
+# 方式 A：localhost:30080（与 Zadig ADDRESS 配置一致，推荐日常使用）
+kubectl port-forward -n zadig svc/gateway-proxy 30080:80
+
+# 方式 B：宿主机 IP:80（监听所有网卡，局域网/Tailscale 均可访问）
+kubectl port-forward -n zadig svc/gateway-proxy 80:80 --address 0.0.0.0
+```
+
+* 方式 B 的访问地址为 `http://<本机IP>`（当前环境为 `http://192.168.31.174`）；绑定前确认 80 端口未被占用：
+  `Get-NetTCPConnection -State Listen -LocalPort 80`
+* 仅本机访问可省略 `--address 0.0.0.0`（默认只监听 127.0.0.1）。
+* 局域网其他设备访问时，需在 Windows 防火墙放行 80/TCP 入站。
+
+### 9.3 Windows 后台常驻
+
+```powershell
+$kubectl = (Get-Command kubectl).Source
+Start-Process -FilePath $kubectl `
+  -ArgumentList @('port-forward','-n','zadig','svc/gateway-proxy','80:80','--address','0.0.0.0') `
+  -RedirectStandardOutput "$env:TEMP\zadig-port-forward-80.log" `
+  -RedirectStandardError "$env:TEMP\zadig-port-forward-80.log.err" `
+  -WindowStyle Hidden
+```
+
+* 后台进程会随机器重启或进程退出而失效，重跑命令即可；也可使用 Lens 的 Port Forward 功能。
+* 查看当前转发进程：
+  `Get-CimInstance Win32_Process -Filter "Name='kubectl.exe'" | Where-Object { $_.CommandLine -match 'port-forward' }`
+* 注意：按端口匹配进程时不要用模糊的 `80:80`，否则会把 `30080:80` 的转发进程一并误杀。
+
+### 9.4 连通性验收
+
+```powershell
+curl.exe -s http://localhost/api/v1/login-enabled
+curl.exe -s http://192.168.31.174/api/v1/login-enabled
+```
+
+* 返回 `{"enabled":false}` 且 HTTP 200：说明网关 → user 服务链路正常；`enabled:false` 仅表示第三方/SSO 登录未开启，不是故障。
+* 门户首页 `/` 返回 200，`/static/version.json` 中 `VERSION` 应为 `5.0.0-RELEASE.3-1020`。
+
+### 9.5 常见问题
+
+* **connection refused / 目标计算机积极拒绝**：转发进程已退出或端口未监听，检查 `Get-NetTCPConnection -State Listen -LocalPort 80` 后重跑命令。
+* **address already in use**：80 端口被 IIS/http.sys 或其他进程占用，改用 30080 或先释放端口。
+* **localhost 可通、本机 IP 不通**：缺少 `--address 0.0.0.0`，或被 Windows 防火墙拦截。
+* **ADDRESS 不一致**：Helm 默认 `endpoint` 为 `http://localhost:30080`；若要固定使用 `http://<本机IP>`，需同步修改 `manifest/deploy/helm/values-local.yaml` 中的 `endpoint`（`type: FQDN`、`FQDN: <本机IP>`）和 Dex `staticClients.redirectURIs`（`http://<本机IP>/api/v1/callback`），再执行 `helm upgrade`。
+
 
