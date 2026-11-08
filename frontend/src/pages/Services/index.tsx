@@ -197,11 +197,17 @@ export const ServicesPage: React.FC = () => {
       setServices(list);
       const searchParams = new URLSearchParams(location.search);
       const queryServiceName = searchParams.get('serviceName') || searchParams.get('service');
+      // LOOP1-A1: 列表无 yaml 字段，YAML 统一由 loadServiceDetail 回填；保留仍存在的当前选中项
       if (list.length > 0) {
-        const chosen = (queryServiceName && list.find((s) => s.service_name === queryServiceName)) || list[0];
-        setSelectedService(chosen.service_name);
-        setYamlContent(chosen.yaml || '');
-        setOriginalYaml(chosen.yaml || '');
+        setSelectedService((prev) => {
+          const byQuery = queryServiceName
+            ? list.find((s) => s.service_name === queryServiceName)
+            : undefined;
+          if (byQuery) return byQuery.service_name;
+          const byPrev = prev ? list.find((s) => s.service_name === prev) : undefined;
+          if (byPrev) return byPrev.service_name;
+          return list[0].service_name;
+        });
       } else {
         setSelectedService(null);
         setYamlContent('');
@@ -230,6 +236,10 @@ export const ServicesPage: React.FC = () => {
     try {
       const detail = await serviceApi.getServiceDetail(serviceName, activeProject, isProduction);
       setServiceDetail(detail);
+      // LOOP1-A1: 详情接口才返回 yaml，回填主编辑器
+      setYamlContent(detail.yaml || '');
+      setOriginalYaml(detail.yaml || '');
+      setIsDiffMode(false);
     } catch {
       setServiceDetail(null);
       feedback.message.error('服务详情加载失败');
@@ -506,6 +516,7 @@ export const ServicesPage: React.FC = () => {
       setVersionYaml({ revision, yaml: res?.yaml || '' });
     } catch {
       setVersionYaml(null);
+      feedback.message.error('版本 YAML 获取失败');
     }
   };
 
@@ -517,7 +528,10 @@ export const ServicesPage: React.FC = () => {
         {}
       );
       feedback.message.success(`服务已回滚至版本 ${revision}`);
-      await loadServices();
+      // LOOP1-A2: 关闭版本预览并刷新当前服务详情（YAML / 变量）
+      setVersionYaml(null);
+      setIsDiffMode(false);
+      await loadServiceDetail(selectedService);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data
         ?.description || (err as { message?: string })?.message || '回滚失败';
@@ -823,10 +837,10 @@ spec:
                     <div
                       key={item.service_name}
                       onClick={() => {
-                        setSelectedService(item.service_name);
-                        setYamlContent(item.yaml || '');
-                        setOriginalYaml(item.yaml || '');
-                        setIsDiffMode(false);
+                        // LOOP1-A1: 列表无 yaml；切换选中后由 loadServiceDetail 回填编辑器
+                        if (item.service_name !== selectedService) {
+                          setSelectedService(item.service_name);
+                        }
                       }}
                       style={{
                         display: 'flex',
@@ -1199,6 +1213,7 @@ spec:
         serviceName={selectedService || ''}
         projectName={activeProject || ''}
         isProduction={isProduction}
+        containers={serviceDetail?.containers}
       />
 
       {/* Service Variables Configuration & Convert Drawer */}

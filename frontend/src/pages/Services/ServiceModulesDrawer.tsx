@@ -12,6 +12,7 @@ import {
   Modal,
   Form,
   Input,
+  AutoComplete,
   App,
 } from 'antd';
 import {
@@ -31,6 +32,7 @@ interface ServiceModulesDrawerProps {
   serviceName: string;
   projectName: string;
   isProduction?: boolean;
+  containers?: Array<{ name?: string }>;
 }
 
 export const ServiceModulesDrawer: React.FC<ServiceModulesDrawerProps> = ({
@@ -39,6 +41,7 @@ export const ServiceModulesDrawer: React.FC<ServiceModulesDrawerProps> = ({
   serviceName,
   projectName,
   isProduction = false,
+  containers,
 }) => {
   const { message } = App.useApp();
 
@@ -407,7 +410,16 @@ export const ServiceModulesDrawer: React.FC<ServiceModulesDrawerProps> = ({
             rules={[{ required: true, message: '请输入模块标识' }]}
             extra="命名后不可更改。在 YAML 中可通过 $<name>-image$ 变量引用。"
           >
-            <Input placeholder="例如: fluentd, sidecar-proxy" disabled={Boolean(editingModule)} />
+            {editingModule ? (
+              <Input disabled />
+            ) : (
+              <AutoComplete
+                placeholder="例如: fluentd, sidecar-proxy"
+                options={(containers || [])
+                  .map((c) => ({ value: c.name || '' }))
+                  .filter((opt) => opt.value)}
+              />
+            )}
           </Form.Item>
 
           <Form.Item
