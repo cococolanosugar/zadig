@@ -8,7 +8,8 @@
 
 * **项目名称**：`zadig` (KodeRover 云原生持续交付平台)
 * **当前分支**：`feat/zadig-portal-next`
-* **目标愿景**：基于真实运行环境（`http://192.168.31.174:8380`）为唯一真理源，在 `frontend/` 目录下使用 **React 18 + Vite + TypeScript + Ant Design 6.x + ProComponents 3.x** 完全复刻并重构现代化前端应用，替代老旧的 Vue 2.6 `zadig-portal`。
+* **目标愿景**：基于真实运行环境（`http://192.168.31.174`）为唯一真理源，在 `frontend/` 目录下使用 **React 18 + Vite + TypeScript + Ant Design 6.x + ProComponents 3.x** 完全复刻并重构现代化前端应用，替代老旧的 Vue 2.6 `zadig-portal`。
+* **默认验证凭据**：线上环境与本地开发代理统一管理员账号为 `admin`，密码为 `Zadig@2026`，前端可通过信封加密直接登录验证。
 * **架构模式**：
   * **后端**：Go 微服务架构（核心微服务 `aslan`、用户与鉴权服务 `user`、系统配置服务 `systemconfig`），通信采用标准 RESTful HTTP + SSE (实时日志流) + WebSocket (Pod Web 终端)。
   * **前端**：独立 SPA 单体工程位于 `frontend/`，通过 Vite 代理连接后端服务。
@@ -41,7 +42,7 @@ zadig/
 │   │   └── App.tsx                # 根应用容器 (包裹 ConfigProvider + App)
 │   ├── package.json
 │   ├── tsconfig.json
-│   └── vite.config.ts             # Vite 配置 (含开发代理至 http://192.168.31.174:8380)
+│   └── vite.config.ts             # Vite 配置 (含开发代理至 http://192.168.31.174)
 │
 ├── openspec/                      # 变更管理与规范定义 (OpenSpec 规划工作区)
 ├── manifest/                      # 系统部署与编排声明
@@ -296,7 +297,14 @@ curl.exe -s http://192.168.31.174/api/v1/login-enabled
 * 返回 `{"enabled":false}` 且 HTTP 200：说明网关 → user 服务链路正常；`enabled:false` 仅表示第三方/SSO 登录未开启，不是故障。
 * 门户首页 `/` 返回 200，`/static/version.json` 中 `VERSION` 应为 `5.0.0-RELEASE.3-1020`。
 
-### 9.5 常见问题
+### 9.5 运行与登录验证凭据 (Authentication & Login)
+
+* **参考运行地址**：`http://192.168.31.174`
+* **管理员用户名**：`admin`
+* **管理员密码**：`Zadig@2026`
+* **前端开发与验证**：在 `frontend/` 下执行 `pnpm dev` 启动前端开发服务（默认监听端口 5174），Vite 代理自动将 `/api`、`/dex` 转发至 `http://192.168.31.174`。在登录页使用上述账号密码登录即可通过 RSA/AES 信封加密获取 Token，在实际页面中进行全量功能验证。
+
+### 9.6 常见问题
 
 * **connection refused / 目标计算机积极拒绝**：转发进程已退出或端口未监听，检查 `Get-NetTCPConnection -State Listen -LocalPort 80` 后重跑命令。
 * **address already in use**：80 端口被 IIS/http.sys 或其他进程占用，改用 30080 或先释放端口。
