@@ -29,12 +29,29 @@ export interface ReleasePlanItem {
   approval?: any;
 }
 
+export interface ReleasePlanListParams {
+  pageNum?: number;
+  pageSize?: number;
+  type?: string;
+  keyword?: string;
+  startTime?: number;
+  endTime?: number;
+}
+
 // 后端 ListReleasePlanOption: pageNum/pageSize 必填，type ∈ name|manager|success_time|update_time|status
 export const releasePlanApi = {
   // R4-A1: 移除模式性 catch→[]，HTTP 故障异常上抛由调用方呈现错误态；成功响应保留防御性解析
-  async getPlans(): Promise<ReleasePlanItem[]> {
+  async getPlans(params: ReleasePlanListParams = {}): Promise<ReleasePlanItem[]> {
+    const {
+      pageNum = 1,
+      pageSize = 50,
+      type = 'name',
+      keyword = '',
+      startTime = 0,
+      endTime = 0,
+    } = params;
     const res = await http.get<{ list?: ReleasePlanItem[] } | ReleasePlanItem[]>(
-      '/api/aslan/release_plan/v1?pageNum=1&pageSize=50&type=name&keyword=&startTime=0&endTime=0',
+      `/api/aslan/release_plan/v1?pageNum=${pageNum}&pageSize=${pageSize}&type=${type}&keyword=${encodeURIComponent(keyword)}&startTime=${startTime}&endTime=${endTime}`,
       { skipErrorHandler: true }
     );
     if (Array.isArray(res)) return res;
@@ -95,12 +112,12 @@ export const releasePlanApi = {
   },
 
   /**
-   * LOOP6-B2: 定时/预约执行发布计划
-   * POST /api/aslan/release_plan/plan/:id/schedule_execute
+   * 定时/预约执行发布计划
+   * POST /api/aslan/release_plan/v1/:id/schedule_execute
    */
-  async scheduleExecuteReleasePlan(id: string, scheduleExecuteTime: number): Promise<any> {
-    return http.post(`/api/aslan/release_plan/plan/${encodeURIComponent(id)}/schedule_execute`, {
-      schedule_execute_time: scheduleExecuteTime,
+  async scheduleExecuteReleasePlan(id: string, executeTime: number): Promise<any> {
+    return http.post(`/api/aslan/release_plan/v1/${encodeURIComponent(id)}/schedule_execute`, {
+      schedule_execute_time: executeTime,
     });
   },
 };

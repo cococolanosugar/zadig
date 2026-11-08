@@ -1,4 +1,8 @@
-# CLAUDE.md - Development & Architecture Guide
+# CLAUDE.md - Source of Truth Pointer
 
-本文档为 Claude 及其他 AI 编程助手提供开发指导、架构规范、命令速查与微服务扩展流程。内容与 `AGENTS.md` 保持完全一致与互补。
-
+> [!IMPORTANT]
+> **唯一真理源说明 (Single Source of Truth)**：
+> 本仓库已将全局架构上下文、微服务规范、前后端重构标准、Ant Design 6 开发约束、本地 MCP 协同以及全量逆向工程实践规范统一收敛并持久化至 [**`AGENTS.md`**](./AGENTS.md)。
+>
+> **Claude Code 及所有 AI Agent 请注意**：
+> 请直接以 [`AGENTS.md`](./AGENTS.md) 作为唯一标准执行所有需求分析、逆向审查、代码编写与测试验证任务，本文档不再维护任何独立规则，彻底避免多文档漂移。

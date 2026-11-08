@@ -51,17 +51,35 @@ import { ManualExecModal } from './ManualExecModal';
 
 const { Title, Text } = Typography;
 
-// 从任务中找到等待审批的 approval job
+// 从任务中找到等待审批的 approval job（含 wait_for_approval / waiting / pause）
 const findPendingApproval = (task: WorkflowTaskExecution | null) => {
   if (!task?.stages) return null;
+  const pendingStatuses = new Set(['wait_for_approval', 'waiting', 'pause']);
   for (const stage of task.stages) {
     for (const job of stage.jobs || []) {
-      if (job.type === 'approval' && (job.status === 'wait_for_approval' || job.status === 'waiting')) {
+      if (job.type === 'approval' && pendingStatuses.has(String(job.status || ''))) {
         return { jobName: job.name, stageName: stage.name, spec: job.spec };
       }
     }
   }
   return null;
+};
+
+const formatDuration = (start?: number, end?: number) => {
+  if (!start) return '-';
+  const endTs = end || Math.floor(Date.now() / 1000);
+  const sec = Math.max(0, endTs - start);
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (m < 60) return `${m}m ${s}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+};
+
+const shortCommit = (sha?: string) => {
+  if (!sha) return '-';
+  return sha.length > 8 ? sha.slice(0, 8) : sha;
 };
 
 // 从任务中找到等待手动执行的阶段（status === 'pause'）
@@ -128,19 +146,34 @@ export const PipelineExecutionPage: React.FC = () => {
     );
   }, [approvalApprovers, user]);
 
-  // REA-S7-1: 任务成功时提取本次部署的目标环境，提供环境深链
-  const deployedTargetEnv = useMemo(() => {
-    if (task?.status !== 'passed') return '';
-    const deployJobTypes = new Set(['zadig-deploy', 'custom-deploy', 'zadig-helm-deploy']);
-    for (const stage of task.stages || []) {
+  // REA-S7-1: 提取已成功部署 Job 的目标环境 / 集群 / 命名空间
+  const deployedTarget = useMemo(() => {
+    const deployJobTypes = new Set([
+      'zadig-deploy',
+      'custom-deploy',
+      'zadig-helm-deploy',
+      'zadig-helm-chart-deploy',
+    ]);
+    for (const stage of task?.stages || []) {
       for (const job of stage.jobs || []) {
         if (!deployJobTypes.has(job.type) || job.status !== 'passed') continue;
-        const env = job.spec?.env || job.spec?.env_name;
-        if (env) return env;
+        const env = String(job.spec?.env || job.spec?.env_name || '');
+        if (!env && !job.spec?.namespace) continue;
+        return {
+          env,
+          envAlias: String(job.spec?.env_alias || ''),
+          clusterId: String(job.spec?.cluster_id || ''),
+          clusterName: String(job.spec?.cluster_name || job.spec?.cluster_id || ''),
+          namespace: String(job.spec?.namespace || ''),
+          production: !!job.spec?.production,
+          jobName: job.name,
+        };
       }
     }
-    return '';
+    return null;
   }, [task]);
+
+  const deployedTargetEnv = deployedTarget?.env || '';
 
   const handleApprove = async (approve: boolean) => {
     if (!pendingApproval || !task) return;
@@ -154,8 +187,9 @@ export const PipelineExecutionPage: React.FC = () => {
         comment: approveComment,
         project_name: activeProject,
       });
-      feedback.message.success(approve ? '已同意，任务继续执行' : '已驳回，任务将终止');
+      feedback.message.success(approve ? '已批准，下游阶段将继续执行' : '已拒绝，任务将终止');
       setApproveComment('');
+      // 审批后即时刷新，恢复下游构建/部署状态流转
       await loadTask();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -199,9 +233,9 @@ export const PipelineExecutionPage: React.FC = () => {
     }
   }, [effWorkflowName, effTaskId, activeProject]);
 
-  // R12 任务五: 运行中/待审批/等待状态 3s 自动轮询，终态自动停止
+  // 运行中/待审批/暂停/等待状态 3s 自动轮询，终态自动停止
   useEffect(() => {
-    const activeStatuses = ['running', 'wait_for_approval', 'waiting'];
+    const activeStatuses = ['running', 'wait_for_approval', 'waiting', 'pause'];
     if (!task || !activeStatuses.includes(task.status)) return;
     const timer = setInterval(() => {
       loadTask();
@@ -283,6 +317,42 @@ export const PipelineExecutionPage: React.FC = () => {
     }
     return null;
   }, [task, selectedJob]);
+
+  // 当前选中构建 Job 的制品与代码简报
+  const selectedBuildArtifacts = useMemo(() => {
+    if (!selectedJobInfo) return [];
+    const isBuild =
+      selectedJobInfo.type === 'zadig-build' || String(selectedJobInfo.type || '').includes('build');
+    if (!isBuild) return [];
+    const modules = selectedJobInfo.service_modules || [];
+    if (modules.length > 0) {
+      return modules.map((m) => {
+        const primaryRepo = m.code_info?.[0];
+        return {
+          service: m.service_name || '-',
+          module: m.service_module || '-',
+          image: m.image || m.image_name || '-',
+          commit: primaryRepo?.commit_id || '',
+          commitMsg: primaryRepo?.commit_message || '',
+          branch: primaryRepo?.branch || primaryRepo?.tag || '',
+          artifacts: m.artifacts || [],
+        };
+      });
+    }
+    const builds = selectedJobInfo.spec?.service_and_builds || [];
+    return builds.map((b) => {
+      const primaryRepo = b.repos?.[0];
+      return {
+        service: b.service_name || '-',
+        module: b.service_module || '-',
+        image: b.image || b.image_name || '-',
+        commit: primaryRepo?.commit_id || '',
+        commitMsg: primaryRepo?.commit_message || '',
+        branch: primaryRepo?.branch || primaryRepo?.tag || '',
+        artifacts: [] as string[],
+      };
+    });
+  }, [selectedJobInfo]);
 
   // R2-A2/A3：产物下载（Blob -> ObjectURL -> 浏览器下载）
   const triggerBlobDownload = (res: unknown, fileName: string) => {
@@ -498,10 +568,19 @@ export const PipelineExecutionPage: React.FC = () => {
   const stepsItems =
     task?.stages?.map((stage) => {
       let stepStatus: 'finish' | 'process' | 'error' | 'wait' = 'finish';
-      if (stage.status === 'running') stepStatus = 'process';
-      else if (stage.status === 'pause') stepStatus = 'process';
-      else if (stage.status === 'failed') stepStatus = 'error';
-      else if (stage.status === 'waiting') stepStatus = 'wait';
+      if (stage.status === 'running' || stage.status === 'pause') stepStatus = 'process';
+      else if (stage.status === 'failed' || stage.status === 'timeout') stepStatus = 'error';
+      else if (
+        stage.status === 'waiting' ||
+        stage.status === 'wait_for_approval' ||
+        stage.status === 'pending' ||
+        stage.status === 'created' ||
+        !stage.status
+      ) {
+        stepStatus = 'wait';
+      } else if (stage.status === 'passed' || stage.status === 'skipped') {
+        stepStatus = 'finish';
+      }
 
       return {
         title: (
@@ -559,12 +638,30 @@ export const PipelineExecutionPage: React.FC = () => {
                   }
                 >
                   <Tag
-                    color={selectedJob === j.name ? 'blue' : isDebug ? 'gold' : hasBreakpoint ? 'volcano' : 'default'}
+                    color={
+                      selectedJob === j.name
+                        ? 'blue'
+                        : isDebug
+                        ? 'gold'
+                        : hasBreakpoint
+                        ? 'volcano'
+                        : j.status === 'passed'
+                        ? 'success'
+                        : j.status === 'failed' || j.status === 'timeout'
+                        ? 'error'
+                        : j.status === 'running'
+                        ? 'processing'
+                        : j.status === 'wait_for_approval' || j.status === 'pause'
+                        ? 'warning'
+                        : j.status === 'pending' || j.status === 'waiting' || j.status === 'created'
+                        ? 'default'
+                        : 'default'
+                    }
                     icon={isDebug ? <BugOutlined /> : hasBreakpoint ? <PauseCircleOutlined /> : undefined}
                     style={{ cursor: 'pointer', userSelect: 'none' }}
                     onClick={() => setSelectedJob(j.name)}
                   >
-                    {j.name} ({j.status})
+                    {j.name} ({j.status || 'pending'})
                     {hasBreakpoint && ' [断点]'}
                   </Tag>
                 </Popover>
@@ -723,21 +820,84 @@ export const PipelineExecutionPage: React.FC = () => {
         </Row>
       </Card>
 
+      {/* 部署完成卡片：环境 / 集群 / Namespace + 深链 */}
+      {deployedTarget && task?.status === 'passed' && (
+        <Card variant="borderless" style={{ borderRadius: 8, border: '1px solid #b7eb8f' }}>
+          <Alert
+            title={`部署完成 · Job [${deployedTarget.jobName}]`}
+            type="success"
+            showIcon
+            style={{ marginBottom: 12, borderRadius: 6 }}
+            description={
+              <Space orientation="vertical" size={4}>
+                <Text>
+                  目标环境：
+                  <Text strong>{deployedTarget.env || '-'}</Text>
+                  {deployedTarget.envAlias ? ` (${deployedTarget.envAlias})` : ''}
+                  {deployedTarget.production ? <Tag color="gold" style={{ marginLeft: 8 }}>生产</Tag> : null}
+                </Text>
+                <Text type="secondary">
+                  K8s 集群：{deployedTarget.clusterName || deployedTarget.clusterId || '-'}
+                  {' · '}
+                  Namespace：{deployedTarget.namespace || '-'}
+                </Text>
+              </Space>
+            }
+            action={
+              deployedTargetEnv ? (
+                <Button
+                  type="primary"
+                  icon={<ExportOutlined />}
+                  onClick={() =>
+                    navigate(
+                      `/v1/projects/detail/${encodeURIComponent(activeProject)}/envs/${encodeURIComponent(deployedTargetEnv)}`
+                    )
+                  }
+                >
+                  前往目标环境查看
+                </Button>
+              ) : null
+            }
+          />
+        </Card>
+      )}
+
       {/* Approval Required Action */}
-      {/* 后端审批态为 wait_for_approval (config.StatusWaitingApprove)，waiting/running 为兼容历史轮询窗口 */}
-      {pendingApproval && (task?.status === 'wait_for_approval' || task?.status === 'waiting' || task?.status === 'running') && (
+      {pendingApproval &&
+        (task?.status === 'wait_for_approval' ||
+          task?.status === 'waiting' ||
+          task?.status === 'running' ||
+          task?.status === 'pause') && (
         <Card variant="borderless" style={{ borderRadius: 8, border: '1px solid #faad14' }}>
           <Alert
-            title="该任务包含等待审批的节点"
+            title="人工审批节点待处理"
             description={`Job [${pendingApproval.jobName}] (Stage: ${pendingApproval.stageName}) 正在等待人工审批。`}
             type="warning"
             showIcon
             icon={<SafetyOutlined />}
             style={{ marginBottom: 16, borderRadius: 6 }}
           />
+          {approvalApprovers.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>
+                审批人名单
+              </Text>
+              <Space size={[6, 6]} wrap>
+                {approvalApprovers.map((a, idx) => (
+                  <Tag
+                    key={`${a.user_id || a.group_id || a.user_name || idx}`}
+                    icon={<UserOutlined />}
+                    color={a.group_id || a.type === 'group' ? 'purple' : 'blue'}
+                  >
+                    {a.group_name || a.user_name || a.user_id || a.group_id || '未知'}
+                  </Tag>
+                ))}
+              </Space>
+            </div>
+          )}
           <Input.TextArea
             rows={2}
-            placeholder="审批意见 (可选)"
+            placeholder="审批意见 comment（可选）"
             value={approveComment}
             onChange={(e) => setApproveComment(e.target.value)}
             style={{ marginBottom: 12 }}
@@ -754,7 +914,7 @@ export const PipelineExecutionPage: React.FC = () => {
                   disabled={approvalRestricted}
                   onClick={() => handleApprove(true)}
                 >
-                  同意，继续执行
+                  批准 (Approve)
                 </Button>
               </span>
             </Tooltip>
@@ -769,7 +929,7 @@ export const PipelineExecutionPage: React.FC = () => {
                   disabled={approvalRestricted}
                   onClick={() => handleApprove(false)}
                 >
-                  驳回，终止任务
+                  拒绝 (Reject)
                 </Button>
               </span>
             </Tooltip>
@@ -816,6 +976,73 @@ export const PipelineExecutionPage: React.FC = () => {
           />
         )}
       </Card>
+
+      {/* 构建制品元数据：镜像 / Tag / Commit / 耗时 */}
+      {selectedBuildArtifacts.length > 0 && (
+        <Card
+          variant="borderless"
+          title={
+            <Space>
+              <FolderOpenOutlined />
+              <span>构建产物与代码简报</span>
+              {selectedJobInfo && (
+                <Tag
+                  color={
+                    selectedJobInfo.status === 'passed'
+                      ? 'success'
+                      : selectedJobInfo.status === 'failed'
+                      ? 'error'
+                      : selectedJobInfo.status === 'running'
+                      ? 'processing'
+                      : 'default'
+                  }
+                >
+                  {selectedJobInfo.status || 'pending'}
+                </Tag>
+              )}
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                耗时 {formatDuration(selectedJobInfo?.start_time, selectedJobInfo?.end_time)}
+              </Text>
+            </Space>
+          }
+          style={{ borderRadius: 8 }}
+        >
+          <Space orientation="vertical" style={{ width: '100%' }} size={12}>
+            {selectedBuildArtifacts.map((item, idx) => (
+              <Card key={`${item.service}-${item.module}-${idx}`} size="small" variant="outlined">
+                <Space orientation="vertical" size={4} style={{ width: '100%' }}>
+                  <Text strong>
+                    {item.service}
+                    {item.module && item.module !== '-' ? ` / ${item.module}` : ''}
+                  </Text>
+                  <Text>
+                    镜像：
+                    <Text code copyable={item.image !== '-'}>
+                      {item.image}
+                    </Text>
+                  </Text>
+                  <Text type="secondary">
+                    分支/Tag：{item.branch || '-'}
+                    {' · '}
+                    Commit：
+                    <Text code>{shortCommit(item.commit)}</Text>
+                    {item.commitMsg ? ` · ${item.commitMsg}` : ''}
+                  </Text>
+                  {item.artifacts.length > 0 && (
+                    <Space size={4} wrap>
+                      {item.artifacts.map((a) => (
+                        <Tag key={a} icon={<FileOutlined />}>
+                          {a}
+                        </Tag>
+                      ))}
+                    </Space>
+                  )}
+                </Space>
+              </Card>
+            ))}
+          </Space>
+        </Card>
+      )}
 
       {/* Step Console Logs Terminal */}
       <Card

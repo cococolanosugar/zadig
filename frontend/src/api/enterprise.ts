@@ -1,5 +1,17 @@
 import http from './client';
 
+/** 企业组织信息与品牌 Logo（base64） */
+export interface Organization {
+  name?: string;
+  website?: string;
+  orgToken?: string;
+  copyright_enabled?: boolean;
+  big_light_logo?: string;
+  big_logo?: string;
+  small_logo?: string;
+  favicon?: string;
+}
+
 export interface EnterpriseLicenseInfo {
   status?: string;
   company?: string;
@@ -61,6 +73,21 @@ export const enterpriseApi = {
    */
   async updateTheme(payload: EnterpriseThemeInfo): Promise<unknown> {
     return http.put('/api/aslan/system/theme', payload);
+  },
+
+  /** 获取企业组织信息与品牌定制 */
+  async getOrganization(): Promise<Organization> {
+    try {
+      const res = await http.get<Organization>('/api/plutus-enterprise/organization');
+      return res || {};
+    } catch {
+      return {};
+    }
+  },
+
+  /** 更新企业组织信息与品牌 Logo */
+  async updateOrganization(payload: Partial<Organization>): Promise<Organization> {
+    return http.post<Organization>('/api/plutus-enterprise/organization', payload);
   },
 };
 

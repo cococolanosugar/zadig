@@ -408,8 +408,24 @@ export const ServiceDetailPage: React.FC = () => {
       dataIndex: 'status',
       key: 'status',
       render: (status, record) => {
-        const running = status === 'Running';
-        return <Tag color={running ? 'success' : 'error'}>{`${status} (${record.ready || '-'})`}</Tag>;
+        const s = String(status || '');
+        let color: string = 'default';
+        if (s === 'Running') color = 'success';
+        else if (s === 'Pending' || s === 'ContainerCreating') color = 'processing';
+        else if (s === 'Succeeded' || s === 'Completed') color = 'blue';
+        else if (
+          s === 'CrashLoopBackOff' ||
+          s === 'Error' ||
+          s === 'Failed' ||
+          s === 'ImagePullBackOff' ||
+          s === 'ErrImagePull' ||
+          s === 'OOMKilled'
+        ) {
+          color = 'error';
+        } else if (s) {
+          color = 'warning';
+        }
+        return <Tag color={color}>{`${s || '-'} (${record.ready || '-'})`}</Tag>;
       },
     },
     { title: '重启', dataIndex: 'restarts', key: 'restarts', render: (r) => String(r ?? 0) },
@@ -707,7 +723,21 @@ export const ServiceDetailPage: React.FC = () => {
           <div>
             <Descriptions bordered column={1} size="small">
               <Descriptions.Item label="状态">
-                <Tag color={podDetail.status === 'Running' ? 'success' : 'error'}>{podDetail.status || '-'}</Tag>
+                <Tag
+                  color={
+                    podDetail.status === 'Running'
+                      ? 'success'
+                      : podDetail.status === 'Pending'
+                      ? 'processing'
+                      : String(podDetail.status || '').includes('CrashLoop') ||
+                        String(podDetail.status || '').includes('Error') ||
+                        String(podDetail.status || '').includes('BackOff')
+                      ? 'error'
+                      : 'warning'
+                  }
+                >
+                  {podDetail.status || '-'}
+                </Tag>
               </Descriptions.Item>
               <Descriptions.Item label="IP">{podDetail.ip || '-'}</Descriptions.Item>
               <Descriptions.Item label="节点">{podDetail.node_name || '-'}</Descriptions.Item>
@@ -723,7 +753,22 @@ export const ServiceDetailPage: React.FC = () => {
               columns={[
                 { title: '容器名', dataIndex: 'name', key: 'name', render: (n) => <Text strong>{String(n || '-')}</Text> },
                 { title: '镜像', dataIndex: 'image', key: 'image', render: (img) => <Text code style={{ fontSize: 12 }}>{String(img || '-')}</Text> },
-                { title: '状态', dataIndex: 'status', key: 'status', render: (s) => <Tag color={String(s || '').includes('Running') ? 'success' : 'default'}>{String(s || '-')}</Tag> },
+                {
+                  title: '状态',
+                  dataIndex: 'status',
+                  key: 'status',
+                  render: (s) => {
+                    const val = String(s || '-');
+                    const color = val.includes('Running')
+                      ? 'success'
+                      : val.includes('Pending')
+                      ? 'processing'
+                      : val.includes('CrashLoop') || val.includes('Error') || val.includes('BackOff')
+                      ? 'error'
+                      : 'default';
+                    return <Tag color={color}>{val}</Tag>;
+                  },
+                },
               ]}
               locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无容器信息" /> }}
             />

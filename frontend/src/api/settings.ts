@@ -48,6 +48,19 @@ export interface ClusterShareStorageConfig {
   };
 }
 
+/** 集群 DinD 资源配置 */
+export interface DindCfg {
+  replicas: number;
+  resources?: { limits?: { cpu?: number; memory?: number } };
+  storage?: {
+    type: 'rootfs' | 'dynamic';
+    storage_class?: string;
+    storage_size_in_gib?: number;
+  };
+  strategy_id?: string;
+  storage_driver?: string;
+}
+
 export interface ClusterItem {
   id: string;
   name: string;
@@ -58,7 +71,10 @@ export interface ClusterItem {
   local?: boolean;
   /** LOOP8-A1: 断开连接标记 */
   disconnected?: boolean;
+  /** 前端表单字段；提交时需同步到后端识别的 config */
   kube_config?: string;
+  /** 后端 kubeconfig 字段名 */
+  config?: string;
   created_at?: number;
   advanced_config?: {
     strategy?: string;
@@ -70,6 +86,7 @@ export interface ClusterItem {
   };
   cache?: ClusterCacheConfig;
   share_storage?: ClusterShareStorageConfig;
+  dind_cfg?: DindCfg;
 }
 
 /** LOOP8-A1: 集群删除预检 — 被引用环境 */
@@ -111,9 +128,19 @@ export interface RegistryReferencesResp {
   references: RegistryReference[];
 }
 
+/** 代码源平台枚举（7 类） */
+export type CodeHostType =
+  | 'gitlab'
+  | 'github'
+  | 'gerrit'
+  | 'gitee'
+  | 'gitee-enterprise'
+  | 'perforce'
+  | 'other';
+
 export interface CodeHostItem {
   id: number;
-  type: string; // github, gitlab, gitee, gerrit
+  type: CodeHostType | string;
   name?: string;
   address: string;
   auth_type?: string;
@@ -124,6 +151,23 @@ export interface CodeHostItem {
   namespace?: string;
   region?: string;
   created_at?: number;
+  /** "2" 已授权，"1" 未授权 */
+  is_ready?: string;
+  enable_proxy?: boolean;
+  disable_ssl?: boolean;
+  username?: string;
+  password?: string;
+  ssh_key?: string;
+  private_access_token?: string;
+  perforce_host?: string;
+  perforce_port?: number;
+  updated_at?: number;
+}
+
+/** OAuth 授权跳转 URL */
+export function getCodeHostAuthUrl(id: number, redirectUrl?: string): string {
+  const redirect = encodeURIComponent(redirectUrl || window.location.href);
+  return `/api/v1/codehosts/${id}/auth?redirect_url=${redirect}`;
 }
 
 export interface RegistryItem {
@@ -284,7 +328,12 @@ export const settingsApi = {
   },
 
   async createCluster(payload: Partial<ClusterItem>): Promise<unknown> {
-    return http.post('/api/aslan/cluster/clusters', payload);
+    // P0: 后端 kubeconfig 字段名为 config
+    const body = {
+      ...payload,
+      config: payload.config || payload.kube_config || '',
+    };
+    return http.post('/api/aslan/cluster/clusters', body);
   },
 
   /**
@@ -297,7 +346,39 @@ export const settingsApi = {
   },
 
   async validateCluster(payload: Partial<ClusterItem>): Promise<unknown> {
-    return http.post('/api/aslan/cluster/clusters/validate', payload);
+    const body = {
+      ...payload,
+      config: payload.config || payload.kube_config || '',
+    };
+    return http.post('/api/aslan/cluster/clusters/validate', body);
+  },
+
+  /** 更新集群 DinD 资源配置 */
+  async updateClusterDind(id: string, dindCfg: DindCfg): Promise<void> {
+    return http.put(`/api/aslan/cluster/clusters/${encodeURIComponent(id)}/dind`, dindCfg);
+  },
+
+  /** 获取集群 StorageClass 列表 */
+  async getClusterStorageClasses(id: string, type = ''): Promise<string[]> {
+    const res = await http.get<string[] | { storage_classes?: string[] }>(
+      `/api/aslan/cluster/${encodeURIComponent(id)}/storageclasses?type=${encodeURIComponent(type)}`
+    );
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.storage_classes)) return res.storage_classes;
+    return [];
+  },
+
+  /** 获取集群 PVC 列表 */
+  async getClusterPvcs(
+    id: string,
+    namespace = 'default'
+  ): Promise<Array<{ name: string; size?: string }>> {
+    const res = await http.get<Array<{ name: string; size?: string }> | { pvcs?: Array<{ name: string; size?: string }> }>(
+      `/api/aslan/cluster/${encodeURIComponent(id)}/${encodeURIComponent(namespace)}/pvcs`
+    );
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.pvcs)) return res.pvcs;
+    return [];
   },
 
   async deleteCluster(id: string): Promise<unknown> {
@@ -359,8 +440,8 @@ export const settingsApi = {
     return Array.isArray(res) ? res : [];
   },
 
-  async createCodeHost(payload: Partial<CodeHostItem>): Promise<unknown> {
-    return http.post('/api/v1/codehosts', payload);
+  async createCodeHost(payload: Partial<CodeHostItem>): Promise<CodeHostItem> {
+    return http.post<CodeHostItem>('/api/v1/codehosts', payload);
   },
 
   // R5 任务2: 连通性校验（codehost router.go:33 POST /codehosts/validate）
@@ -369,8 +450,8 @@ export const settingsApi = {
   },
 
   // R5 任务2: 更新代码源（codehost router.go:30 PATCH /codehosts/:id）
-  async updateCodeHost(id: number | string, payload: Partial<CodeHostItem>): Promise<unknown> {
-    return http.patch(`/api/v1/codehosts/${id}`, payload, { skipErrorHandler: true });
+  async updateCodeHost(id: number, payload: Partial<CodeHostItem>): Promise<CodeHostItem> {
+    return http.patch<CodeHostItem>(`/api/v1/codehosts/${id}`, payload, { skipErrorHandler: true });
   },
 
   // R5 任务2: OAuth 授权跳转地址获取（codehost router.go:31 GET /codehosts/:id/auth）
@@ -531,8 +612,10 @@ export const settingsApi = {
     return { users: [], total: 0 };
   },
 
-  async createUser(payload: Partial<UserManagementItem> & { password?: string }): Promise<unknown> {
-    return http.post('/api/v1/users', payload);
+  async createUser(
+    payload: Partial<UserManagementItem> & { password?: string }
+  ): Promise<{ uid: string } & Partial<UserManagementItem>> {
+    return http.post<{ uid: string } & Partial<UserManagementItem>>('/api/v1/users', payload);
   },
 
   /** LOOP9-A2: 更新用户基本信息 */
@@ -550,10 +633,27 @@ export const settingsApi = {
     );
   },
 
-  // R8 任务3: 重置/停用用户 MFA（后端无 DELETE /users/:uid/mfa 路由，
-  // 对齐既有 DisableUserMFA 契约：POST /users/:uid/mfa/disable，仅本人可操作）
+  // Round3: 管理端重置用户 MFA — DELETE /users/:uid/mfa（ResetUserMFAByAdmin）
   async resetUserMFA(uid: string): Promise<unknown> {
-    return http.post(`/api/v1/users/${encodeURIComponent(uid)}/mfa/disable`, {}, { skipErrorHandler: true });
+    return http.delete(`/api/v1/users/${encodeURIComponent(uid)}/mfa`, { skipErrorHandler: true });
+  },
+
+  /** 系统级角色列表（namespace=*） */
+  async getSystemRoles(): Promise<Array<{ id?: number; name: string; desc?: string; type?: string; namespace?: string }>> {
+    const res = await http.get<Array<{ id?: number; name: string; desc?: string; type?: string; namespace?: string }>>(
+      '/api/v1/policy/roles?namespace=*',
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
+  },
+
+  /** 为用户绑定角色（覆盖式更新） */
+  async updateRoleBindingForUser(uid: string, namespace: string = '*', roles: string[]): Promise<unknown> {
+    return http.post(
+      `/api/v1/policy/role-bindings/user/${encodeURIComponent(uid)}?namespace=${encodeURIComponent(namespace)}`,
+      { roles },
+      { skipErrorHandler: true }
+    );
   },
 
   async deleteUser(uid: string): Promise<unknown> {

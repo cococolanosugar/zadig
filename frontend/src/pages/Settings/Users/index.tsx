@@ -21,7 +21,6 @@ import {
   settingsApi,
   type UserManagementItem,
   type UserGroupItem,
-  type RoleItem,
 } from '../../../api/settings';
 import { rbacApi } from '../../../api/rbac';
 import { authApi } from '../../../api/auth';
@@ -159,13 +158,27 @@ export const UsersPage: React.FC = () => {
 
   const handleCreateUser = async (values: Record<string, unknown>) => {
     try {
-      await settingsApi.createUser({
+      const res = await settingsApi.createUser({
         account: values.account as string,
         name: values.name as string,
         email: values.email as string,
         password: values.password as string,
         phone: values.phone as string,
       });
+      const role = values.role as string | undefined;
+      if (res?.uid && role) {
+        try {
+          await settingsApi.updateRoleBindingForUser(res.uid, '*', [role]);
+        } catch (bindErr: unknown) {
+          const bindMsg =
+            (bindErr as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+            (bindErr instanceof Error ? bindErr.message : '') ||
+            '角色绑定失败';
+          feedback.message.warning(`用户已创建，但系统角色绑定失败：${bindMsg}`);
+          userActionRef.current?.reload();
+          return true;
+        }
+      }
       feedback.message.success('用户创建成功！');
       userActionRef.current?.reload();
       return true;
@@ -421,17 +434,18 @@ export const UsersPage: React.FC = () => {
     },
   ];
 
-  // R8 任务2: 系统角色与模板（数据源 role-templates）
+  // Round3: 系统角色（GET /api/v1/policy/roles?namespace=*）
+  type SystemRoleRow = { id?: number; name: string; desc?: string; type?: string; namespace?: string };
   const [roleDetailOpen, setRoleDetailOpen] = useState(false);
   const [roleDetailLoading, setRoleDetailLoading] = useState(false);
   const [roleDetail, setRoleDetail] = useState<{ name: string; desc?: string; rules: Array<{ resource: string; verbs: string[] }> } | null>(null);
 
-  const openRoleDetail = async (role: RoleItem) => {
+  const openRoleDetail = async (role: SystemRoleRow) => {
     setRoleDetailOpen(true);
     setRoleDetailLoading(true);
     setRoleDetail({ name: role.name, desc: role.desc, rules: [] });
     try {
-      const detail = await rbacApi.getRoleTemplate(role.name);
+      const detail = await rbacApi.getRole('*', role.name);
       setRoleDetail({
         name: detail?.name || role.name,
         desc: detail?.desc || role.desc,
@@ -447,9 +461,21 @@ export const UsersPage: React.FC = () => {
     }
   };
 
-  const roleColumns: ProColumns<RoleItem>[] = [
+  const handleDeleteSystemRole = async (name: string) => {
+    try {
+      await rbacApi.deleteRole('*', name);
+      feedback.message.success(`角色 [${name}] 已删除`);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : '')
+        || '删除角色失败';
+      feedback.message.error(msg);
+    }
+  };
+
+  const roleColumns: ProColumns<SystemRoleRow>[] = [
     {
-      title: '模板名称',
+      title: '角色名称',
       dataIndex: 'name',
       key: 'name',
       render: (text) => (
@@ -470,17 +496,47 @@ export const UsersPage: React.FC = () => {
       dataIndex: 'type',
       key: 'type',
       width: 120,
-      render: (t) => (Number(t) === 1 ? <Tag color="gold">系统内置</Tag> : <Tag color="blue">自定义模板</Tag>),
+      render: (t) => (t === 'system' ? <Tag color="gold">系统内置</Tag> : <Tag color="blue">自定义</Tag>),
     },
     {
       title: '操作',
       key: 'role_action',
-      width: 120,
-      render: (_, record) => (
-        <Button type="link" size="small" onClick={() => openRoleDetail(record)}>
-          查看权限详情
-        </Button>
-      ),
+      width: 220,
+      render: (_, record) => {
+        const isSystem = record.type === 'system';
+        return (
+          <Space size={4}>
+            <Button type="link" size="small" onClick={() => openRoleDetail(record)}>
+              查看权限详情
+            </Button>
+            <Button
+              type="link"
+              size="small"
+              disabled={isSystem}
+              title={isSystem ? '系统内置角色不可修改' : '修改角色'}
+            >
+              修改
+            </Button>
+            {isSystem ? (
+              <Button type="link" size="small" danger disabled title="系统内置角色不可删除">
+                删除
+              </Button>
+            ) : (
+              <Popconfirm
+                title="确定删除此角色？"
+                description="系统内置角色不可删除"
+                onConfirm={() => handleDeleteSystemRole(record.name)}
+                okText="删除"
+                cancelText="取消"
+              >
+                <Button type="link" size="small" danger>
+                  删除
+                </Button>
+              </Popconfirm>
+            )}
+          </Space>
+        );
+      },
     },
   ];
 
@@ -639,17 +695,17 @@ export const UsersPage: React.FC = () => {
             key: 'roles',
             label: (
               <span>
-                <SafetyCertificateOutlined /> 系统角色与模板
+                <SafetyCertificateOutlined /> 系统角色
               </span>
             ),
             children: (
-              <ProTable<RoleItem>
+              <ProTable<SystemRoleRow>
                 rowKey="name"
                 search={false}
                 cardBordered={false}
                 options={{ density: false, fullScreen: true, reload: true, setting: false }}
                 request={async () => {
-                  const list = await settingsApi.getRoles();
+                  const list = await settingsApi.getSystemRoles();
                   return {
                     data: list,
                     success: true,
@@ -658,7 +714,7 @@ export const UsersPage: React.FC = () => {
                 }}
                 columns={roleColumns}
                 locale={{
-                  emptyText: <Typography.Text type="secondary">暂无角色模板</Typography.Text>,
+                  emptyText: <Typography.Text type="secondary">暂无系统角色</Typography.Text>,
                 }}
               />
             ),

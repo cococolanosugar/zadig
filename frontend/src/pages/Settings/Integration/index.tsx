@@ -39,6 +39,7 @@ import settingsApi from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
 import { generateAesKey, rsaEncrypt } from '../../../utils/crypto';
 import { authApi } from '../../../api/auth';
+import { CodeHostsPage } from '../CodeHosts';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -608,6 +609,42 @@ export const SystemIntegrationPage: React.FC = () => {
 
   // 1. Detail Management View
   if (currentCategory) {
+    // 代码源分类：直接挂载 CodeHostsPage，与 /v1/system/codehosts 体验一致
+    if (currentCategory.key === 'git') {
+      return (
+        <div style={{ position: 'relative', flex: 1, minHeight: '100%', padding: '24px 30px', background: '#fff' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 20,
+              paddingBottom: 16,
+              borderBottom: '1px solid #ebeef5',
+            }}
+          >
+            <Space size="middle">
+              <Button icon={<ArrowLeftOutlined />} onClick={handleBack}>
+                返回系统集成
+              </Button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {currentCategory.icon}
+                <div>
+                  <Title level={4} style={{ margin: 0, fontSize: 18, color: '#303133' }}>
+                    {currentCategory.name}
+                  </Title>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {currentCategory.desc}
+                  </Text>
+                </div>
+              </div>
+            </Space>
+          </div>
+          <CodeHostsPage />
+        </div>
+      );
+    }
+
     return (
       <div style={{ position: 'relative', flex: 1, minHeight: '100%', padding: '24px 30px', background: '#fff' }}>
         {/* Top Header matching live Zadig */}

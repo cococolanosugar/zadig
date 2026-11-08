@@ -311,4 +311,92 @@ curl.exe -s http://192.168.31.174/api/v1/login-enabled
 * **localhost 可通、本机 IP 不通**：缺少 `--address 0.0.0.0`，或被 Windows 防火墙拦截。
 * **ADDRESS 不一致**：Helm 默认 `endpoint` 为 `http://localhost:30080`；若要固定使用 `http://<本机IP>`，需同步修改 `manifest/deploy/helm/values-local.yaml` 中的 `endpoint`（`type: FQDN`、`FQDN: <本机IP>`）和 Dex `staticClients.redirectURIs`（`http://<本机IP>/api/v1/callback`），再执行 `helm upgrade`。
 
+---
+
+## 10. 全量逆向工程实践与沉淀体系 (Reverse Engineering Practices & Lessons Learned)
+
+在基于生产镜像产物（`zadig-ee-portal/`）与在线参考环境（`http://192.168.31.174`）重构现代前端的过程中，总结并沉淀了如下逆向工程方法论、多 Agent 协作体系与核心业务域避坑指南。
+
+### 10.1 多 Agent 闭环逆向流水线 (Multi-Agent RE Pipeline)
+逆向任务不宜单点孤军奋战，推荐采用四位一体闭环流水线：
+```text
+┌─────────────────────────┐
+│ Antigravity (总控/对账)  │ ➔ 制定任务清单与协议对账规范
+└───────────┬─────────────┘
+            ▼
+┌─────────────────────────┐
+│ Claude Code (静态逆向)  │ ➔ 审计 zadig-ee-portal Bundle + Go 后端微服务源码，输出详细审计报告
+└───────────┬─────────────┘
+            ▼
+┌─────────────────────────┐
+│ Antigravity (协议复核)  │ ➔ 提炼高精度 Implementation Spec（锁定类型、URL、Payload、UI 契约）
+└───────────┬─────────────┘
+            ▼
+┌─────────────────────────┐
+│ Cursor (精密实现落地)   │ ➔ 在 frontend/ 下实施 React 18 + TS + Ant Design 6.x 落地重构
+└───────────┬─────────────┘
+            ▼
+┌─────────────────────────┐
+│ 双门禁 + Chrome DevTools│ ➔ antd lint (0 告警) + pnpm build (0 错误) + 真实浏览器 E2E 交互验收
+└─────────────────────────┘
+```
+
+### 10.2 静态产物逆向与后端交叉核验方法论 (Bundle RE & Backend Cross-Audit)
+1. **静态 Bundle 定位切入点**：
+   * 所有官方构建产物位于 `zadig-ee-portal/static/js/*.js`。
+   * 路由与视图映射：首先在 `app.xxx.js` 检索 Vue Router 配置，定位组件名与其异步加载的 Chunk 文件哈希。
+   * 接口与字段反查：利用关键词（如 `/api/aslan/`, `/api/v1/`, 请求参数名）在 `zadig-ee-portal/static/js/` 下全局搜索，确定请求 Method、Query、Body 结构与状态码处理分支。
+2. **严防“前端代码孤证”——必须交叉核验 Go 后端源码**：
+   * **陷阱示例 1（MFA 重置）**：前端 Bundle 中存在调用 `POST /api/v1/users/:uid/mfa/disable`，但在 Go 后端源码（`pkg/microservice/user/core/handler/user.go`）中明确校验 `if ctx.UserID != uid { return ErrForbidden }`，表明该接口仅供登录用户自服务；管理员强制重置 MFA 的真实有效接口为 `DELETE /api/v1/users/:uid/mfa`。若不核验后端，就会导致管理端报 403 越权错误。
+   * **陷阱示例 2（RBAC 动作树）**：后端 `GET /api/v1/policy/resource-actions` 返回结构为 `[]*ResourceDefinition{ resource, alias, rules: []*Action{ action, alias } }`。前端角色创建接口所需要的 verb 列表是纯动词（如 `get_workflow`, `edit_workflow`），而非拼接后的 `resource:verb`，必须对齐 Go 结构体序列化字段。
+
+### 10.3 核心业务域逆向避坑知识库 (Domain Knowledge & Gotchas)
+
+#### 1. 项目向导与模板体系 (Projects & Wizards)
+* **向导模式**：新建项目并非单一表单，官方支持 5 类项目卡片模式（K8s YAML 项目、Helm Chart 项目、K8s 托管项目、生产托管项目、虚拟机项目），向导流程必须支持多集群调度策略。
+* **数据结构**：接口 `POST /api/aslan/project/v3/projects`，包含 `project_name`、`product_name`、`desc` 与部署策略对象。
+
+#### 2. 工作流与模板库 (Pipelines & Templates)
+* **预置模板库**：工作流新建入口需提供官方内置模板库（单服务构建部署、多环境分支发布等），支持一键加载阶段（Stages）与任务（Jobs）骨架。
+* **DAG 画布与执行器**：画布数据模型必须与 Aslan 工作流 V4 调度引擎的 Stage-Job 结构严格 1:1 对齐，防止保存时后端校验失败。
+
+#### 3. 基础设施集成 (CodeHosts & Clusters)
+* **代码源集成**：涵盖 7 大代码托管平台（GitLab、GitHub、Gerrit、Gitee、Gitee EE、Codeup、GitLab EE），平台表单各不相同（个人 Token、OAuth 鉴权应用、内网 HTTP/SOCKS5 代理穿透），OAuth 流程需引导用户至提供商授权并在回调中完成交换。
+* **集群高级调度**：集群抽屉具备四面板高级配置（连接信息、缓存 PVC 共享、DinD Docker 守护进程调度、镜像仓库路由解析），DinD 策略对流水线容器化构建性能至关重要。
+
+#### 4. 企业与定制信息 (Enterprise Branding)
+* **品牌资产四槽位**：企业定制不仅是名称和简介，核心为四槽位 Base64 图标资产——登录页 Logo、浅色顶部导航 Logo、深色顶部导航 Logo、浏览器 Favicon；必须提供实时缩略图预览与重置机制。
+
+#### 5. 工作台与卡片系统 (Dashboard Widgets)
+* **有效卡片真理源**：官方后端工作台存储于 `GET/PUT/POST /api/aslan/system/dashboard/settings`，支持且仅支持 3 类微部件：
+  1. `running_workflow` (当前运行中的工作流)
+  2. `my_workflow` (常用/收藏工作流)
+  3. `my_env` (我的环境，必须携带 `is_production: boolean` 传参区分生产与测试)
+* **实时性保证**：工作台卡片必须引入 5 秒轻量定时轮询，实现构建/发布任务状态的无感自动刷新。
+
+#### 6. 发布计划与日历视图 (Release Plan & Calendar)
+* **视图切换与持久化**：支持 Segmented 列表（List）与日历（Calendar）无缝切换，偏好配置持久化至 `localStorage`。
+* **按月范围查询**：日历视图必须带入当前月份起止的 Unix 秒级时间戳（`startTime` 与 `endTime`），并设置 `pageSize: 9999` 拉取整月计划，在 `<Calendar cellRender={...} />` 单元格内按状态（`planning`, `running`, `success`, `failed`）呈现徽标与抽屉联动。
+* **接口路径契约**：计划立即/调度执行接口必须精准对齐 `/api/aslan/release_plan/v1/{id}/schedule_execute`。
+
+#### 7. 用户管理与 RBAC 精细权限 (Users & RBAC)
+* **用户即时授权**：调用 `POST /api/v1/users` 创建用户账号后，必须立即联动调用 `POST /api/v1/policy/role-bindings/user/{uid}?namespace=*` 绑定系统角色，防止产生无权限孤儿账号。
+* **系统角色真理源与内置保护**：角色列表统一通过 `GET /api/v1/policy/roles?namespace=*` 获取；对于 `type === 'system'` 的内置角色（如 `admin`、`global-read-only`），前端必须禁用其“修改”和“删除”操作，防止破坏平台基础设施权限。
+
+### 10.4 验证与防退化双门禁标准 (Anti-Regression & Verification Standards)
+每次逆向代码重构提交前，必须顺序通过三道严格门禁：
+1. **Ant Design 6.x CLI 静态语法检查**：
+   ```bash
+   npx antd lint ./frontend/src
+   # 必须保持 0 errors, 0 warnings
+   ```
+2. **TypeScript 类型安全与 Vite 构建检查**：
+   ```bash
+   pnpm --dir frontend run build
+   # 确保无 TS 报错且产物打包顺利输出
+   ```
+3. **Chrome DevTools MCP 真实浏览器验收**：
+   * 在真实浏览器中打开目标路由，验证元素可见性、网络请求（Network）、控制台日志（Console 无 Red Error），并进行点击与表单提交操作，确保端到端功能闭环。
+
+
 

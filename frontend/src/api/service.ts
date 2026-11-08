@@ -361,6 +361,19 @@ export const serviceApi = {
     return Array.isArray(res) ? res : [];
   },
 
+  /** GET /api/aslan/code/codehost/:id/tags */
+  async getCodehostTags(
+    id: number,
+    repoOwner: string,
+    repoName: string
+  ): Promise<Array<{ name: string }>> {
+    const res = await http.get<Array<{ name: string }>>(
+      `/api/aslan/code/codehost/${id}/tags?repoOwner=${encodeURIComponent(repoOwner)}&repoName=${encodeURIComponent(repoName)}&page=1&per_page=200`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
+  },
+
   // --- 2. Template (从模板加载/同步) ---
   // 后端: pkg/microservice/aslan/core/service/handler/yaml_template.go:39
   async loadServiceFromTemplate(

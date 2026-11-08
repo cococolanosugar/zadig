@@ -8,15 +8,10 @@ import {
   Empty,
   Dropdown,
   Modal,
-  Form,
-  Select,
-  Input,
   Tag,
   Spin,
   Row,
   Col,
-  Statistic,
-  Progress,
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
@@ -26,16 +21,12 @@ import {
   ReloadOutlined,
   DeleteOutlined,
   ClusterOutlined,
-  ThunderboltOutlined,
   UserOutlined,
-  RocketOutlined,
-  RollbackOutlined,
-  CheckCircleOutlined,
-  ClockCircleOutlined,
+  PlayCircleOutlined,
+  AppstoreOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import http from '../../api/client';
-import statApi from '../../api/stat';
 import { feedback } from '../../utils/feedback';
 
 const { Text } = Typography;
@@ -69,21 +60,30 @@ interface EnvResponseItem {
 }
 
 const CARD_TYPE_OPTIONS = [
-  { label: '运行中的工作流', value: 'running_workflow' },
-  { label: '我的工作流', value: 'my_workflow' },
-  { label: '我的环境', value: 'my_env' },
-  { label: '服务热力图', value: 'service_update_frequency' },
-  { label: '部署效能统计', value: 'deploy_statistics' },
-  { label: '服务回滚排行榜', value: 'service_rollback_ranking' },
+  {
+    label: '运行中的工作流',
+    value: 'running_workflow',
+    description: '显示系统中正在运行的工作流任务实时状态',
+    icon: <PlayCircleOutlined style={{ fontSize: 28, color: '#1677ff' }} />,
+  },
+  {
+    label: '我的工作流',
+    value: 'my_workflow',
+    description: '显示个人关注的工作流列表，支持快速触发运行',
+    icon: <BranchesOutlined style={{ fontSize: 28, color: '#52c41a' }} />,
+  },
+  {
+    label: '我的环境',
+    value: 'my_env',
+    description: '显示个人关注的环境及服务运行状态',
+    icon: <ClusterOutlined style={{ fontSize: 28, color: '#faad14' }} />,
+  },
 ];
 
 const CARD_TYPE_LABEL: Record<string, string> = {
   running_workflow: '运行中的工作流',
   my_workflow: '我的工作流',
   my_env: '我的环境',
-  service_update_frequency: '服务热力图',
-  deploy_statistics: '部署效能统计',
-  service_rollback_ranking: '服务回滚排行榜',
 };
 
 export const DashboardPage: React.FC = () => {
@@ -91,10 +91,8 @@ export const DashboardPage: React.FC = () => {
   const [cards, setCards] = useState<DashboardCardConfig[]>([]);
   const [cardsLoading, setCardsLoading] = useState(true);
   const [addCardModalOpen, setAddCardModalOpen] = useState(false);
-  const [addForm] = Form.useForm();
-  const [cardType, setCardType] = useState<string>('running_workflow');
+  const [addingType, setAddingType] = useState<string | null>(null);
 
-  // [card.id, data] pairs for each card's fetched data
   const [cardData, setCardData] = useState<Record<string, unknown>>({});
 
   const loadCardConfig = useCallback(async () => {
@@ -104,19 +102,11 @@ export const DashboardPage: React.FC = () => {
         '/api/aslan/system/dashboard/settings',
         { skipErrorHandler: true }
       );
-      const defaultCards = [
-        { name: '运行中的工作流', type: 'running_workflow' },
-        { name: '部署与交付效能统计', type: 'deploy_statistics' },
-        { name: '服务回滚排行榜', type: 'service_rollback_ranking' },
-      ];
+      const defaultCards = [{ name: '运行中的工作流', type: 'running_workflow' }];
       const list = res?.cards && res.cards.length > 0 ? res.cards : defaultCards;
       setCards(list);
     } catch {
-      setCards([
-        { name: '运行中的工作流', type: 'running_workflow' },
-        { name: '部署与交付效能统计', type: 'deploy_statistics' },
-        { name: '服务回滚排行榜', type: 'service_rollback_ranking' },
-      ]);
+      setCards([{ name: '运行中的工作流', type: 'running_workflow' }]);
     } finally {
       setCardsLoading(false);
     }
@@ -139,63 +129,18 @@ export const DashboardPage: React.FC = () => {
           { skipErrorHandler: true }
         );
       } else if (card.type === 'my_env') {
-        const cfg = card.config || {};
+        const cfg = (card.config || {}) as {
+          env_name?: string;
+          project_name?: string;
+          production?: boolean;
+        };
+        const envName = cfg.env_name || '';
+        const projectName = cfg.project_name || '';
+        const production = cfg.production ? 'true' : 'false';
         data = await http.get<EnvResponseItem>(
-          `/api/aslan/system/dashboard/environment/${cfg.env_name as string}?projectName=${cfg.project_name as string}`,
+          `/api/aslan/system/dashboard/environment/${envName}?projectName=${projectName}&production=${production}`,
           { skipErrorHandler: true }
         );
-      } else if (card.type === 'deploy_statistics') {
-        try {
-          // LOOP7-A1: 必填 type/startDate/endDate，避免后端 invlid production type 500
-          const now = Math.floor(Date.now() / 1000);
-          const past30 = now - 30 * 86400;
-          const health = await statApi.getDeployHealthStats({
-            startDate: past30,
-            endDate: now,
-            type: 'both',
-          });
-          const success = health?.success || 0;
-          const failure = health?.failure || 0;
-          const total = success + failure;
-          const successRate = total > 0 ? Number(((success / total) * 100).toFixed(1)) : null;
-          data = {
-            total_deploys: total,
-            success_rate: successRate,
-            failed_deploys: failure,
-          };
-        } catch {
-          data = {
-            total_deploys: 0,
-            success_rate: null,
-            failed_deploys: 0,
-          };
-        }
-      } else if (card.type === 'service_rollback_ranking') {
-        try {
-          // LOOP7-A1: 必填 type/startDate/endDate
-          const now = Math.floor(Date.now() / 1000);
-          const past30 = now - 30 * 86400;
-          const res = await statApi.getTopRollbackedServices({
-            startDate: past30,
-            endDate: now,
-            top: 5,
-            type: 'both',
-          });
-          if (Array.isArray(res) && res.length > 0) {
-            data = res.map((item, idx) => ({
-              rank: idx + 1,
-              service_name: item.service_name || 'unknown',
-              count: item.count || 0,
-              last_env: item.production ? 'prod' : 'dev/test',
-              last_time: '近30天',
-              reason: item.project_name ? `所属项目: ${item.project_name}` : '发布回滚',
-            }));
-          } else {
-            data = [];
-          }
-        } catch {
-          data = [];
-        }
       }
       setCardData((prev) => ({ ...prev, [card.id || card.name]: data }));
     } catch {
@@ -203,17 +148,34 @@ export const DashboardPage: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
+  const refreshAllCardData = useCallback(() => {
     cards.forEach((card) => {
       fetchCardData(card);
     });
   }, [cards, fetchCardData]);
 
-  const handleSaveCards = async (nextCards: DashboardCardConfig[]) => {
+  useEffect(() => {
+    refreshAllCardData();
+  }, [refreshAllCardData]);
+
+  // 工作台数据 5 秒自动轮询
+  useEffect(() => {
+    if (cards.length === 0) return undefined;
+    const timer = window.setInterval(() => {
+      cards.forEach((card) => {
+        fetchCardData(card);
+      });
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [cards, fetchCardData]);
+
+  const handleSaveCards = async (nextCards: DashboardCardConfig[], silent = false) => {
     try {
       await http.put('/api/aslan/system/dashboard/settings', { cards: nextCards });
       setCards(nextCards);
-      feedback.message.success('工作台卡片配置已保存');
+      if (!silent) {
+        feedback.message.success('工作台卡片配置已保存');
+      }
       return true;
     } catch (err: any) {
       feedback.message.error(err?.response?.data?.message || err?.message || '卡片配置保存失败');
@@ -221,21 +183,23 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  const handleAddCard = async () => {
+  const operateCard = async (type: string) => {
+    setAddingType(type);
     try {
-      const values = await addForm.validateFields();
-      const newCard: DashboardCardConfig = { name: values.name, type: values.type };
-      if (values.type === 'my_env') {
-        newCard.config = { project_name: values.project_name, env_name: values.env_name };
+      const option = CARD_TYPE_OPTIONS.find((o) => o.value === type);
+      const newCard: DashboardCardConfig = {
+        name: option?.label || CARD_TYPE_LABEL[type] || type,
+        type,
+      };
+      if (type === 'my_env') {
+        newCard.config = { project_name: '', env_name: '', production: false };
       }
       const ok = await handleSaveCards([...cards, newCard]);
       if (ok) {
         setAddCardModalOpen(false);
-        addForm.resetFields();
-        setCardType('running_workflow');
       }
-    } catch {
-      // Form validation error
+    } finally {
+      setAddingType(null);
     }
   };
 
@@ -250,7 +214,7 @@ export const DashboardPage: React.FC = () => {
       label: '刷新卡片',
       onClick: () => {
         loadCardConfig();
-        cards.forEach((c) => fetchCardData(c));
+        refreshAllCardData();
       },
     },
     {
@@ -311,114 +275,6 @@ export const DashboardPage: React.FC = () => {
     );
   };
 
-  const renderDeployStatistics = (stats: any) => {
-    // R11 任务四: 无数据时如实展示 0 次 / '-'，严禁捏造虚假效能数
-    const s = stats || {
-      total_deploys: 0,
-      success_rate: null,
-      failed_deploys: 0,
-    };
-    return (
-      <Row gutter={[24, 24]} align="middle" style={{ padding: '12px 0' }}>
-        <Col xs={24} sm={8}>
-          <Statistic
-            title="总部署发布次数"
-            value={s.total_deploys ?? 0}
-            prefix={<RocketOutlined style={{ color: '#1677ff' }} />}
-            suffix="次"
-          />
-        </Col>
-        <Col xs={24} sm={8}>
-          <Statistic
-            title="发布成功率"
-            value={s.success_rate ?? '-'}
-            precision={s.success_rate !== null && s.success_rate !== undefined ? 1 : undefined}
-            styles={{ content: { color: s.success_rate !== null && s.success_rate >= 95 ? '#52c41a' : '#8c8c8c' } }}
-            prefix={<CheckCircleOutlined />}
-            suffix={s.success_rate !== null && s.success_rate !== undefined ? '%' : ''}
-          />
-          <Progress
-            percent={s.success_rate !== null && s.success_rate !== undefined ? s.success_rate : 0}
-            size="small"
-            status={s.success_rate !== null && s.success_rate >= 95 ? 'normal' : s.success_rate !== null ? 'exception' : 'normal'}
-          />
-        </Col>
-        <Col xs={24} sm={8}>
-          <Statistic
-            title="失败部署次数"
-            value={s.failed_deploys ?? 0}
-            styles={{ content: { color: s.failed_deploys ? '#fa8c16' : '#52c41a' } }}
-            prefix={<ClockCircleOutlined />}
-            suffix="次"
-          />
-        </Col>
-      </Row>
-    );
-  };
-
-  const renderRollbackRanking = (items: any) => {
-    const list = Array.isArray(items) ? items : [];
-    return (
-      <Table
-        dataSource={list}
-        rowKey="service_name"
-        pagination={false}
-        size="small"
-        columns={[
-          {
-            title: '排名',
-            dataIndex: 'rank',
-            key: 'rank',
-            width: 70,
-            render: (r: number) => {
-              const color = r === 1 ? '#ff4d4f' : r === 2 ? '#fa8c16' : r === 3 ? '#faad14' : '#8c8c8c';
-              return (
-                <Tag color={r <= 3 ? 'gold' : 'default'} style={{ borderRadius: 10, fontWeight: 700, color }}>
-                  #{r}
-                </Tag>
-              );
-            },
-          },
-          {
-            title: '脆弱服务名称',
-            dataIndex: 'service_name',
-            key: 'service_name',
-            render: (name: string) => (
-              <Space size={6}>
-                <RollbackOutlined style={{ color: '#ff4d4f' }} />
-                <Text strong style={{ color: '#1f2d3d' }}>{name}</Text>
-              </Space>
-            ),
-          },
-          {
-            title: '回滚频次',
-            dataIndex: 'count',
-            key: 'count',
-            render: (c: number) => <Tag color="error">{c} 次回滚</Tag>,
-          },
-          {
-            title: '所属环境',
-            dataIndex: 'last_env',
-            key: 'last_env',
-            render: (env: string) => <Tag color="blue">{env}</Tag>,
-          },
-          {
-            title: '主要归因 / 异常类型',
-            dataIndex: 'reason',
-            key: 'reason',
-            render: (reason: string) => <Text type="secondary" style={{ fontSize: 12 }}>{reason}</Text>,
-          },
-          {
-            title: '最近回滚时间',
-            dataIndex: 'last_time',
-            key: 'last_time',
-            render: (t: string) => <span style={{ color: '#8c8c8c', fontSize: 12 }}>{t}</span>,
-          },
-        ]}
-      />
-    );
-  };
-
   const renderCard = (card: DashboardCardConfig, index: number) => {
     const key = card.id || card.name;
     const data = cardData[key];
@@ -447,10 +303,10 @@ export const DashboardPage: React.FC = () => {
           <Space orientation="horizontal" size={16} wrap>
             <ClusterOutlined style={{ fontSize: 28, color: '#0066ff' }} />
             <div>
-              <Text strong style={{ fontSize: 16 }}>{env.name}</Text>
+              <Text strong style={{ fontSize: 16 }}>{env.name || '未配置环境'}</Text>
               <div style={{ marginTop: 4 }}>
                 <Tag color={env.production ? 'gold' : 'blue'}>{env.production ? '生产环境' : '测试环境'}</Tag>
-                <Tag color="geekblue">{env.project_name}</Tag>
+                {env.project_name ? <Tag color="geekblue">{env.project_name}</Tag> : null}
               </div>
               <div style={{ marginTop: 8 }}>
                 <Text type="secondary" style={{ fontSize: 12 }}>
@@ -462,14 +318,10 @@ export const DashboardPage: React.FC = () => {
           </Space>
         </div>
       ) : env === null ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="环境不存在或已删除" />
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="环境不存在或尚未配置" />
       ) : (
         <Spin />
       );
-    } else if (card.type === 'deploy_statistics') {
-      body = renderDeployStatistics(data);
-    } else if (card.type === 'service_rollback_ranking') {
-      body = renderRollbackRanking(data);
     } else {
       body = (
         <div style={{ padding: '40px 0', textAlign: 'center' }}>
@@ -514,7 +366,6 @@ export const DashboardPage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Top Action Bar */}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button
           type="default"
@@ -531,7 +382,6 @@ export const DashboardPage: React.FC = () => {
         </Button>
       </div>
 
-      {/* Dashboard Cards (config persisted per-user via /api/aslan/system/dashboard/settings) */}
       {cardsLoading ? (
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
           <Spin size="large" />
@@ -540,57 +390,60 @@ export const DashboardPage: React.FC = () => {
         cards.map((card, idx) => renderCard(card, idx))
       )}
 
-      {/* Add Card Modal */}
       <Modal
-        title="添加工作台卡片"
+        title={
+          <Space>
+            <AppstoreOutlined />
+            <span>选择工作台卡片</span>
+          </Space>
+        }
         open={addCardModalOpen}
-        onOk={handleAddCard}
         onCancel={() => setAddCardModalOpen(false)}
-        okText="保存"
-        cancelText="取消"
-        confirmLoading={false}
+        footer={null}
+        width={720}
+        destroyOnHidden
       >
-        <Form
-          form={addForm}
-          layout="vertical"
-          style={{ marginTop: 16 }}
-          initialValues={{ type: 'running_workflow' }}
-        >
-          <Form.Item name="type" label="选择卡片类型" rules={[{ required: true }]}>
-            <Select options={CARD_TYPE_OPTIONS} onChange={(v) => setCardType(v)} />
-          </Form.Item>
-          <Form.Item name="name" label="卡片名称" rules={[{ required: true, message: '请输入卡片名称' }]}>
-            <Input placeholder={CARD_TYPE_LABEL[cardType]} />
-          </Form.Item>
-          {cardType === 'my_env' && (
-            <>
-              <Form.Item
-                name="project_name"
-                label="所属项目"
-                rules={[{ required: true, message: '请输入项目名称' }]}
+        <Row gutter={[16, 16]} style={{ marginTop: 8 }}>
+          {CARD_TYPE_OPTIONS.map((opt) => (
+            <Col xs={24} sm={12} md={8} key={opt.value}>
+              <Card
+                hoverable
+                variant="outlined"
+                onClick={() => {
+                  if (!addingType) operateCard(opt.value);
+                }}
+                style={{ height: '100%', cursor: addingType ? 'wait' : 'pointer' }}
+                styles={{ body: { padding: 16 } }}
               >
-                <Input placeholder="例如: demo-k8s" />
-              </Form.Item>
-              <Form.Item
-                name="env_name"
-                label="环境名称"
-                rules={[{ required: true, message: '请输入环境名称' }]}
-              >
-                <Input placeholder="例如: dev" />
-              </Form.Item>
-            </>
-          )}
-          {cardType === 'service_update_frequency' && (
-            <Text type="secondary">
-              <ThunderboltOutlined /> 服务热力图卡片将在后续版本支持，请先选择其他卡片类型。
-            </Text>
-          )}
-          {cardType === 'running_workflow' && (
-            <Text type="secondary">
-              <UserOutlined /> 展示当前集群中所有正在执行的工作流任务。
-            </Text>
-          )}
-        </Form>
+                <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+                  <div>{opt.icon}</div>
+                  <Text strong style={{ fontSize: 15 }}>{opt.label}</Text>
+                  <Text type="secondary" style={{ fontSize: 12, lineHeight: 1.5 }}>
+                    {opt.description}
+                  </Text>
+                  <Button
+                    type="primary"
+                    block
+                    loading={addingType === opt.value}
+                    disabled={!!addingType && addingType !== opt.value}
+                    icon={<PlusOutlined />}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!addingType) operateCard(opt.value);
+                    }}
+                  >
+                    添加卡片
+                  </Button>
+                </Space>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+        <div style={{ marginTop: 16 }}>
+          <Text type="secondary">
+            <UserOutlined /> 单击卡片即可添加至工作台，配置将自动持久化。
+          </Text>
+        </div>
       </Modal>
     </div>
   );

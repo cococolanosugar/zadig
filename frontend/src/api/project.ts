@@ -6,6 +6,35 @@ export interface ProjectListResponse {
   total: number;
 }
 
+/** 新建项目 5 类卡片类型 */
+export type ProjectCardType = 'k8s' | 'helm' | 'external' | 'host' | 'agent';
+
+/** 自由项目应用类型 */
+export type AppType = 'host' | 'mobile';
+
+export interface ProductFeature {
+  basic_facility: 'kubernetes' | 'cloud_host' | 'agent';
+  deploy_type: 'k8s' | 'helm' | 'agent' | '';
+  create_env_type: 'system' | 'external';
+  app_type?: AppType | '';
+}
+
+export interface CreateProjectPayload {
+  /** 显示名（中文） */
+  project_name: string;
+  /** 标识名（英文） */
+  product_name: string;
+  desc?: string;
+  enabled?: boolean;
+  /** 必填：私有/公开 */
+  public: boolean;
+  /** 必填：项目管理员 uid 列表 */
+  admins: string[];
+  cluster_ids?: string[];
+  group_name?: string;
+  product_feature: ProductFeature;
+}
+
 export const projectApi = {
   /**
    * Get list of projects
@@ -116,31 +145,27 @@ export const projectApi = {
   },
 
   /**
-   * Create a new project
-   * R12 任务一: 后端强制 product_name 与 product_feature 必填，payload 始终完整组装
+   * Create a new project via picket（携带 public / admins / product_feature 全量字段）
+   * POST /api/v1/picket/projects → aslan /project/products
    */
-  async createProject(data: {
-    project_name: string;
-    product_name?: string;
-    alias?: string;
-    desc?: string;
-    product_feature?: {
-      basic_facility?: string;
-      deploy_type?: string;
-      create_env_type?: string;
-    };
-  }): Promise<ProjectItem> {
-    const payload = {
-      product_name: data.product_name || data.project_name,
-      project_name: data.alias || data.project_name,
+  async createProject(data: CreateProjectPayload): Promise<ProjectItem> {
+    const payload: CreateProjectPayload = {
+      project_name: data.project_name,
+      product_name: data.product_name,
       desc: data.desc || '',
-      product_feature: data.product_feature || {
-        basic_facility: 'kubernetes',
-        deploy_type: 'k8s',
-        create_env_type: 'system',
-      },
+      enabled: data.enabled !== false,
+      public: Boolean(data.public),
+      admins: Array.isArray(data.admins) ? data.admins : [],
+      cluster_ids: data.cluster_ids || [],
+      group_name: data.group_name || '',
+      product_feature: data.product_feature,
     };
-    return http.post<ProjectItem>('/api/aslan/project/products', payload);
+    try {
+      return await http.post<ProjectItem>('/api/v1/picket/projects', payload);
+    } catch {
+      // picket 不可用时回退 aslan 直连，字段保持完整
+      return http.post<ProjectItem>('/api/aslan/project/products', payload);
+    }
   },
 
   /**

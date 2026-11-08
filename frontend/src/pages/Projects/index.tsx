@@ -1,10 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  ModalForm,
-  ProFormText,
-  ProFormTextArea,
-} from '@ant-design/pro-components';
-import {
   Button,
   Tag,
   Space,
@@ -45,6 +40,10 @@ import { projectApi } from '../../api/project';
 import { useProjectStore, type ProjectItem } from '../../stores/project';
 import { feedback } from '../../utils/feedback';
 import { ProjectHierarchyDrawer } from './ProjectHierarchyDrawer';
+import {
+  ProjectCreateWizard,
+  getPostCreateRoute,
+} from './ProjectCreateWizard';
 
 const { Title, Text } = Typography;
 
@@ -59,6 +58,7 @@ export const ProjectsPage: React.FC = () => {
   const [groups, setGroups] = useState<Array<{ id: string; name: string }>>([]);
   const [searchText, setSearchText] = useState('');
   const [hierarchyDrawerOpen, setHierarchyDrawerOpen] = useState<boolean>(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const fetchProjects = useCallback(async () => {
     setLoading(true);
@@ -84,31 +84,6 @@ export const ProjectsPage: React.FC = () => {
   useEffect(() => {
     fetchProjects();
   }, [fetchProjects]);
-
-  const handleCreate = async (values: Record<string, unknown>) => {
-    try {
-      // R12 任务一: 透传 deploy_type 供 product_feature 组装（缺省 k8s）
-      await projectApi.createProject({
-        project_name: values.project_name as string,
-        alias: values.alias as string,
-        desc: values.desc as string,
-        product_feature: {
-          basic_facility: (values.basic_facility as string) || 'kubernetes',
-          deploy_type: (values.deploy_type as string) || 'k8s',
-          create_env_type: 'system',
-        },
-      });
-      feedback.message.success('项目创建成功！');
-      fetchProjects();
-      return true;
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        || (err instanceof Error ? err.message : '')
-        || '项目创建失败，请检查项目唯一标识';
-      feedback.message.error(msg);
-      return false;
-    }
-  };
 
   const handleDelete = async (name: string, e?: React.MouseEvent) => {
     if (e) {
@@ -357,39 +332,14 @@ export const ProjectsPage: React.FC = () => {
             模板层级拓扑
           </Button>
 
-          {/* Create Project Modal */}
-          <ModalForm
-            title="新建云原生项目"
-            trigger={
-              <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 4 }}>
-                新建项目
-              </Button>
-            }
-            width={520}
-            onFinish={handleCreate}
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            style={{ borderRadius: 4 }}
+            onClick={() => setCreateOpen(true)}
           >
-            <ProFormText
-              name="project_name"
-              label="项目标识名称 (DNS 命名规范)"
-              placeholder="例如: demo-k8s"
-              rules={[
-                { required: true, message: '请输入项目英文标识' },
-                { pattern: /^[a-z0-9-]+$/, message: '仅支持小写字母、数字和中划线' },
-              ]}
-            />
-
-            <ProFormText
-              name="alias"
-              label="项目显示别名"
-              placeholder="例如: 业务中台微服务体系"
-            />
-
-            <ProFormTextArea
-              name="desc"
-              label="项目详细描述"
-              placeholder="业务场景、所属团队及交付目标说明"
-            />
-          </ModalForm>
+            新建项目
+          </Button>
         </Space>
       </div>
 
@@ -704,6 +654,18 @@ export const ProjectsPage: React.FC = () => {
       <ProjectHierarchyDrawer
         open={hierarchyDrawerOpen}
         onClose={() => setHierarchyDrawerOpen(false)}
+      />
+
+      <ProjectCreateWizard
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        groupName={
+          activeGroup !== 'all' && activeGroup !== 'ungrouped' ? activeGroup : undefined
+        }
+        onCreated={(name, type, appType) => {
+          fetchProjects();
+          navigate(getPostCreateRoute(name, type, appType));
+        }}
       />
     </div>
   );

@@ -28,7 +28,8 @@ import {
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import { useParams, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { load as yamlLoad } from 'js-yaml';
 import { useProjectStore } from '../../stores/project';
 import {
   workflowApi,
@@ -36,8 +37,10 @@ import {
   type WorkflowTaskPreview,
   type WorkflowViewDetail,
 } from '../../api/workflow';
+import templateApi from '../../api/template';
 import WorkflowCanvas from '../../components/WorkflowDAG/WorkflowCanvas';
 import WorkflowTriggerModal from '../../components/WorkflowDAG/WorkflowTriggerModal';
+import { WorkflowTemplateModal } from './WorkflowTemplateModal';
 import { feedback } from '../../utils/feedback';
 
 const { Title, Text } = Typography;
@@ -46,6 +49,7 @@ export const PipelinesPage: React.FC = () => {
   const { projectName } = useParams<{ projectName?: string }>();
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { currentProject, projects } = useProjectStore();
   const activeProject = projectName || currentProject;
 
@@ -57,6 +61,7 @@ export const PipelinesPage: React.FC = () => {
   const [activeWorkflow, setActiveWorkflow] = useState<WorkflowV4Item | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'tasks' | 'dag'>('list');
   const [loading, setLoading] = useState(false);
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
 
   // 任务历史（对齐旧版全局工作流任务列表与实时 SSE 订阅 /api/aslan/workflow/sse/workflowTasks/running & pending）
   const [tasks, setTasks] = useState<WorkflowTaskPreview[]>([]);
@@ -313,37 +318,80 @@ export const PipelinesPage: React.FC = () => {
   }, [loadWorkflows]);
 
   useEffect(() => {
-    if (isCreateRoute) {
-      setActiveTab('dag');
+    if (!isCreateRoute) return;
+
+    const templateId = searchParams.get('id') || '';
+    const templateBinding = searchParams.get('templateBinding') === 'true';
+    const projectFromQuery = searchParams.get('projectName') || activeProject || 'default';
+
+    let cancelled = false;
+    setActiveTab('dag');
+
+    const initBlank = () => {
+      if (cancelled) return;
       setActiveWorkflow({
         name: '',
-        project: activeProject || 'default',
+        project: projectFromQuery,
         description: '',
-        stages: [
-          {
-            name: '构建阶段',
-            jobs: [
-              {
-                name: 'build-job',
-                type: 'zadig-build',
-                spec: {},
-              },
-            ],
-          },
-          {
-            name: '部署阶段',
-            jobs: [
-              {
-                name: 'deploy-job',
-                type: 'zadig-deploy',
-                spec: {},
-              },
-            ],
-          },
-        ],
+        stages: [],
       });
+    };
+
+    const initFromTemplate = async () => {
+      try {
+        const [yamlText, listRes] = await Promise.all([
+          templateApi.getWorkflowTemplateDetail(templateId, projectFromQuery),
+          templateApi.getWorkflowTemplates({
+            excludeBuildIn: false,
+            projectName: projectFromQuery,
+          }),
+        ]);
+        const parsed = yamlLoad(yamlText) as Partial<WorkflowV4Item> & {
+          template_name?: string;
+          stages?: WorkflowV4Item['stages'];
+        };
+        const templateName = parsed.template_name || '';
+        const i18n = (listRes.build_in_workflow_template_i18ns || []).find(
+          (item) => item.name_key === templateName
+        );
+        const stages = (parsed.stages || []).map((stage) => {
+          const stageI18n = i18n?.stages?.find((s) => s.key === stage.name);
+          return stageI18n ? { ...stage, name: stageI18n.name_zh } : stage;
+        });
+        if (cancelled) return;
+        setActiveWorkflow({
+          name: '',
+          project: projectFromQuery,
+          display_name: i18n?.name_zh || parsed.display_name || '',
+          description: i18n?.description_zh || parsed.description || '',
+          stages,
+          params: parsed.params,
+          template_binding: templateBinding
+            ? {
+                enabled: true,
+                template_id: templateId,
+                template_name: templateName,
+                base_version: 0,
+              }
+            : undefined,
+        });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : '加载工作流模板失败';
+        feedback.message.error(msg);
+        initBlank();
+      }
+    };
+
+    if (templateId) {
+      void initFromTemplate();
+    } else {
+      initBlank();
     }
-  }, [isCreateRoute, activeProject]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isCreateRoute, activeProject, searchParams]);
 
   const handleOpenTrigger = (name: string) => {
     setTriggerWorkflowName(name);
@@ -562,7 +610,7 @@ export const PipelinesPage: React.FC = () => {
                 icon={<PlusOutlined />}
                 onClick={() => {
                   if (activeProject && !isGlobalRoute) {
-                    navigate(`/v1/projects/detail/${activeProject}/pipelines/custom/create`);
+                    setTemplateModalOpen(true);
                   } else {
                     setCreateModalVisible(true);
                   }
@@ -815,7 +863,14 @@ export const PipelinesPage: React.FC = () => {
 
                     const isNew = !workflows.some((w) => w.name === updated.name);
                     if (isNew) {
-                      await workflowApi.createWorkflow(updated);
+                      const viewName =
+                        searchParams.get('viewName') ||
+                        (selectedView !== 'all' ? selectedView : '') ||
+                        '';
+                      await workflowApi.createWorkflow(updated, {
+                        projectName: activeProject || updated.project,
+                        viewName,
+                      });
                       feedback.message.success(`工作流 [${updated.name}] 创建成功！`);
                       setWorkflows((prev) => [...prev, updated]);
                     } else {
@@ -825,6 +880,8 @@ export const PipelinesPage: React.FC = () => {
                     }
                     setActiveWorkflow(updated);
                     if (isCreateRoute && activeProject) {
+                      setActiveTab('list');
+                      void loadWorkflows();
                       navigate(`/v1/projects/detail/${activeProject}/pipelines`);
                     }
                   } catch (err: unknown) {
@@ -845,6 +902,13 @@ export const PipelinesPage: React.FC = () => {
         ]}
       />
 
+      <WorkflowTemplateModal
+        open={templateModalOpen}
+        onClose={() => setTemplateModalOpen(false)}
+        projectName={activeProject || ''}
+        viewName={selectedView !== 'all' ? selectedView : ''}
+      />
+
       {/* Trigger Modal */}
       <WorkflowTriggerModal
         visible={triggerModalVisible}
@@ -853,7 +917,7 @@ export const PipelinesPage: React.FC = () => {
         onClose={() => setTriggerModalVisible(false)}
       />
 
-      {/* Create Workflow Modal */}
+      {/* Create Workflow Modal（全局工作区兜底） */}
       <Modal
         title="新建 Workflow V4 工作流"
         open={createModalVisible}

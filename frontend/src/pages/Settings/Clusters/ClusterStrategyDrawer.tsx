@@ -110,6 +110,18 @@ export const ClusterStrategyDrawer: React.FC<ClusterStrategyDrawerProps> = ({
     setModalVisible(true);
   };
 
+  /** P0: 后端识别 key:value，将 key=value 规范化为 key:value */
+  const normalizeNodeLabels = (labels: string[] = []): string[] =>
+    labels
+      .map((raw) => String(raw || '').trim())
+      .filter(Boolean)
+      .map((label) => {
+        if (label.includes(':')) return label;
+        const eq = label.indexOf('=');
+        if (eq > 0) return `${label.slice(0, eq)}:${label.slice(eq + 1)}`;
+        return label;
+      });
+
   const handleSaveStrategy = async () => {
     if (!cluster) return;
     try {
@@ -120,7 +132,10 @@ export const ClusterStrategyDrawer: React.FC<ClusterStrategyDrawerProps> = ({
         strategy_name: values.strategy_name.trim(),
         strategy: values.strategy,
         default: Boolean(values.default),
-        node_labels: values.strategy !== 'normal' ? values.node_labels || [] : [],
+        node_labels:
+          values.strategy !== 'normal'
+            ? normalizeNodeLabels(values.node_labels || [])
+            : [],
         tolerations: values.tolerations || '',
       };
 
@@ -405,11 +420,11 @@ export const ClusterStrategyDrawer: React.FC<ClusterStrategyDrawerProps> = ({
                   },
                 },
               ]}
-              extra="输入 key=value 并按回车添加标签，例如: kubernetes.io/arch=amd64 或 disktype=ssd"
+              extra="输入 key:value 并按回车添加标签，例如: kubernetes.io/arch:amd64 或 disktype:ssd（兼容 key=value 输入，保存时自动转换）"
             >
               <Select
                 mode="tags"
-                placeholder="键入标签后按回车添加，如 env=prod"
+                placeholder="键入标签后按回车添加，如 env:prod"
                 tokenSeparators={[',', ' ']}
               />
             </Form.Item>

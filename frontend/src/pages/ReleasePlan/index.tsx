@@ -20,6 +20,8 @@ import {
   Spin,
   Alert,
   Timeline,
+  Calendar,
+  Segmented,
 } from 'antd';
 import {
   ScheduleOutlined,
@@ -33,9 +35,12 @@ import {
   CopyOutlined,
   FileTextOutlined,
   SafetyOutlined,
+  UnorderedListOutlined,
 } from '@ant-design/icons';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
+import type { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 import { releasePlanApi, type ReleasePlanItem, type ReleaseJobItem } from '../../api/releasePlan';
 import { feedback } from '../../utils/feedback';
 import { useAuthStore } from '../../stores/auth';
@@ -43,6 +48,30 @@ import { useAuthStore } from '../../stores/auth';
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 const { RangePicker } = DatePicker;
+
+const RELEASE_PLAN_VIEW_KEY = 'releasePlanViewMode';
+
+const toUnixSeconds = (value?: number | string): number => {
+  if (value === undefined || value === null || value === '') return 0;
+  if (typeof value === 'number') {
+    return value > 1e12 ? Math.floor(value / 1000) : value;
+  }
+  const asNum = Number(value);
+  if (!Number.isNaN(asNum) && String(value).trim() !== '' && /^\d+$/.test(String(value).trim())) {
+    return asNum > 1e12 ? Math.floor(asNum / 1000) : asNum;
+  }
+  const parsed = dayjs(value);
+  return parsed.isValid() ? parsed.unix() : 0;
+};
+
+const planStatusColor = (status?: string): string => {
+  const s = String(status || '').toLowerCase();
+  if (s === 'success' || s === 'successed') return 'success';
+  if (s === 'failed' || s === 'timeout' || s === 'cancelled') return 'error';
+  if (s === 'executing' || s === 'in_progress' || s === 'running') return 'processing';
+  if (s === 'wait_for_approval' || s === 'planning') return 'default';
+  return 'blue';
+};
 
 // 已进入终态的 Job 不再提供执行/重试/跳过操作
 const readOnlyJobStatus = (status?: string) =>
@@ -57,6 +86,11 @@ export const ReleasePlanPage: React.FC = () => {
   const [plans, setPlans] = useState<ReleasePlanItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [searchText, setSearchText] = useState<string>('');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>(() => {
+    const saved = localStorage.getItem(RELEASE_PLAN_VIEW_KEY);
+    return saved === 'calendar' ? 'calendar' : 'list';
+  });
+  const [calendarMonth, setCalendarMonth] = useState<Dayjs>(() => dayjs());
 
   // Modal state
   const [createModalVisible, setCreateModalVisible] = useState<boolean>(false);
@@ -87,10 +121,22 @@ export const ReleasePlanPage: React.FC = () => {
   const [planLogs, setPlanLogs] = useState<any[]>([]);
   const [logsLoading, setLogsLoading] = useState<boolean>(false);
 
-  const fetchPlans = useCallback(async () => {
+  const fetchPlans = useCallback(async (mode: 'list' | 'calendar' = viewMode, month: Dayjs = calendarMonth) => {
     setLoading(true);
     try {
-      const data = await releasePlanApi.getPlans();
+      let data: ReleasePlanItem[];
+      if (mode === 'calendar') {
+        const startTime = month.startOf('month').startOf('day').unix();
+        const endTime = month.endOf('month').endOf('day').unix();
+        data = await releasePlanApi.getPlans({
+          pageNum: 1,
+          pageSize: 9999,
+          startTime,
+          endTime,
+        });
+      } else {
+        data = await releasePlanApi.getPlans();
+      }
       setPlans(data);
     } catch (err: any) {
       setPlans([]);
@@ -98,11 +144,75 @@ export const ReleasePlanPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [viewMode, calendarMonth]);
 
   useEffect(() => {
-    fetchPlans();
-  }, [fetchPlans]);
+    fetchPlans(viewMode, calendarMonth);
+  }, [fetchPlans, viewMode, calendarMonth]);
+
+  const handleViewModeChange = (mode: 'list' | 'calendar') => {
+    setViewMode(mode);
+    localStorage.setItem(RELEASE_PLAN_VIEW_KEY, mode);
+  };
+
+  const openPlanDetail = (plan: ReleasePlanItem) => {
+    setActivePlan(plan);
+    setDetailDrawerVisible(true);
+  };
+
+  const plansOnDate = useCallback(
+    (date: Dayjs) => {
+      const dayStart = date.startOf('day').unix();
+      const dayEnd = date.endOf('day').unix();
+      return plans.filter((p) => {
+        const start = toUnixSeconds(p.start_time);
+        const end = toUnixSeconds(p.end_time) || start;
+        if (!start && !end) return false;
+        return start <= dayEnd && end >= dayStart;
+      });
+    },
+    [plans]
+  );
+
+  const calendarCellRender = (current: Dayjs, info: { type: string; originNode: React.ReactElement }) => {
+    if (info.type !== 'date') return info.originNode;
+    const dayPlans = plansOnDate(current);
+    return (
+      <div style={{ minHeight: 72 }}>
+        {info.originNode}
+        <ul style={{ listStyle: 'none', margin: 0, padding: '2px 0 0', overflow: 'hidden' }}>
+          {dayPlans.slice(0, 3).map((p) => (
+            <li key={p.id || p._id || p.name} style={{ marginBottom: 2 }}>
+              <Tag
+                color={planStatusColor(p.status)}
+                style={{
+                  maxWidth: '100%',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  cursor: 'pointer',
+                  marginInlineEnd: 0,
+                  fontSize: 11,
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openPlanDetail(p);
+                }}
+              >
+                {p.name}
+              </Tag>
+            </li>
+          ))}
+          {dayPlans.length > 3 ? (
+            <li>
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                +{dayPlans.length - 3} 更多
+              </Text>
+            </li>
+          ) : null}
+        </ul>
+      </div>
+    );
+  };
 
   useEffect(() => {
     if (targetId && plans.length > 0) {
@@ -465,7 +575,15 @@ export const ReleasePlanPage: React.FC = () => {
           </Text>
         </div>
 
-        <Space orientation="horizontal" size={12}>
+        <Space orientation="horizontal" size={12} wrap>
+          <Segmented
+            value={viewMode}
+            onChange={(v) => handleViewModeChange(v as 'list' | 'calendar')}
+            options={[
+              { label: '列表', value: 'list', icon: <UnorderedListOutlined /> },
+              { label: '日历', value: 'calendar', icon: <CalendarOutlined /> },
+            ]}
+          />
           <Input
             placeholder="搜索发布计划名称 / 负责人"
             prefix={<SearchOutlined style={{ color: '#8c8c8c' }} />}
@@ -474,7 +592,7 @@ export const ReleasePlanPage: React.FC = () => {
             allowClear
             style={{ width: 240, borderRadius: 4 }}
           />
-          <Button icon={<ReloadOutlined />} onClick={fetchPlans} loading={loading}>
+          <Button icon={<ReloadOutlined />} onClick={() => fetchPlans()} loading={loading}>
             刷新
           </Button>
           <Button icon={<SettingOutlined />} onClick={handleOpenHookModal}>
@@ -494,12 +612,22 @@ export const ReleasePlanPage: React.FC = () => {
         </Space>
       </div>
 
-      {/* Main Table */}
+      {/* Main: 列表 / 日历双视图 */}
       <Card
         variant="borderless"
         style={{ borderRadius: 8, border: '1px solid #ebeef5' }}
         styles={{ body: { padding: '16px 24px' } }}
       >
+        {viewMode === 'calendar' ? (
+          <Spin spinning={loading}>
+            <Calendar
+              value={calendarMonth}
+              onPanelChange={(date) => setCalendarMonth(date)}
+              onChange={(date) => setCalendarMonth(date)}
+              cellRender={calendarCellRender}
+            />
+          </Spin>
+        ) : (
         <Table
           rowKey={(r) => r.id || r._id || r.name}
           dataSource={filteredPlans}
@@ -526,6 +654,7 @@ export const ReleasePlanPage: React.FC = () => {
             ),
           }}
         />
+        )}
       </Card>
 
       {/* Create Modal */}

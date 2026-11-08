@@ -52,10 +52,10 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
 
     let currentX = 50;
 
-    currentWorkflow.stages.forEach((stage, stageIndex) => {
+    (currentWorkflow?.stages || []).forEach((stage, stageIndex) => {
       let currentY = 50;
 
-      stage.jobs.forEach((job, jobIndex) => {
+      (stage?.jobs || []).forEach((job, jobIndex) => {
         const nodeId = `job-${stageIndex}-${jobIndex}-${job.name}`;
         nodes.push({
           id: nodeId,
@@ -133,9 +133,9 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   );
 
   const handleSaveJob = (updatedJob: WorkflowJob) => {
-    const updatedStages = currentWorkflow.stages.map((stage) => ({
+    const updatedStages = (currentWorkflow?.stages || []).map((stage) => ({
       ...stage,
-      jobs: stage.jobs.map((j) => (j.name === updatedJob.name ? updatedJob : j)),
+      jobs: (stage.jobs || []).map((j) => (j.name === updatedJob.name ? updatedJob : j)),
     }));
 
     setCurrentWorkflow((prev) => ({
@@ -158,11 +158,12 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     };
 
     // Append to latest stage or create stage
-    const updatedStages = [...currentWorkflow.stages];
+    const updatedStages = [...(currentWorkflow?.stages || [])];
     if (updatedStages.length === 0) {
       updatedStages.push({ name: 'Stage-1', jobs: [newJob] });
     } else {
-      updatedStages[updatedStages.length - 1].jobs.push(newJob);
+      const lastStage = updatedStages[updatedStages.length - 1];
+      lastStage.jobs = [...(lastStage.jobs || []), newJob];
     }
 
     setCurrentWorkflow((prev) => ({ ...prev, stages: updatedStages }));

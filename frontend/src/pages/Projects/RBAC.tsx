@@ -32,7 +32,7 @@ import {
   rbacApi,
   type PolicyRole,
   type RoleBindingResp,
-  type ResourceAction,
+  type ResourceDefinition,
 } from '../../api/rbac';
 import { settingsApi, type UserManagementItem, type UserGroupItem } from '../../api/settings';
 import { feedback } from '../../utils/feedback';
@@ -65,8 +65,12 @@ const RBACPage: React.FC = () => {
   const [rolesLoading, setRolesLoading] = useState(false);
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
   const [roleForm] = Form.useForm();
-  const [actions, setActions] = useState<ResourceAction[]>([]);
-  const [detailRole, setDetailRole] = useState<{ name: string; desc: string; rules: ResourceAction[] } | null>(null);
+  const [actions, setActions] = useState<ResourceDefinition[]>([]);
+  const [detailRole, setDetailRole] = useState<{
+    name: string;
+    desc: string;
+    rules: Array<{ resource: string; verbs: string[] }>;
+  } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
   const [users, setUsers] = useState<UserManagementItem[]>([]);
@@ -200,19 +204,21 @@ const RBACPage: React.FC = () => {
     }
   };
 
-  // 动作选择树：按 resource 分组，叶子为 "Resource:Verb"
+  // 动作选择树：ResourceDefinition → 纯 verb（严禁 resource:verb 拼接）
   const actionTreeData = useMemo(
     () =>
-      actions.map((a) => ({
-        value: a.resource,
-        title: resourceLabel(a.resource),
-        selectable: false,
-        disableCheckbox: true,
-        children: a.verbs.map((v) => ({
-          value: `${a.resource}:${v}`,
-          title: v,
+      actions
+        .filter((a) => a && a.resource)
+        .map((a) => ({
+          value: a.resource,
+          title: a.alias || resourceLabel(a.resource),
+          selectable: false,
+          disableCheckbox: true,
+          children: (a.rules || []).map((rule) => ({
+            value: rule.action,
+            title: rule.alias || rule.action,
+          })),
         })),
-      })),
     [actions]
   );
 
@@ -475,7 +481,7 @@ const RBACPage: React.FC = () => {
           </Form.Item>
           <Form.Item
             name="actions"
-            label="权限动作 (按资源分组，选中叶子节点即授予 Resource:Verb)"
+            label="权限动作 (按资源分组，选中叶子节点即授予纯 verb)"
           >
             <TreeSelect
               treeData={actionTreeData}

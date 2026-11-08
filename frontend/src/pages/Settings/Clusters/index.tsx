@@ -25,6 +25,7 @@ import {
   CopyOutlined,
   LinkOutlined,
   DisconnectOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { settingsApi, type ClusterItem } from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
@@ -32,6 +33,7 @@ import { ClusterStrategyDrawer } from './ClusterStrategyDrawer';
 import { ClusterCacheModal } from './ClusterCacheModal';
 import { ClusterShareStorageModal } from './ClusterShareStorageModal';
 import { ClusterCleanCacheModal } from './ClusterCleanCacheModal';
+import { ClusterAdvancedConfigDrawer } from './ClusterAdvancedConfigDrawer';
 
 const { Text, Paragraph } = Typography;
 
@@ -44,6 +46,7 @@ export const ClustersPage: React.FC = () => {
   const [cacheModalVisible, setCacheModalVisible] = useState<boolean>(false);
   const [shareStorageModalVisible, setShareStorageModalVisible] = useState<boolean>(false);
   const [cleanCacheModalVisible, setCleanCacheModalVisible] = useState<boolean>(false);
+  const [advancedOpen, setAdvancedOpen] = useState<boolean>(false);
   const formRef = useRef<ProFormInstance>();
   const [validating, setValidating] = useState<boolean>(false);
 
@@ -295,6 +298,18 @@ export const ClustersPage: React.FC = () => {
       render: (_, record) => {
         const isDisconnected = record.status === 'disconnected' || !!record.disconnected;
         return [
+          <Button
+            key="advanced"
+            type="link"
+            size="small"
+            icon={<SettingOutlined />}
+            onClick={() => {
+              setActiveCluster(record);
+              setAdvancedOpen(true);
+            }}
+          >
+            高级配置
+          </Button>,
           <Button
             key="strategy"
             type="link"
@@ -550,6 +565,13 @@ export const ClustersPage: React.FC = () => {
       <ClusterCleanCacheModal
         open={cleanCacheModalVisible}
         onClose={() => setCleanCacheModalVisible(false)}
+      />
+
+      <ClusterAdvancedConfigDrawer
+        open={advancedOpen}
+        onClose={() => setAdvancedOpen(false)}
+        cluster={activeCluster}
+        onSuccess={() => actionRef.current?.reload()}
       />
     </div>
   );

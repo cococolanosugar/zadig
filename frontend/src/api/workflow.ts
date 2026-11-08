@@ -218,6 +218,14 @@ export interface WorkflowStage {
   jobs: WorkflowJob[];
 }
 
+export interface WorkflowTemplateBinding {
+  enabled: boolean;
+  template_id?: string;
+  template_name?: string;
+  base_version?: number;
+  base_version_id?: string;
+}
+
 export interface WorkflowV4Item {
   name: string;
   project: string;
@@ -226,6 +234,7 @@ export interface WorkflowV4Item {
   category?: string;
   stages: WorkflowStage[];
   params?: WorkflowParam[];
+  template_binding?: WorkflowTemplateBinding;
   created_by?: string;
   created_at?: number;
   updated_at?: number;
@@ -243,6 +252,24 @@ export interface WorkflowV4Item {
   averageExecutionTime?: number;
 }
 
+/** types.Repository — 触发时绑定到构建 Job / repo 参数 */
+export interface WorkflowRepoRef {
+  codehost_id?: number;
+  source?: string;
+  repo_owner?: string;
+  repo_namespace?: string;
+  repo_name?: string;
+  branch?: string;
+  tag?: string;
+  commit_id?: string;
+  commit_message?: string;
+  enable_commit?: boolean;
+  pr?: number;
+  is_primary?: boolean;
+  use_default?: boolean;
+  [key: string]: unknown;
+}
+
 // models.Param — 工作流自定义运行时参数（string/text/choice/repo/file）
 export interface WorkflowParam {
   name: string;
@@ -254,6 +281,19 @@ export interface WorkflowParam {
   script?: string;
   call_function?: string;
   default?: string;
+  repo?: WorkflowRepoRef;
+  file_id?: string;
+  file_name?: string;
+  required?: boolean;
+}
+
+export interface WorkflowTaskServiceModule {
+  service_name?: string;
+  service_module?: string;
+  image?: string;
+  image_name?: string;
+  code_info?: WorkflowRepoRef[];
+  artifacts?: string[];
 }
 
 export interface WorkflowTaskExecution {
@@ -289,13 +329,33 @@ export interface WorkflowTaskExecution {
       error_policy?: { policy?: string } | null;
       breakpoint_before?: boolean;
       breakpoint_after?: boolean;
+      start_time?: number;
+      end_time?: number;
+      service_modules?: WorkflowTaskServiceModule[];
+      outputs?: Array<{ name?: string; value?: string }>;
       // 任务执行时后端返回的 JobTask Spec（models.TaskJob.Spec，json:"spec"）
-      // 部署类 Job 通过 env 回填目标环境；审批类 Job 通过 native_approval 回填审批人。
+      // 部署类 Job 通过 env/cluster_id/namespace 回填目标；审批类 Job 通过 native_approval 回填审批人。
       spec?: {
         env?: string;
         env_name?: string;
+        env_alias?: string;
+        cluster_id?: string;
+        cluster_name?: string;
+        namespace?: string;
+        production?: boolean;
+        image?: string;
+        image_name?: string;
+        service_and_images?: Array<{ service_name?: string; service_module?: string; image?: string; image_name?: string }>;
+        service_and_builds?: Array<{
+          service_name?: string;
+          service_module?: string;
+          image?: string;
+          image_name?: string;
+          repos?: WorkflowRepoRef[];
+        }>;
         approve_users?: TaskJobApproverItem[];
-        native_approval?: { approve_users?: TaskJobApproverItem[] };
+        native_approval?: { approve_users?: TaskJobApproverItem[]; description?: string };
+        [key: string]: unknown;
       };
     }[];
   }[];
@@ -381,9 +441,16 @@ export const workflowApi = {
 
   /**
    * Create Workflow V4
+   * viewName 透传时，后端会将新建工作流自动加入对应视图
    */
-  async createWorkflow(payload: Partial<WorkflowV4Item>): Promise<unknown> {
-    return http.post('/api/aslan/workflow/v4', payload);
+  async createWorkflow(
+    payload: Partial<WorkflowV4Item>,
+    opts?: { projectName?: string; viewName?: string }
+  ): Promise<unknown> {
+    const params: Record<string, string> = {};
+    if (opts?.viewName) params.viewName = opts.viewName;
+    if (opts?.projectName) params.projectName = opts.projectName;
+    return http.post('/api/aslan/workflow/v4', payload, { params });
   },
 
   /**
@@ -446,9 +513,16 @@ export const workflowApi = {
     project_name?: string;
   }): Promise<unknown> {
     const query = args.project_name ? `?projectName=${encodeURIComponent(args.project_name)}` : '';
+    // 严格对齐后端 ApproveRequest：仅传 Go 结构体字段，project_name 只走 query
     return http.post(
       `/api/aslan/workflow/v4/workflowtask/approve${query}`,
-      { ...args, task_id: Number(args.task_id) },
+      {
+        workflow_name: args.workflow_name,
+        job_name: args.job_name,
+        task_id: Number(args.task_id),
+        approve: args.approve,
+        comment: args.comment || '',
+      },
       { skipErrorHandler: true }
     );
   },

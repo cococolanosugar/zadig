@@ -1,5 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Tabs, Descriptions, Tag, Typography, Button, Space, Alert, Spin, Form, Select, Input, Row, Col, Switch } from 'antd';
+import {
+  App,
+  Card,
+  Tabs,
+  Descriptions,
+  Tag,
+  Typography,
+  Button,
+  Space,
+  Alert,
+  Spin,
+  Form,
+  Select,
+  Input,
+  Row,
+  Col,
+  Switch,
+  Upload,
+  Image,
+} from 'antd';
 import {
   SafetyCertificateOutlined,
   SkinOutlined,
@@ -7,15 +26,39 @@ import {
   InfoCircleOutlined,
   CheckCircleOutlined,
   SaveOutlined,
+  UploadOutlined,
+  RedoOutlined,
 } from '@ant-design/icons';
+import type { UploadProps } from 'antd';
 import { useLocation, useNavigate } from 'react-router-dom';
-import enterpriseApi, { type EnterpriseLicenseInfo, type EnterpriseThemeInfo } from '../../api/enterprise';
+import enterpriseApi, {
+  type EnterpriseLicenseInfo,
+  type EnterpriseThemeInfo,
+  type Organization,
+} from '../../api/enterprise';
 import { settingsApi } from '../../api/settings';
 import { feedback } from '../../utils/feedback';
 
 const { Title, Text } = Typography;
 
+type LogoSlotKey = 'big_light_logo' | 'big_logo' | 'small_logo' | 'favicon';
+
+const LOGO_SLOTS: Array<{
+  key: LogoSlotKey;
+  label: string;
+  hint: string;
+}> = [
+  { key: 'big_light_logo', label: '浅色 Logo', hint: '建议 200×60' },
+  { key: 'big_logo', label: '深色 Logo', hint: '建议 200×60' },
+  { key: 'small_logo', label: '折叠态小 Logo', hint: '建议 60×60' },
+  { key: 'favicon', label: 'Favicon', hint: '建议 16×16 / 32×32' },
+];
+
+const ALLOWED_LOGO_TYPES = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/x-icon', 'image/vnd.microsoft.icon'];
+const MAX_LOGO_BYTES = 1024 * 1024;
+
 export const EnterprisePage: React.FC = () => {
+  const { message } = App.useApp();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -40,7 +83,16 @@ export const EnterprisePage: React.FC = () => {
   const [savingTheme, setSavingTheme] = useState(false);
   const [themeForm] = Form.useForm();
   const [langForm] = Form.useForm();
+  const [orgForm] = Form.useForm();
   const [savingLang, setSavingLang] = useState(false);
+  const [savingOrg, setSavingOrg] = useState(false);
+  const [organization, setOrganization] = useState<Organization>({});
+  const [logos, setLogos] = useState<Record<LogoSlotKey, string>>({
+    big_light_logo: '',
+    big_logo: '',
+    small_logo: '',
+    favicon: '',
+  });
   const [themeInitialValues, setThemeInitialValues] = useState<Record<string, any>>({
     theme_type: 'zadig',
     theme_color: '#0066ff',
@@ -59,13 +111,26 @@ export const EnterprisePage: React.FC = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [lic, thm, sysLang] = await Promise.all([
+        const [lic, thm, sysLang, org] = await Promise.all([
           enterpriseApi.getLicense(),
           enterpriseApi.getTheme(),
           settingsApi.getSystemLanguage().catch(() => 'zh-cn'),
+          enterpriseApi.getOrganization(),
         ]);
         setLicense(lic);
         setTheme(thm);
+        setOrganization(org || {});
+        setLogos({
+          big_light_logo: org?.big_light_logo || '',
+          big_logo: org?.big_logo || '',
+          small_logo: org?.small_logo || '',
+          favicon: org?.favicon || '',
+        });
+        orgForm.setFieldsValue({
+          name: org?.name || '',
+          website: org?.website || '',
+          copyright_enabled: org?.copyright_enabled !== false,
+        });
         const tType = thm.theme_type || 'zadig';
         setThemeType(tType);
         const nextThemeValues = {
@@ -92,15 +157,114 @@ export const EnterprisePage: React.FC = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [orgForm]);
 
   useEffect(() => {
     if (activeTab === 'theme') {
       themeForm.setFieldsValue(themeInitialValues);
     } else if (activeTab === 'language') {
       langForm.setFieldsValue(langInitialValues);
+    } else if (activeTab === 'info') {
+      orgForm.setFieldsValue({
+        name: organization.name || '',
+        website: organization.website || '',
+        copyright_enabled: organization.copyright_enabled !== false,
+      });
     }
-  }, [activeTab, themeInitialValues, langInitialValues, themeForm, langForm]);
+  }, [activeTab, themeInitialValues, langInitialValues, themeForm, langForm, orgForm, organization]);
+
+  const readFileAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('文件读取失败'));
+      reader.readAsDataURL(file);
+    });
+
+  const makeLogoUploadProps = (slot: LogoSlotKey): UploadProps => ({
+    accept: '.jpg,.jpeg,.png,.svg,.ico',
+    showUploadList: false,
+    beforeUpload: async (file) => {
+      const isAllowed =
+        ALLOWED_LOGO_TYPES.includes(file.type) ||
+        /\.(jpe?g|png|svg|ico)$/i.test(file.name);
+      if (!isAllowed) {
+        message.error('仅支持 JPG / PNG / SVG / ICO 格式');
+        return false;
+      }
+      if (file.size > MAX_LOGO_BYTES) {
+        message.error('图片大小需小于 1MB');
+        return false;
+      }
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        setLogos((prev) => ({ ...prev, [slot]: dataUrl }));
+        message.success('已加载预览');
+      } catch {
+        message.error('读取图片失败');
+      }
+      return false;
+    },
+  });
+
+  const handleSaveOrganization = async () => {
+    setSavingOrg(true);
+    try {
+      const values = await orgForm.validateFields();
+      const payload: Partial<Organization> = {
+        ...organization,
+        name: values.name,
+        website: values.website,
+        copyright_enabled: Boolean(values.copyright_enabled),
+        big_light_logo: logos.big_light_logo || '',
+        big_logo: logos.big_logo || '',
+        small_logo: logos.small_logo || '',
+        favicon: logos.favicon || '',
+      };
+      const saved = await enterpriseApi.updateOrganization(payload);
+      setOrganization(saved || payload);
+      message.success('企业信息与品牌定制已保存');
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'errorFields' in err) return;
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        (err instanceof Error ? err.message : '') ||
+        '保存企业信息失败';
+      message.error(msg);
+    } finally {
+      setSavingOrg(false);
+    }
+  };
+
+  const handleResetLogos = async () => {
+    setSavingOrg(true);
+    try {
+      const values = await orgForm.validateFields();
+      const cleared = {
+        big_light_logo: '',
+        big_logo: '',
+        small_logo: '',
+        favicon: '',
+      };
+      setLogos(cleared);
+      const payload: Partial<Organization> = {
+        ...organization,
+        name: values.name,
+        website: values.website,
+        copyright_enabled: Boolean(values.copyright_enabled),
+        ...cleared,
+      };
+      const saved = await enterpriseApi.updateOrganization(payload);
+      setOrganization(saved || payload);
+      message.success('已恢复默认 Logo');
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'errorFields' in err) return;
+      const msg = err instanceof Error ? err.message : '恢复默认失败';
+      message.error(msg);
+    } finally {
+      setSavingOrg(false);
+    }
+  };
 
   const handleSaveTheme = async () => {
     setSavingTheme(true);
@@ -374,20 +538,110 @@ export const EnterprisePage: React.FC = () => {
             </div>
           </div>
         ) : activeTab === 'info' ? (
-          <div style={{ maxWidth: 720 }}>
-            <Descriptions
-              title="平台系统信息"
-              bordered
-              column={1}
-              size="middle"
-              styles={{ label: { width: 180, fontWeight: 500, backgroundColor: '#fafafa' } }}
-              items={[
-                { key: 'version', label: '系统版本', children: 'Zadig Enterprise 5.0.0' },
-                { key: 'arch', label: '前端技术架构', children: 'React 18 + Vite + TypeScript + Ant Design 6.x' },
-                { key: 'backend', label: '后端微服务引擎', children: 'Aslan Core V4 + User RBAC + SystemConfig' },
-                { key: 'copyright', label: '版权所属', children: 'KodeRover Inc. / 筑栈（上海）信息技术有限公司' },
-              ]}
-            />
+          <div style={{ maxWidth: 840 }}>
+            <Title level={5} style={{ marginBottom: 16 }}>
+              企业信息与品牌定制
+            </Title>
+            <Form form={orgForm} layout="vertical">
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="name"
+                    label="企业名称"
+                    rules={[{ required: true, message: '请输入企业名称' }]}
+                  >
+                    <Input placeholder="例如：KodeRover" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="website" label="企业网址">
+                    <Input placeholder="例如：https://www.koderover.com" />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item
+                name="copyright_enabled"
+                label="登录页版权展示"
+                valuePropName="checked"
+                extra="关闭后登录页将隐藏版权文案"
+              >
+                <Switch />
+              </Form.Item>
+
+              <Title level={5} style={{ marginTop: 8, marginBottom: 12 }}>
+                四维 Logo 定制
+              </Title>
+              <Row gutter={[16, 16]}>
+                {LOGO_SLOTS.map((slot) => (
+                  <Col xs={24} sm={12} key={slot.key}>
+                    <Card
+                      variant="outlined"
+                      size="small"
+                      title={slot.label}
+                      extra={<Text type="secondary">{slot.hint}</Text>}
+                    >
+                      <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+                        <div
+                          style={{
+                            minHeight: 72,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: '#fafafa',
+                            borderRadius: 6,
+                            border: '1px dashed #d9d9d9',
+                            padding: 8,
+                          }}
+                        >
+                          {logos[slot.key] ? (
+                            <Image
+                              src={logos[slot.key]}
+                              alt={slot.label}
+                              style={{ maxHeight: 60, maxWidth: '100%', objectFit: 'contain' }}
+                              preview
+                            />
+                          ) : (
+                            <Text type="secondary">暂无预览，将使用系统默认</Text>
+                          )}
+                        </div>
+                        <Space>
+                          <Upload {...makeLogoUploadProps(slot.key)}>
+                            <Button icon={<UploadOutlined />}>上传</Button>
+                          </Upload>
+                          {logos[slot.key] && (
+                            <Button
+                              onClick={() =>
+                                setLogos((prev) => ({ ...prev, [slot.key]: '' }))
+                              }
+                            >
+                              清除
+                            </Button>
+                          )}
+                        </Space>
+                      </Space>
+                    </Card>
+                  </Col>
+                ))}
+              </Row>
+
+              <Space style={{ marginTop: 24 }}>
+                <Button
+                  type="primary"
+                  icon={<SaveOutlined />}
+                  loading={savingOrg}
+                  onClick={handleSaveOrganization}
+                >
+                  保存设置
+                </Button>
+                <Button
+                  icon={<RedoOutlined />}
+                  loading={savingOrg}
+                  onClick={handleResetLogos}
+                >
+                  恢复默认
+                </Button>
+              </Space>
+            </Form>
           </div>
         ) : (
           <div style={{ maxWidth: 640 }}>

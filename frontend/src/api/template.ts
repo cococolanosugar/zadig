@@ -17,12 +17,28 @@ export interface WorkflowTemplateItem {
   build_in?: boolean;
 }
 
+export interface WorkflowTemplateJobI18n {
+  key?: string;
+  name_zh?: string;
+  name_en?: string;
+  description_zh?: string;
+  description_en?: string;
+}
+
+export interface WorkflowTemplateStageI18n {
+  key: string;
+  name_zh: string;
+  name_en: string;
+  jobs?: WorkflowTemplateJobI18n[];
+}
+
 export interface WorkflowTemplateI18n {
   name_key: string;
   name_zh: string;
   name_en: string;
   description_zh: string;
   description_en: string;
+  stages?: WorkflowTemplateStageI18n[];
 }
 
 export interface WorkflowTemplateResponse {
@@ -71,11 +87,33 @@ export interface ScannerTemplateItem {
 export const templateApi = {
   /**
    * Get workflow templates (contains 20+ enterprise built-in templates)
-   * 注意：列表接口不再吞错 — 异常向上抛出，由调用方展示错误态与重试（对齐 P1-05 错误通道修复）
+   * 必须透传 excludeBuildIn / projectName，避免非系统管理员 403
    */
-  async getWorkflowTemplates(): Promise<WorkflowTemplateResponse> {
-    const res = await http.get<WorkflowTemplateResponse>('/api/aslan/template/workflow');
+  async getWorkflowTemplates(opts?: {
+    excludeBuildIn?: boolean;
+    projectName?: string;
+    category?: string;
+  }): Promise<WorkflowTemplateResponse> {
+    const res = await http.get<WorkflowTemplateResponse>('/api/aslan/template/workflow', {
+      params: {
+        excludeBuildIn: opts?.excludeBuildIn ?? false,
+        projectName: opts?.projectName ?? '',
+        category: opts?.category || undefined,
+      },
+    });
     return res || { workflow_templates: [] };
+  },
+
+  /**
+   * 获取工作流模板 YAML 原文
+   * GET /api/aslan/template/workflow/:id?projectName=
+   */
+  async getWorkflowTemplateDetail(id: string, projectName: string): Promise<string> {
+    const res = await http.get<string>(
+      `/api/aslan/template/workflow/${encodeURIComponent(id)}?projectName=${encodeURIComponent(projectName)}`,
+      { responseType: 'text' }
+    );
+    return typeof res === 'string' ? res : String(res ?? '');
   },
 
   /**

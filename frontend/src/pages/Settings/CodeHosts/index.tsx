@@ -1,86 +1,266 @@
-import React, { useRef, useState } from 'react';
-import { ProTable, ModalForm, ProFormText, ProFormSelect, ProFormRadio } from '@ant-design/pro-components';
+import React, { useMemo, useRef, useState } from 'react';
+import { ProTable } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
-import { Button, Tag, Space, Popconfirm, Typography } from 'antd';
-import { PlusOutlined, DeleteOutlined, CodeOutlined, GithubOutlined, GitlabOutlined, ApiOutlined } from '@ant-design/icons';
-import { settingsApi, type CodeHostItem } from '../../../api/settings';
-import { feedback } from '../../../utils/feedback';
+import {
+  App,
+  Button,
+  Tag,
+  Space,
+  Popconfirm,
+  Typography,
+  Modal,
+  Form,
+  Input,
+  Select,
+  Switch,
+  Radio,
+  InputNumber,
+  Alert,
+  Divider,
+} from 'antd';
+import {
+  PlusOutlined,
+  DeleteOutlined,
+  CodeOutlined,
+  GithubOutlined,
+  GitlabOutlined,
+  EditOutlined,
+  CopyOutlined,
+  LinkOutlined,
+} from '@ant-design/icons';
+import {
+  settingsApi,
+  getCodeHostAuthUrl,
+  type CodeHostItem,
+  type CodeHostType,
+} from '../../../api/settings';
 
-const { Text } = Typography;
+const { Text, Paragraph } = Typography;
 
-export const CodeHostsPage: React.FC = () => {
-  const actionRef = useRef<ActionType>(null);
-  const [testingConn, setTestingConn] = useState(false);
+const OAUTH_TYPES: CodeHostType[] = ['github', 'gitlab', 'gitee', 'gitee-enterprise'];
 
-  // R5 任务3: 代码源连通性测试（POST /codehosts/validate）
-  const handleTestConnection = async (values: Record<string, unknown>) => {
-    setTestingConn(true);
-    try {
-      await settingsApi.validateCodeHost({
-        type: values.type as string,
-        address: values.address as string,
-        auth_type: values.auth_type as string,
-        access_token: values.access_token as string,
+const PLATFORM_OPTIONS: Array<{ label: string; value: CodeHostType }> = [
+  { label: 'GitLab', value: 'gitlab' },
+  { label: 'GitHub', value: 'github' },
+  { label: 'Gerrit', value: 'gerrit' },
+  { label: 'Gitee', value: 'gitee' },
+  { label: 'Gitee 企业版', value: 'gitee-enterprise' },
+  { label: 'Perforce', value: 'perforce' },
+  { label: '其他 (Other)', value: 'other' },
+];
+
+function resolveAddress(type: CodeHostType, values: Record<string, unknown>): string {
+  if (type === 'github') return 'https://github.com';
+  if (type === 'gitee') return 'https://gitee.com';
+  if (type === 'perforce') {
+    const host = String(values.perforce_host || '');
+    const port = values.perforce_port ? String(values.perforce_port) : '';
+    return port ? `${host}:${port}` : host;
+  }
+  return String(values.address || '');
+}
+
+function buildPayload(
+  type: CodeHostType,
+  values: Record<string, unknown>
+): Partial<CodeHostItem> {
+  const base: Partial<CodeHostItem> = {
+    type,
+    alias: (values.alias as string) || undefined,
+    address: resolveAddress(type, values),
+    enable_proxy: Boolean(values.enable_proxy),
+  };
+
+  switch (type) {
+    case 'github':
+    case 'gitee':
+      return {
+        ...base,
         application_id: values.application_id as string,
         client_secret: values.client_secret as string,
-      });
-      feedback.message.success('代码源连通性测试通过！凭据与服务验证正常');
+      };
+    case 'gitlab':
+    case 'gitee-enterprise':
+      return {
+        ...base,
+        application_id: values.application_id as string,
+        client_secret: values.client_secret as string,
+        disable_ssl: values.enable_ssl === undefined ? false : !Boolean(values.enable_ssl),
+      };
+    case 'gerrit':
+      return {
+        ...base,
+        username: values.username as string,
+        password: values.password as string,
+      };
+    case 'perforce':
+      return {
+        ...base,
+        perforce_host: values.perforce_host as string,
+        perforce_port: Number(values.perforce_port),
+        username: values.username as string,
+        password: values.password as string,
+      };
+    case 'other':
+      return {
+        ...base,
+        auth_type: values.auth_type as string,
+        ssh_key: values.auth_type === 'SSH' ? (values.ssh_key as string) : undefined,
+        private_access_token:
+          values.auth_type === 'PrivateAccessToken'
+            ? (values.private_access_token as string)
+            : undefined,
+      };
+    default:
+      return base;
+  }
+}
+
+export const CodeHostsPage: React.FC = () => {
+  const { message, modal } = App.useApp();
+  const actionRef = useRef<ActionType>(null);
+  const [form] = Form.useForm();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<CodeHostItem | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const selectedType = (Form.useWatch('type', form) || 'gitlab') as CodeHostType;
+  const otherAuthType = Form.useWatch('auth_type', form) || 'SSH';
+
+  const callbackUrl = useMemo(
+    () => `${window.location.origin}/api/directory/codehosts/callback`,
+    []
+  );
+
+  const openCreate = () => {
+    setEditing(null);
+    form.resetFields();
+    form.setFieldsValue({
+      type: 'gitlab',
+      enable_ssl: true,
+      enable_proxy: false,
+      auth_type: 'SSH',
+      perforce_port: 1666,
+    });
+    setModalOpen(true);
+  };
+
+  const openEdit = (record: CodeHostItem) => {
+    setEditing(record);
+    form.setFieldsValue({
+      type: record.type,
+      alias: record.alias,
+      address: record.address,
+      application_id: record.application_id,
+      client_secret: record.client_secret,
+      username: record.username,
+      password: record.password,
+      perforce_host: record.perforce_host,
+      perforce_port: record.perforce_port || 1666,
+      auth_type: record.auth_type || 'SSH',
+      ssh_key: record.ssh_key,
+      private_access_token: record.private_access_token,
+      enable_ssl: !record.disable_ssl,
+      enable_proxy: Boolean(record.enable_proxy),
+    });
+    setModalOpen(true);
+  };
+
+  const promptOAuth = (id: number, type: string) => {
+    if (!OAUTH_TYPES.includes(type as CodeHostType)) return;
+    modal.confirm({
+      title: '前往 OAuth 授权',
+      content: '代码源已保存。是否立即跳转到平台完成 OAuth 授权？',
+      okText: '立即授权',
+      cancelText: '稍后',
+      onOk: () => {
+        window.location.href = getCodeHostAuthUrl(id);
+      },
+    });
+  };
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+      const type = values.type as CodeHostType;
+      const payload = buildPayload(type, values);
+      setSubmitting(true);
+      if (editing) {
+        await settingsApi.updateCodeHost(editing.id, { ...editing, ...payload });
+        message.success('代码源配置已更新');
+        setModalOpen(false);
+        actionRef.current?.reload();
+        if (editing.is_ready !== '2' && OAUTH_TYPES.includes(type)) {
+          promptOAuth(editing.id, type);
+        }
+      } else {
+        const res = await settingsApi.createCodeHost(payload);
+        message.success('代码源集成成功');
+        setModalOpen(false);
+        actionRef.current?.reload();
+        if (res?.id) {
+          promptOAuth(res.id, type);
+        }
+      }
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        || (err instanceof Error ? err.message : '')
-        || '连接测试失败，请检查地址与凭据';
-      feedback.message.error(`连接测试失败: ${msg}`);
+      if (err && typeof err === 'object' && 'errorFields' in err) return;
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        (err instanceof Error ? err.message : '') ||
+        '保存代码源失败';
+      message.error(msg);
     } finally {
-      setTestingConn(false);
+      setSubmitting(false);
     }
   };
 
   const handleDelete = async (id: number) => {
     try {
       await settingsApi.deleteCodeHost(id);
-      feedback.message.success('代码源配置已删除');
+      message.success('代码源配置已删除');
       actionRef.current?.reload();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        || (err instanceof Error ? err.message : '')
-        || '删除代码源配置失败（可能仍被项目引用）';
-      feedback.message.error(msg);
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        (err instanceof Error ? err.message : '') ||
+        '删除代码源配置失败（可能仍被项目引用）';
+      message.error(msg);
     }
   };
 
-  const handleCreate = async (values: Record<string, unknown>) => {
+  const handleToggleProxy = async (record: CodeHostItem, val: boolean) => {
     try {
-      await settingsApi.createCodeHost({
-        type: values.type as string,
-        address: values.address as string,
-        auth_type: values.auth_type as string,
-        access_token: values.access_token as string,
-        application_id: values.application_id as string,
-        client_secret: values.client_secret as string,
-        alias: values.alias as string,
-      });
-      feedback.message.success('代码源集成成功！');
+      await settingsApi.updateCodeHost(record.id, { ...record, enable_proxy: val });
+      message.success(val ? '已开启代理' : '已关闭代理');
       actionRef.current?.reload();
-      return true;
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        || (err instanceof Error ? err.message : '')
-        || '代码源集成失败，请检查配置与权限';
-      feedback.message.error(msg);
-      return false;
+      const msg = err instanceof Error ? err.message : '更新代理开关失败';
+      message.error(msg);
     }
   };
 
   const renderTypeIcon = (type: string) => {
     switch (type?.toLowerCase()) {
       case 'github':
-        return <Tag icon={<GithubOutlined />} color="black">GitHub</Tag>;
+        return (
+          <Tag icon={<GithubOutlined />} color="default">
+            GitHub
+          </Tag>
+        );
       case 'gitlab':
-        return <Tag icon={<GitlabOutlined />} color="orange">GitLab</Tag>;
+        return (
+          <Tag icon={<GitlabOutlined />} color="orange">
+            GitLab
+          </Tag>
+        );
       case 'gitee':
-        return <Tag color="red">Gitee</Tag>;
+      case 'gitee-enterprise':
+        return <Tag color="red">{type === 'gitee' ? 'Gitee' : 'Gitee EE'}</Tag>;
+      case 'gerrit':
+        return <Tag color="blue">Gerrit</Tag>;
+      case 'perforce':
+        return <Tag color="purple">Perforce</Tag>;
       default:
-        return <Tag color="blue">{type || 'Git'}</Tag>;
+        return <Tag color="cyan">{type || 'Other'}</Tag>;
     }
   };
 
@@ -101,14 +281,49 @@ export const CodeHostsPage: React.FC = () => {
       title: '服务地址',
       dataIndex: 'address',
       key: 'address',
-      render: (text) => <Text code>{String(text)}</Text>,
+      render: (text) => <Text code>{String(text || '-')}</Text>,
     },
     {
-      title: '认证类型',
-      dataIndex: 'auth_type',
-      key: 'auth_type',
-      render: (text) => (
-        <Tag color="geekblue">{String(text || 'Personal Access Token')}</Tag>
+      title: '授权状态',
+      dataIndex: 'is_ready',
+      key: 'is_ready',
+      width: 220,
+      render: (_, record) => {
+        const ready = record.is_ready === '2';
+        const needOAuth = OAUTH_TYPES.includes(record.type as CodeHostType);
+        return (
+          <Space orientation="horizontal" size={8}>
+            {ready ? (
+              <Tag color="success">授权成功</Tag>
+            ) : (
+              <Tag color="warning">未授权/需重新授权</Tag>
+            )}
+            {needOAuth && !ready && (
+              <Button
+                type="link"
+                size="small"
+                icon={<LinkOutlined />}
+                onClick={() => {
+                  window.location.href = getCodeHostAuthUrl(record.id);
+                }}
+              >
+                前往授权
+              </Button>
+            )}
+          </Space>
+        );
+      },
+    },
+    {
+      title: '开启代理',
+      dataIndex: 'enable_proxy',
+      key: 'enable_proxy',
+      width: 120,
+      render: (_, record) => (
+        <Switch
+          checked={Boolean(record.enable_proxy)}
+          onChange={(val) => handleToggleProxy(record, val)}
+        />
       ),
     },
     {
@@ -116,6 +331,14 @@ export const CodeHostsPage: React.FC = () => {
       valueType: 'option',
       key: 'option',
       render: (_, record) => [
+        <Button
+          key="edit"
+          type="link"
+          icon={<EditOutlined />}
+          onClick={() => openEdit(record)}
+        >
+          编辑
+        </Button>,
         <Popconfirm
           key="delete"
           title="确定移除此代码源？"
@@ -151,78 +374,208 @@ export const CodeHostsPage: React.FC = () => {
         }}
         columns={columns}
         toolBarRender={() => [
-          <ModalForm
-            key="add-codehost"
-            title="添加代码源集成"
-            trigger={
-              <Button type="primary" icon={<PlusOutlined />}>
-                添加代码源
-              </Button>
-            }
-            width={560}
-            onFinish={handleCreate}
-            submitter={{
-              render: (props, dom) => [
-                ...dom,
-                <Button
-                  key="test-conn"
-                  icon={<ApiOutlined />}
-                  loading={testingConn}
-                  onClick={async () => {
-                    const values = (await props.form?.validateFields()) || {};
-                    await handleTestConnection(values as Record<string, unknown>);
-                  }}
-                >
-                  测试连接
-                </Button>,
-              ],
-            }}
-          >
-            <ProFormSelect
-              name="type"
-              label="代码托管类型"
-              initialValue="gitlab"
-              options={[
-                { label: 'GitLab (私有部署 / 官方云端)', value: 'gitlab' },
-                { label: 'GitHub', value: 'github' },
-                { label: 'Gitee (码云)', value: 'gitee' },
-                { label: 'Gerrit', value: 'gerrit' },
-              ]}
-              rules={[{ required: true, message: '请选择代码托管类型' }]}
-            />
-
-            <ProFormText
-              name="address"
-              label="服务站点地址"
-              placeholder="例如: https://gitlab.example.com 或 https://github.com"
-              rules={[{ required: true, message: '请输入代码源地址' }]}
-            />
-
-            <ProFormText
-              name="alias"
-              label="集成标识别名"
-              placeholder="例如: 公司私有 GitLab"
-            />
-
-            <ProFormRadio.Group
-              name="auth_type"
-              label="授权方式"
-              initialValue="token"
-              options={[
-                { label: 'Access Token 个人访问令牌', value: 'token' },
-                { label: 'OAuth Application 授权', value: 'oauth' },
-              ]}
-            />
-
-            <ProFormText.Password
-              name="access_token"
-              label="Access Token"
-              placeholder="具有 api/repo/read_user 权限的访问令牌"
-              rules={[{ required: true, message: '请输入 Access Token' }]}
-            />
-          </ModalForm>,
+          <Button key="add" type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+            添加代码源
+          </Button>,
         ]}
       />
+
+      <Modal
+        title={editing ? '编辑代码源集成' : '添加代码源集成'}
+        open={modalOpen}
+        onCancel={() => setModalOpen(false)}
+        onOk={handleSubmit}
+        confirmLoading={submitting}
+        destroyOnHidden
+        width={640}
+        okText="保存"
+      >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          title="OAuth 回调地址"
+          description={
+            <div>
+              <Paragraph style={{ marginBottom: 8 }}>
+                申请应用时请配置回调地址：
+                <Text code copyable={{ text: callbackUrl, tooltips: ['复制', '已复制'] }}>
+                  {callbackUrl}
+                </Text>
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<CopyOutlined />}
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(callbackUrl);
+                      message.success('回调地址已复制');
+                    } catch {
+                      message.error('复制失败');
+                    }
+                  }}
+                >
+                  复制
+                </Button>
+              </Paragraph>
+              <Text type="secondary">
+                建议申请权限：api、read_user、read_repository
+              </Text>
+            </div>
+          }
+        />
+
+        <Form form={form} layout="vertical">
+          <Form.Item
+            name="type"
+            label="代码托管类型"
+            rules={[{ required: true, message: '请选择平台类型' }]}
+          >
+            <Select options={PLATFORM_OPTIONS} disabled={Boolean(editing)} />
+          </Form.Item>
+
+          <Form.Item name="alias" label="集成标识别名">
+            <Input placeholder="例如：公司私有 GitLab" />
+          </Form.Item>
+
+          {(selectedType === 'github' || selectedType === 'gitee') && (
+            <Form.Item label="服务站点地址">
+              <Input
+                value={selectedType === 'github' ? 'https://github.com' : 'https://gitee.com'}
+                disabled
+              />
+            </Form.Item>
+          )}
+
+          {(selectedType === 'gitlab' ||
+            selectedType === 'gitee-enterprise' ||
+            selectedType === 'gerrit' ||
+            selectedType === 'other') && (
+            <Form.Item
+              name="address"
+              label="服务站点地址"
+              rules={[{ required: true, message: '请输入服务站点地址' }]}
+            >
+              <Input placeholder="例如：https://gitlab.example.com" />
+            </Form.Item>
+          )}
+
+          {OAUTH_TYPES.includes(selectedType) && (
+            <>
+              <Form.Item
+                name="application_id"
+                label="Client ID / Application ID"
+                rules={[{ required: true, message: '请输入 Application ID' }]}
+              >
+                <Input placeholder="OAuth Application ID" />
+              </Form.Item>
+              <Form.Item
+                name="client_secret"
+                label="Client Secret"
+                rules={[{ required: !editing, message: '请输入 Client Secret' }]}
+              >
+                <Input.Password placeholder="OAuth Client Secret" />
+              </Form.Item>
+            </>
+          )}
+
+          {(selectedType === 'gitlab' || selectedType === 'gitee-enterprise') && (
+            <Form.Item
+              name="enable_ssl"
+              label="开启 SSL 校验"
+              valuePropName="checked"
+              extra="关闭后对应后端 disable_ssl=true"
+            >
+              <Switch />
+            </Form.Item>
+          )}
+
+          {(selectedType === 'gerrit' || selectedType === 'perforce') && (
+            <>
+              <Form.Item
+                name="username"
+                label="用户名"
+                rules={[{ required: true, message: '请输入用户名' }]}
+              >
+                <Input />
+              </Form.Item>
+              <Form.Item
+                name="password"
+                label="密码"
+                rules={[{ required: !editing, message: '请输入密码' }]}
+              >
+                <Input.Password />
+              </Form.Item>
+            </>
+          )}
+
+          {selectedType === 'perforce' && (
+            <>
+              <Form.Item
+                name="perforce_host"
+                label="Perforce Host"
+                rules={[{ required: true, message: '请输入 Host' }]}
+              >
+                <Input placeholder="例如：p4.example.com" />
+              </Form.Item>
+              <Form.Item
+                name="perforce_port"
+                label="Perforce Port"
+                rules={[
+                  { required: true, message: '请输入 Port' },
+                  {
+                    type: 'number',
+                    min: 1,
+                    max: 65535,
+                    message: '端口范围 1-65535',
+                  },
+                ]}
+              >
+                <InputNumber style={{ width: '100%' }} min={1} max={65535} />
+              </Form.Item>
+            </>
+          )}
+
+          {selectedType === 'other' && (
+            <>
+              <Form.Item
+                name="auth_type"
+                label="授权类型"
+                rules={[{ required: true, message: '请选择授权类型' }]}
+              >
+                <Radio.Group
+                  options={[
+                    { label: 'SSH', value: 'SSH' },
+                    { label: 'Private Access Token', value: 'PrivateAccessToken' },
+                  ]}
+                />
+              </Form.Item>
+              {otherAuthType === 'SSH' ? (
+                <Form.Item
+                  name="ssh_key"
+                  label="SSH Private Key"
+                  rules={[{ required: true, message: '请输入 SSH Key' }]}
+                >
+                  <Input.TextArea rows={5} placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" />
+                </Form.Item>
+              ) : (
+                <Form.Item
+                  name="private_access_token"
+                  label="Private Access Token"
+                  rules={[{ required: true, message: '请输入 Token' }]}
+                >
+                  <Input.Password />
+                </Form.Item>
+              )}
+            </>
+          )}
+
+          <Divider />
+          <Form.Item name="enable_proxy" label="开启代理" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

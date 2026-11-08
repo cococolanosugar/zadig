@@ -22,11 +22,20 @@ export interface DetailedRole {
   rules: Array<{ resource: string; verbs: string[] }>;
 }
 
-// types.ResourceAction — GET /api/v1/policy/resource-actions
-export interface ResourceAction {
-  resource: string;
-  verbs: string[];
+// permission.ResourceDefinition — GET /api/v1/policy/resource-actions?scope=
+export interface ActionRule {
+  action: string;
+  alias: string;
 }
+
+export interface ResourceDefinition {
+  resource: string;
+  alias: string;
+  rules: ActionRule[];
+}
+
+/** @deprecated 兼容旧命名，请使用 ResourceDefinition */
+export type ResourceAction = ResourceDefinition;
 
 // user/core/service/permission/role_binding.go — GET /api/v1/policy/role-bindings?namespace=
 export interface RoleBindingResp {
@@ -130,11 +139,12 @@ export const rbacApi = {
     );
   },
 
-  /** 权限动作定义（resource → verbs），用于新建角色的动作选择器。P1-E1: HTTP 故障异常上抛 */
-  async getResourceActions(): Promise<ResourceAction[]> {
-    const res = await http.get<ResourceAction[]>('/api/v1/policy/resource-actions', {
-      skipErrorHandler: true,
-    });
+  /** 权限动作定义（ResourceDefinition[]），用于新建角色的动作选择器。P1-E1: HTTP 故障异常上抛 */
+  async getResourceActions(scope: 'project' | 'system' = 'project'): Promise<ResourceDefinition[]> {
+    const res = await http.get<ResourceDefinition[]>(
+      `/api/v1/policy/resource-actions?scope=${encodeURIComponent(scope)}`,
+      { skipErrorHandler: true }
+    );
     return Array.isArray(res) ? res : [];
   },
 
