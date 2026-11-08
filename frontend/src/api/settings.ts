@@ -56,6 +56,8 @@ export interface ClusterItem {
   type?: string;
   production?: boolean;
   local?: boolean;
+  /** LOOP8-A1: 断开连接标记 */
+  disconnected?: boolean;
   kube_config?: string;
   created_at?: number;
   advanced_config?: {
@@ -68,6 +70,45 @@ export interface ClusterItem {
   };
   cache?: ClusterCacheConfig;
   share_storage?: ClusterShareStorageConfig;
+}
+
+/** LOOP8-A1: 集群删除预检 — 被引用环境 */
+export interface ClusterEnvInfo {
+  name: string;
+  display_name?: string;
+  project_name: string;
+  production?: boolean;
+}
+
+export interface ClusterDeletionInfo {
+  deletable: boolean;
+  env_in_use?: ClusterEnvInfo[];
+}
+
+/** LOOP8-A2: Helm Chart 索引清单 */
+export interface ChartVersionItem {
+  chartName: string;
+  version: string;
+}
+
+export interface HelmIndexFileResp {
+  entries: Record<string, ChartVersionItem[]>;
+}
+
+/** LOOP8-A3: 镜像仓库引用环境预检 */
+export interface RegistryReferenceEnv {
+  name: string;
+  alias?: string;
+}
+
+export interface RegistryReference {
+  project_name: string;
+  project_alias?: string;
+  envs?: RegistryReferenceEnv[];
+}
+
+export interface RegistryReferencesResp {
+  references: RegistryReference[];
 }
 
 export interface CodeHostItem {
@@ -228,6 +269,21 @@ export const settingsApi = {
     return http.delete(`/api/aslan/cluster/clusters/${id}`);
   },
 
+  /** LOOP8-A1: 断开集群连接 (PUT /api/aslan/cluster/clusters/:id/disconnect) */
+  async disconnectCluster(id: string): Promise<void> {
+    return http.put(`/api/aslan/cluster/clusters/${id}/disconnect`);
+  },
+
+  /** LOOP8-A1: 重新连接集群 (PUT /api/aslan/cluster/clusters/:id/reconnect) */
+  async reconnectCluster(id: string): Promise<void> {
+    return http.put(`/api/aslan/cluster/clusters/${id}/reconnect`);
+  },
+
+  /** LOOP8-A1: 获取集群删除前依赖环境检查 (GET /api/aslan/cluster/clusters/:id/deletion) */
+  async getClusterDeletionInfo(id: string): Promise<ClusterDeletionInfo> {
+    return http.get(`/api/aslan/cluster/clusters/${id}/deletion`);
+  },
+
   async addOrUpdateClusterStrategy(clusterId: string, strategy: ClusterScheduleStrategy): Promise<ClusterItem> {
     return http.put(`/api/aslan/cluster/clusters/${clusterId}/strategy`, strategy);
   },
@@ -344,6 +400,11 @@ export const settingsApi = {
 
   async deleteRegistry(id: string): Promise<unknown> {
     return http.delete(`/api/aslan/system/registry/namespaces/${id}`);
+  },
+
+  /** LOOP8-A3: 镜像仓库删除前引用检查 (GET /api/aslan/system/registry/namespaces/:id/reference) */
+  async getRegistryReferences(id: string): Promise<RegistryReferencesResp> {
+    return http.get(`/api/aslan/system/registry/namespaces/${id}/reference`);
   },
 
   // --- Storage (S3 / OSS) ---
@@ -599,6 +660,11 @@ export const settingsApi = {
 
   async deleteHelmRepo(id: string): Promise<unknown> {
     return http.delete(`/api/aslan/system/helm/${id}`);
+  },
+
+  /** LOOP8-A2: 获取 Helm 仓库内 Chart 清单 (GET /api/aslan/system/helm/:name/index) */
+  async getHelmCharts(repoName: string): Promise<HelmIndexFileResp> {
+    return http.get(`/api/aslan/system/helm/${encodeURIComponent(repoName)}/index`);
   },
 
   // --- DB Instances ---

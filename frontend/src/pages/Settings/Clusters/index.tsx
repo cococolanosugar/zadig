@@ -23,6 +23,8 @@ import {
   ApiOutlined,
   CodeOutlined,
   CopyOutlined,
+  LinkOutlined,
+  DisconnectOutlined,
 } from '@ant-design/icons';
 import { settingsApi, type ClusterItem } from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
@@ -138,15 +140,73 @@ export const ClustersPage: React.FC = () => {
     setShareStorageModalVisible(true);
   };
 
-  const handleDelete = async (id: string) => {
+  // LOOP8-A1: 断开 / 重连 / 安全删除
+  const handleDisconnect = async (clusterId: string) => {
     try {
-      await settingsApi.deleteCluster(id);
-      feedback.message.success('集群已成功删除');
+      await settingsApi.disconnectCluster(clusterId);
+      feedback.message.success('集群已断开连接');
       actionRef.current?.reload();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        || (err instanceof Error ? err.message : '')
-        || '删除集群失败（本地集群或仍被环境引用时不可删除）';
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        (err instanceof Error ? err.message : '') ||
+        '断开集群连接失败';
+      feedback.message.error(msg);
+    }
+  };
+
+  const handleReconnect = async (clusterId: string) => {
+    try {
+      await settingsApi.reconnectCluster(clusterId);
+      feedback.message.success('集群已重新连接');
+      actionRef.current?.reload();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        (err instanceof Error ? err.message : '') ||
+        '重新连接集群失败';
+      feedback.message.error(msg);
+    }
+  };
+
+  const handleSafeDelete = async (record: ClusterItem) => {
+    try {
+      const info = await settingsApi.getClusterDeletionInfo(record.id);
+      if (!info.deletable && info.env_in_use && info.env_in_use.length > 0) {
+        feedback.modal?.warning({
+          title: '无法删除该集群',
+          content: (
+            <div>
+              <p>以下环境仍在引用该集群，请先清理后再删除：</p>
+              <ul style={{ paddingLeft: 20, marginBottom: 0 }}>
+                {info.env_in_use.map((e) => (
+                  <li key={`${e.project_name}-${e.name}`}>
+                    项目: {e.project_name}, 环境: {e.display_name || e.name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ),
+        });
+        return;
+      }
+      feedback.modal?.confirm({
+        title: `确定删除集群 [${record.name}]？`,
+        content: '删除后将无法向该集群调度工作流或部署环境。',
+        okText: '删除',
+        okButtonProps: { danger: true },
+        cancelText: '取消',
+        onOk: async () => {
+          await settingsApi.deleteCluster(record.id);
+          feedback.message.success('集群已成功删除');
+          actionRef.current?.reload();
+        },
+      });
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        (err instanceof Error ? err.message : '') ||
+        '删除集群失败（本地集群或仍被环境引用时不可删除）';
       feedback.message.error(msg);
     }
   };
@@ -231,66 +291,94 @@ export const ClustersPage: React.FC = () => {
       title: '操作',
       valueType: 'option',
       key: 'option',
-      width: 340,
-      render: (_, record) => [
-        <Button
-          key="strategy"
-          type="link"
-          size="small"
-          icon={<ScheduleOutlined />}
-          onClick={() => openStrategyDrawer(record)}
-        >
-          策略配置
-        </Button>,
-        <Button
-          key="cache"
-          type="link"
-          size="small"
-          icon={<CloudServerOutlined />}
-          onClick={() => openCacheModal(record)}
-        >
-          缓存配置
-        </Button>,
-        <Button
-          key="share-storage"
-          type="link"
-          size="small"
-          icon={<FolderOpenOutlined />}
-          onClick={() => openShareStorageModal(record)}
-        >
-          共享存储
-        </Button>,
-        // LOOP2-B2: 外置集群均可生成 Agent 接入脚本（含 agent 类型 / 未连接状态）
-        !record.local ? (
+      width: 420,
+      render: (_, record) => {
+        const isDisconnected = record.status === 'disconnected' || !!record.disconnected;
+        return [
           <Button
-            key="agent-script"
+            key="strategy"
             type="link"
             size="small"
-            icon={<CodeOutlined />}
-            onClick={() => showAgentScriptModal(record.id, record.name)}
+            icon={<ScheduleOutlined />}
+            onClick={() => openStrategyDrawer(record)}
           >
-            接入脚本
-          </Button>
-        ) : null,
-        !record.local ? (
-          <Popconfirm
-            key="delete"
-            title="确定断开此集群连接？"
-            description="删除后将无法向该集群调度工作流或部署环境。"
-            onConfirm={() => handleDelete(record.id)}
-            okText="删除"
-            cancelText="取消"
+            策略配置
+          </Button>,
+          <Button
+            key="cache"
+            type="link"
+            size="small"
+            icon={<CloudServerOutlined />}
+            onClick={() => openCacheModal(record)}
           >
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-              断开连接
+            缓存配置
+          </Button>,
+          <Button
+            key="share-storage"
+            type="link"
+            size="small"
+            icon={<FolderOpenOutlined />}
+            onClick={() => openShareStorageModal(record)}
+          >
+            共享存储
+          </Button>,
+          // LOOP2-B2: 外置集群均可生成 Agent 接入脚本
+          !record.local ? (
+            <Button
+              key="agent-script"
+              type="link"
+              size="small"
+              icon={<CodeOutlined />}
+              onClick={() => showAgentScriptModal(record.id, record.name)}
+            >
+              接入脚本
             </Button>
-          </Popconfirm>
-        ) : (
-          <Text key="builtin" type="secondary" style={{ fontSize: 12, paddingLeft: 4 }}>
-            内置保护
-          </Text>
-        ),
-      ],
+          ) : null,
+          // LOOP8-A1: 非本地集群 — 断开/重连 + 安全删除
+          !record.local ? (
+            isDisconnected ? (
+              <Button
+                key="reconnect"
+                type="link"
+                size="small"
+                icon={<LinkOutlined />}
+                onClick={() => handleReconnect(record.id)}
+              >
+                重新连接
+              </Button>
+            ) : (
+              <Popconfirm
+                key="disconnect"
+                title="确定断开此集群连接？"
+                description="断开后将无法向该集群调度工作流或部署环境，可稍后重新连接。"
+                onConfirm={() => handleDisconnect(record.id)}
+                okText="断开"
+                cancelText="取消"
+              >
+                <Button type="link" size="small" icon={<DisconnectOutlined />}>
+                  断开连接
+                </Button>
+              </Popconfirm>
+            )
+          ) : null,
+          !record.local ? (
+            <Button
+              key="delete"
+              type="link"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => handleSafeDelete(record)}
+            >
+              删除
+            </Button>
+          ) : (
+            <Text key="builtin" type="secondary" style={{ fontSize: 12, paddingLeft: 4 }}>
+              内置保护
+            </Text>
+          ),
+        ];
+      },
     },
   ];
 

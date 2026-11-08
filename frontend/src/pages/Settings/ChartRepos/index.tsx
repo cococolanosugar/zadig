@@ -1,16 +1,27 @@
 import React, { useRef, useState } from 'react';
 import { ProTable, ModalForm, ProFormText } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
-import { Button, Tag, Space, Popconfirm, Typography } from 'antd';
-import { PlusOutlined, DeleteOutlined, AppstoreOutlined, ApiOutlined } from '@ant-design/icons';
+import { Button, Tag, Space, Popconfirm, Typography, Drawer, Table, Spin } from 'antd';
+import { PlusOutlined, DeleteOutlined, AppstoreOutlined, ApiOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import { settingsApi, type HelmRepoItem } from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
 
 const { Text } = Typography;
 
+interface ChartFlatItem {
+  name: string;
+  versions: string[];
+}
+
 export const ChartReposPage: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
   const [testingConn, setTestingConn] = useState(false);
+
+  // LOOP8-A2: Chart 索引清单抽屉
+  const [chartsDrawerOpen, setChartsDrawerOpen] = useState(false);
+  const [chartsLoading, setChartsLoading] = useState(false);
+  const [chartsRepoName, setChartsRepoName] = useState('');
+  const [chartFlatList, setChartFlatList] = useState<ChartFlatItem[]>([]);
 
   // R5 任务4: Chart 仓库连通性测试（POST /helm/validate）
   const handleTestConnection = async (values: Record<string, unknown>) => {
@@ -67,6 +78,32 @@ export const ChartReposPage: React.FC = () => {
     }
   };
 
+  // LOOP8-A2: 查看 Charts 索引清单
+  const handleViewCharts = async (record: HelmRepoItem) => {
+    const name = record.repo_name || record.id;
+    setChartsRepoName(name);
+    setChartsDrawerOpen(true);
+    setChartsLoading(true);
+    setChartFlatList([]);
+    try {
+      const res = await settingsApi.getHelmCharts(name);
+      const entries = res?.entries || {};
+      const flat: ChartFlatItem[] = Object.keys(entries).map((chartName) => ({
+        name: chartName,
+        versions: (entries[chartName] || []).map((v) => v.version).filter(Boolean),
+      }));
+      setChartFlatList(flat);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        (err instanceof Error ? err.message : '') ||
+        '拉取 Chart 索引失败';
+      feedback.message.error(msg);
+    } finally {
+      setChartsLoading(false);
+    }
+  };
+
   const columns: ProColumns<HelmRepoItem>[] = [
     {
       title: '仓库名称',
@@ -117,6 +154,14 @@ export const ChartReposPage: React.FC = () => {
       valueType: 'option',
       key: 'option',
       render: (_, record) => [
+        <Button
+          key="view-charts"
+          type="link"
+          icon={<UnorderedListOutlined />}
+          onClick={() => handleViewCharts(record)}
+        >
+          查看 Charts
+        </Button>,
         <Popconfirm
           key="delete"
           title="确定移除该 Chart 仓库？"
@@ -207,6 +252,49 @@ export const ChartReposPage: React.FC = () => {
           </ModalForm>,
         ]}
       />
+
+      {/* LOOP8-A2: Chart 索引清单抽屉 */}
+      <Drawer
+        title={`Chart 索引清单 - [${chartsRepoName}]`}
+        open={chartsDrawerOpen}
+        onClose={() => setChartsDrawerOpen(false)}
+        size="large"
+        destroyOnHidden
+      >
+        <Spin spinning={chartsLoading}>
+          <Table<ChartFlatItem>
+            rowKey="name"
+            dataSource={chartFlatList}
+            pagination={{ pageSize: 20, showSizeChanger: true }}
+            locale={{ emptyText: chartsLoading ? '加载中…' : '该仓库暂无 Chart 索引' }}
+            columns={[
+              {
+                title: 'Chart 名称',
+                dataIndex: 'name',
+                key: 'name',
+                render: (n) => <Text strong>{n}</Text>,
+              },
+              {
+                title: '可用版本',
+                dataIndex: 'versions',
+                key: 'versions',
+                render: (versions: string[]) =>
+                  versions && versions.length > 0 ? (
+                    <Space size={[4, 4]} wrap>
+                      {versions.map((v) => (
+                        <Tag key={v} color="blue">
+                          {v}
+                        </Tag>
+                      ))}
+                    </Space>
+                  ) : (
+                    <Text type="secondary">-</Text>
+                  ),
+              },
+            ]}
+          />
+        </Spin>
+      </Drawer>
     </div>
   );
 };

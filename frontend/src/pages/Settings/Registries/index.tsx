@@ -66,9 +66,32 @@ export const RegistriesPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  // LOOP8-A3: 删除前引用环境拦截预检
+  const handleDelete = async (record: RegistryItem) => {
     try {
-      await settingsApi.deleteRegistry(id);
+      const refRes = await settingsApi.getRegistryReferences(record.id);
+      if (refRes?.references && refRes.references.length > 0) {
+        feedback.modal?.warning({
+          title: '无法删除该镜像仓库',
+          content: (
+            <div>
+              <p>该镜像仓库正被以下项目/环境引用，请先解除引用后再删除：</p>
+              <ul style={{ paddingLeft: 20, marginBottom: 0 }}>
+                {refRes.references.map((ref) => (
+                  <li key={ref.project_name}>
+                    项目: {ref.project_alias || ref.project_name}
+                    {ref.envs && ref.envs.length > 0
+                      ? `；环境: ${ref.envs.map((e) => e.alias || e.name).join(', ')}`
+                      : ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ),
+        });
+        return;
+      }
+      await settingsApi.deleteRegistry(record.id);
       feedback.message.success('镜像仓库已成功删除');
       actionRef.current?.reload();
     } catch (err: unknown) {
@@ -166,7 +189,7 @@ export const RegistriesPage: React.FC = () => {
           key="delete"
           title="确定移除该镜像仓库？"
           description="构建步骤若依赖此仓库推拉镜像将受到影响。"
-          onConfirm={() => handleDelete(record.id)}
+          onConfirm={() => handleDelete(record)}
           okText="移除"
           cancelText="取消"
         >
