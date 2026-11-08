@@ -35,6 +35,7 @@ import {
 import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
 import http from '../../../api/client';
+import settingsApi from '../../../api/settings';
 import { feedback } from '../../../utils/feedback';
 import { generateAesKey, rsaEncrypt } from '../../../utils/crypto';
 import { authApi } from '../../../api/auth';
@@ -396,6 +397,26 @@ export const SystemIntegrationPage: React.FC = () => {
           { skipErrorHandler: true }
         );
         feedback.message.success('云服务凭据与权限验证成功！');
+      } else if (currentCategory.key === 'ai') {
+        // NEW-A1: 大语言模型 AI 凭据真实连通性握手校验 (POST /api/aslan/system/llm/integration/validate)
+        let provider = 'openai';
+        const vendorStr = String(values.vendor || '').toLowerCase();
+        if (vendorStr.includes('通义千问') || vendorStr.includes('qwen')) provider = 'qwen';
+        else if (vendorStr.includes('deepseek')) provider = 'deepseek';
+        else if (vendorStr.includes('azure')) provider = 'azure';
+        else if (vendorStr.includes('ollama')) provider = 'ollama';
+
+        await settingsApi.validateLLMIntegration({
+          name: values.name || 'test-ai',
+          provider_name: values.provider_name || provider,
+          protocol: values.protocol || 'https',
+          token: values.token || values.api_key || '',
+          base_url: values.base_url || values.url || '',
+          model: values.model || 'gpt-4o',
+          enable_proxy: Boolean(values.enable_proxy),
+          is_default: Boolean(values.is_default),
+        });
+        feedback.message.success('大语言模型 (LLM) 凭据连通性握手验证成功！');
       } else {
         const url = await buildListUrl(currentCategory);
         await http.get(url, { skipErrorHandler: true });

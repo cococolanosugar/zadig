@@ -790,6 +790,24 @@ export const settingsApi = {
     }
   },
 
+  /**
+   * 验证大语言模型 (LLM) 集成凭据连通性 (POST /api/aslan/system/llm/integration/validate)
+   */
+  async validateLLMIntegration(payload: {
+    name?: string;
+    provider_name?: string;
+    protocol?: string;
+    token?: string;
+    base_url?: string;
+    model?: string;
+    enable_proxy?: boolean;
+    is_default?: boolean;
+    id?: string;
+    [key: string]: unknown;
+  }): Promise<unknown> {
+    return http.post('/api/aslan/system/llm/integration/validate', payload, { skipErrorHandler: true });
+  },
+
   // P1-E1: HTTP 故障异常上抛（当前无调用方；登录页接入时需自带 try/catch 呈现"未配置默认账号"态）
   async getDefaultLogin(): Promise<any> {
     return http.get('/api/aslan/system/login/default', { skipErrorHandler: true });
