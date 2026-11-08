@@ -63,9 +63,11 @@ export interface DeliveryVariablesApplyArgs {
   services: DeliveryVersionService[];
 }
 
+/** CC-Loop01 P0-2/P0-3: Chart 版本解析契约 */
 export interface ChartVersionResp {
   chartName: string;
-  versions: string[];
+  chartVersion: string;
+  nextChartVersion?: string;
 }
 
 export const deliveryApi = {
@@ -132,11 +134,10 @@ export const deliveryApi = {
   async getChartVersionFromRepo(
     chartName: string,
     chartRepoName: string
-  ): Promise<string[] | string> {
-    const res = await http.get<string[] | string>(
+  ): Promise<Array<{ chartName: string; chartVersion: string; nextChartVersion?: string }>> {
+    return http.get(
       `/api/aslan/delivery/releases/helm/charts/version?chartName=${encodeURIComponent(chartName)}&chartRepoName=${encodeURIComponent(chartRepoName)}`
     );
-    return res;
   },
 
   // 后端: delivery/handler/router.go:46, version.go:406 (DownloadDeliveryChart)
@@ -163,12 +164,16 @@ export const deliveryApi = {
     }
   },
 
-  /** 重试发布版本交付 (R4-A8 下沉)
-   * POST /api/aslan/delivery/releases/retry
-   * 后端: pkg/microservice/aslan/core/delivery/handler/router.go:43 (RetryDeliveryVersion)
+  /**
+   * CC-Loop01 P0-1: 重试发布版本交付 — query 传参
+   * POST /api/aslan/delivery/releases/retry?id=&projectName=
    */
-  async retryDeliveryVersion(payload: { id: string; project_name: string }): Promise<unknown> {
-    return http.post('/api/aslan/delivery/releases/retry', payload, { skipErrorHandler: true });
+  async retryDeliveryVersion(id: string, projectName: string): Promise<unknown> {
+    return http.post(
+      `/api/aslan/delivery/releases/retry?id=${encodeURIComponent(id)}&projectName=${encodeURIComponent(projectName)}`,
+      undefined,
+      { skipErrorHandler: true }
+    );
   },
 
   /** 按镜像获取制品信息

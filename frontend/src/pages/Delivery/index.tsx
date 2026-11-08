@@ -29,8 +29,6 @@ import {
   PlusOutlined,
   DropboxOutlined,
   BranchesOutlined,
-  CloudUploadOutlined,
-  CheckCircleOutlined,
   ClusterOutlined,
   ReloadOutlined,
   DownOutlined,
@@ -58,26 +56,61 @@ interface ArtifactItem {
   image?: string;
   image_tag?: string;
   image_digest?: string;
+  image_size?: number;
   project_name?: string;
   workflow_name?: string;
   size?: string;
   created_at?: string;
+  created_time?: number | string;
+  created_by?: string;
   commit_id?: string;
   branch?: string;
   author?: string;
+}
+
+interface ArtifactActivity {
+  type?: string;
+  content?: string;
+  created_by?: string;
+  created_time?: number;
+  start_time?: number;
+  end_time?: number;
+  url?: string;
+  env_name?: string;
+  namespace?: string;
 }
 
 interface ReleaseVersionItem {
   id?: string;
   version: string;
   product_name: string;
+  projectName?: string;
   created_at?: string | number;
   create_by?: string;
+  create_time?: string | number;
   desc?: string;
   status?: string;
   type?: 'k8s' | 'helm' | string;
   services?: Array<{ service_name: string; chart_name?: string; chart_version?: string; image?: string }>;
 }
+
+/** CC-Loop01 P0-4: 字节格式化为 KB/MB */
+const formatImageSize = (bytes?: number | string | null): string => {
+  if (bytes == null || bytes === '') return '-';
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n < 0) return '-';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const formatUnixOrMs = (t?: number | string | null): string => {
+  if (t == null || t === '') return '-';
+  const num = Number(t);
+  if (!Number.isFinite(num) || num <= 0) return String(t);
+  const date = num > 1e11 ? new Date(num) : new Date(num * 1000);
+  return date.toLocaleString('zh-CN');
+};
 
 export const DeliveryPage: React.FC = () => {
   const { tab } = useParams<{ tab?: string }>();
@@ -111,6 +144,9 @@ export const DeliveryPage: React.FC = () => {
   // Lineage Drawer state
   const [lineageDrawerVisible, setLineageDrawerVisible] = useState(false);
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactItem | null>(null);
+  // CC-Loop01 P0-5: 真实 activities
+  const [artifactDetailLoading, setArtifactDetailLoading] = useState(false);
+  const [artifactActivities, setArtifactActivities] = useState<ArtifactActivity[]>([]);
 
   // Service image list modal state
   const [serviceImagesOpen, setServiceImagesOpen] = useState(false);
@@ -261,16 +297,53 @@ export const DeliveryPage: React.FC = () => {
   };
 
   const handleRetryDelivery = async (record: ReleaseVersionItem) => {
-    if (!record.id || !record.product_name) return;
+    const projectName = record.product_name || record.projectName || '';
+    if (!record.id || !projectName) return;
     try {
-      // R4-A8: 重试逻辑下沉至 API 层（POST /delivery/releases/retry body 传参）
-      await deliveryApi.retryDeliveryVersion({ id: record.id, project_name: record.product_name });
+      // CC-Loop01 P0-1: query 传参 id + projectName
+      await deliveryApi.retryDeliveryVersion(record.id, projectName);
       feedback.message.success(`已下发版本 [${record.version}] 的重新交付与构建调度任务！`);
       fetchData();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
         || (err instanceof Error ? err.message : '重试交付失败，请检查网络或权限');
       feedback.message.error(msg);
+    }
+  };
+
+  // CC-Loop01 P0-5: 打开详情并拉取真实 activities
+  const openArtifactDetail = async (record: ArtifactItem) => {
+    setSelectedArtifact(record);
+    setLineageDrawerVisible(true);
+    setArtifactActivities([]);
+    if (!record.id) return;
+    setArtifactDetailLoading(true);
+    try {
+      const detail = await deliveryApi.getDeliveryArtifactDetail(record.id);
+      const activities = Array.isArray(detail?.activities) ? detail.activities : [];
+      setArtifactActivities(activities);
+      // 用详情中的真实字段补全展示
+      if (detail) {
+        setSelectedArtifact((prev) =>
+          prev
+            ? {
+                ...prev,
+                image_tag: detail.image_tag ?? prev.image_tag,
+                image_size: detail.image_size ?? prev.image_size,
+                image_digest: detail.image_digest ?? prev.image_digest,
+                created_by: detail.created_by ?? prev.created_by,
+                created_time: detail.created_time ?? prev.created_time,
+                image: detail.image ?? prev.image,
+                name: detail.name ?? prev.name,
+              }
+            : prev
+        );
+      }
+    } catch {
+      setArtifactActivities([]);
+      feedback.message.error('加载交付物详情失败');
+    } finally {
+      setArtifactDetailLoading(false);
     }
   };
 
@@ -419,11 +492,10 @@ export const DeliveryPage: React.FC = () => {
             <DropboxOutlined style={{ color: '#0066ff' }} />
             <Text strong>{text || record.image || '-'}</Text>
           </Space>
-          {record.commit_id && (
-            <Text type="secondary" code style={{ fontSize: 12 }}>
-              commit: {record.commit_id.slice(0, 7)}
-            </Text>
-          )}
+          {/* CC-Loop01 P0-4: 真实 image_tag */}
+          <Text type="secondary" code style={{ fontSize: 12 }}>
+            tag: {record.image_tag || '-'}
+          </Text>
         </Space>
       ),
     },
@@ -451,31 +523,33 @@ export const DeliveryPage: React.FC = () => {
     },
     {
       title: '产物大小',
-      dataIndex: 'size',
-      key: 'size',
+      dataIndex: 'image_size',
+      key: 'image_size',
       width: 120,
-      render: (s) => s || '142 MB',
+      // CC-Loop01 P0-4: 剔除 142 MB 假兜底
+      render: (s, record) => formatImageSize(s ?? record.size),
+    },
+    {
+      title: '创建人',
+      dataIndex: 'created_by',
+      key: 'created_by',
+      width: 120,
+      render: (by) => by || '-',
     },
     {
       title: '创建时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
+      dataIndex: 'created_time',
+      key: 'created_time',
       width: 160,
-      render: (t) => t || '刚刚',
+      // CC-Loop01 P0-4: 剔除「刚刚」假兜底
+      render: (t, record) => formatUnixOrMs(t ?? record.created_at),
     },
     {
       title: '操作',
       key: 'action',
       width: 140,
       render: (_, record) => (
-        <Button
-          type="link"
-          size="small"
-          onClick={() => {
-            setSelectedArtifact(record);
-            setLineageDrawerVisible(true);
-          }}
-        >
+        <Button type="link" size="small" onClick={() => openArtifactDetail(record)}>
           查看流向图
         </Button>
       ),
@@ -524,10 +598,12 @@ export const DeliveryPage: React.FC = () => {
         if (status === 'success') {
           return <Badge status="success" text="已发布" />;
         }
-        if (status === 'failed' || status === 'error') {
+        if (status === 'failed' || status === 'fail' || status === 'error') {
           return <Badge status="error" text="交付失败" />;
         }
-        return <Badge status="processing" text={status || '已就绪'} />;
+        // CC-Loop01 P0-4: 剔除「已就绪」假兜底
+        if (!status) return <Badge status="default" text="-" />;
+        return <Badge status="processing" text={status} />;
       },
     },
     {
@@ -535,22 +611,14 @@ export const DeliveryPage: React.FC = () => {
       dataIndex: 'create_by',
       key: 'create_by',
       width: 120,
-      render: (by) => by || 'admin',
+      render: (by) => by || '-',
     },
     {
       title: '创建时间',
       dataIndex: 'create_time',
       key: 'create_time',
       width: 160,
-      render: (t) => {
-        if (!t) return '刚刚';
-        const num = Number(t);
-        if (!isNaN(num) && num > 0) {
-          const date = num > 1e11 ? new Date(num) : new Date(num * 1000);
-          return date.toLocaleString();
-        }
-        return String(t);
-      },
+      render: (t) => formatUnixOrMs(t),
     },
     {
       title: '操作',
@@ -561,21 +629,20 @@ export const DeliveryPage: React.FC = () => {
           <Button type="link" size="small" onClick={() => handleShowServiceImages(record)}>
             镜像清单
           </Button>
-          <Popconfirm
-            title="确定重新触发版本交付？"
-            description="将重新执行版本镜像打包与分发调度流水线。"
-            onConfirm={() => handleRetryDelivery(record)}
-            okText="重试"
-            cancelText="取消"
-          >
-            <Button
-              type="link"
-              size="small"
-              icon={<RedoOutlined />}
+          {/* CC-Loop01 P0-1: 仅 fail/failed 显示重试 */}
+          {(record.status === 'fail' || record.status === 'failed') && (
+            <Popconfirm
+              title="确定重新触发版本交付？"
+              description="将重新执行版本镜像打包与分发调度流水线。"
+              onConfirm={() => handleRetryDelivery(record)}
+              okText="重试"
+              cancelText="取消"
             >
-              重试交付
-            </Button>
-          </Popconfirm>
+              <Button type="link" size="small" icon={<RedoOutlined />}>
+                重试交付
+              </Button>
+            </Popconfirm>
+          )}
           {(record.type === 'helm' || (record.services && record.services.some((s) => s.chart_name))) && (
             <Button
               type="link"
@@ -742,77 +809,59 @@ export const DeliveryPage: React.FC = () => {
         {selectedArtifact && (
           <div>
             <Descriptions bordered column={1} size="small" style={{ marginBottom: 28 }}>
-              <Descriptions.Item label="交付物名称">{selectedArtifact.name}</Descriptions.Item>
+              <Descriptions.Item label="交付物名称">{selectedArtifact.name || '-'}</Descriptions.Item>
+              <Descriptions.Item label="镜像 Tag">{selectedArtifact.image_tag || '-'}</Descriptions.Item>
               <Descriptions.Item label="镜像">
                 <Text code style={{ fontSize: 12 }}>{selectedArtifact.image || '-'}</Text>
               </Descriptions.Item>
               <Descriptions.Item label="镜像 Digest">
                 <Text code style={{ fontSize: 12 }}>{selectedArtifact.image_digest || '-'}</Text>
               </Descriptions.Item>
+              <Descriptions.Item label="产物大小">
+                {formatImageSize(selectedArtifact.image_size ?? selectedArtifact.size)}
+              </Descriptions.Item>
               <Descriptions.Item label="归属项目">
                 <Tag color="blue">{selectedArtifact.project_name || '-'}</Tag>
               </Descriptions.Item>
+              <Descriptions.Item label="创建人">{selectedArtifact.created_by || '-'}</Descriptions.Item>
               <Descriptions.Item label="创建时间">
-                {selectedArtifact.created_at || '-'}
+                {formatUnixOrMs(selectedArtifact.created_time ?? selectedArtifact.created_at)}
               </Descriptions.Item>
             </Descriptions>
 
             <Title level={5} style={{ marginBottom: 20 }}>
-              完整产物上下游流向链条 (End-to-End Lineage Flow)
+              交付活动记录 (Activities)
             </Title>
 
-            <Timeline
-              items={[
-                {
+            {/* CC-Loop01 P0-5: 真实 activities，剔除伪造 CVE Timeline */}
+            {artifactDetailLoading ? (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <Spin />
+              </div>
+            ) : artifactActivities.length > 0 ? (
+              <Timeline
+                items={artifactActivities.map((act, idx) => ({
                   color: 'blue',
-                  dot: <BranchesOutlined style={{ fontSize: 16 }} />,
                   children: (
-                    <div>
-                      <Text strong>1. 代码仓库提交 (Git Commit)</Text>
+                    <div key={idx}>
+                      <Text strong>
+                        {act.type || 'activity'}
+                        {act.content ? ` · ${act.content}` : ''}
+                      </Text>
                       <Paragraph type="secondary" style={{ fontSize: 12, margin: '4px 0 0' }}>
-                        分支: {selectedArtifact.branch || '-'} | 提交人: {selectedArtifact.author || '-'}
+                        时间: {formatUnixOrMs(act.created_time || act.start_time)}
+                        {' | '}
+                        触发人: {act.created_by || '-'}
+                        {act.env_name ? ` | 环境: ${act.env_name}` : ''}
+                        {act.namespace ? ` | NS: ${act.namespace}` : ''}
                       </Paragraph>
                     </div>
                   ),
-                },
-                {
-                  color: 'cyan',
-                  dot: <CloudUploadOutlined style={{ fontSize: 16 }} />,
-                  children: (
-                    <div>
-                      <Text strong>2. 容器编译与构建归档 (Pipeline Build)</Text>
-                      <Paragraph type="secondary" style={{ fontSize: 12, margin: '4px 0 0' }}>
-                        流水线任务完成二进制打包并生成 OCI 规范镜像产物
-                      </Paragraph>
-                    </div>
-                  ),
-                },
-                {
-                  color: 'green',
-                  dot: <CheckCircleOutlined style={{ fontSize: 16 }} />,
-                  children: (
-                    <div>
-                      <Text strong>3. 镜像仓库验签分发 (Registry Storage)</Text>
-                      <Paragraph type="secondary" style={{ fontSize: 12, margin: '4px 0 0' }}>
-                        已推送至企业私有 Harbor 镜像中心并完成 CVE 静态漏洞扫描
-                      </Paragraph>
-                    </div>
-                  ),
-                },
-                {
-                  color: 'purple',
-                  dot: <ClusterOutlined style={{ fontSize: 16 }} />,
-                  children: (
-                    <div>
-                      <Text strong>4. 集群环境上线部署 (Workload Deployment)</Text>
-                      <Paragraph type="secondary" style={{ fontSize: 12, margin: '4px 0 0' }}>
-                        就绪分发至集成测试 (qa) 与预发布环境 Kubernetes 工作负载
-                      </Paragraph>
-                    </div>
-                  ),
-                },
-              ]}
-            />
+                }))}
+              />
+            ) : (
+              <Empty description="暂无交付活动记录" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )}
           </div>
         )}
       </Drawer>

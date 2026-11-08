@@ -29,7 +29,7 @@ import {
   CreateDeliveryVersionRequest,
 } from '../../api/delivery';
 import { useProjectStore } from '../../stores/project';
-import { settingsApi, HelmRepoItem } from '../../api/settings';
+import { settingsApi, type HelmRepoItem, type RegistryItem } from '../../api/settings';
 
 const { Text } = Typography;
 
@@ -53,6 +53,7 @@ export const CreateHelmReleaseModal: React.FC<CreateHelmReleaseModalProps> = ({
   const [fetchingChartVersion, setFetchingChartVersion] = useState<Record<number, boolean>>({});
 
   const [chartRepos, setChartRepos] = useState<HelmRepoItem[]>([]);
+  const [registries, setRegistries] = useState<RegistryItem[]>([]);
   const [services, setServices] = useState<DeliveryVersionService[]>([
     {
       service_name: '',
@@ -65,7 +66,7 @@ export const CreateHelmReleaseModal: React.FC<CreateHelmReleaseModalProps> = ({
   const [globalVariables, setGlobalVariables] = useState<string>('global:\n  env: production\n');
   const [editingYamlIndex, setEditingYamlIndex] = useState<number | null>(null);
 
-  // 加载 Helm 仓库列表
+  // 加载 Helm 仓库 + 镜像仓列表
   useEffect(() => {
     if (open) {
       settingsApi.getHelmRepos()
@@ -74,10 +75,19 @@ export const CreateHelmReleaseModal: React.FC<CreateHelmReleaseModalProps> = ({
         })
         .catch(() => setChartRepos([]));
 
+      // CC-Loop01 P0-2: 目标镜像仓列表
+      settingsApi
+        .getRegistries()
+        .then((res) => {
+          setRegistries(Array.isArray(res) ? res : []);
+        })
+        .catch(() => setRegistries([]));
+
       form.resetFields();
       form.setFieldsValue({
         project_name: initialProjectName || projects[0]?.name,
         chart_repo_name: '',
+        image_registry_id: undefined,
       });
       setServices([
         {
@@ -107,12 +117,13 @@ export const CreateHelmReleaseModal: React.FC<CreateHelmReleaseModalProps> = ({
 
     setFetchingChartVersion((prev) => ({ ...prev, [index]: true }));
     try {
+      // CC-Loop01 P0-3: 从对象数组读取 nextChartVersion || chartVersion，杜绝 [object Object]
       const res = await deliveryApi.getChartVersionFromRepo(item.chart_name, chartRepoName);
       let latestVersion = '';
       if (Array.isArray(res) && res.length > 0) {
-        latestVersion = res[0];
-      } else if (typeof res === 'string') {
-        latestVersion = res;
+        const found =
+          res.find((r) => r.chartName === item.chart_name) || res[0];
+        latestVersion = String(found?.nextChartVersion || found?.chartVersion || '');
       }
 
       if (latestVersion) {
@@ -218,6 +229,8 @@ export const CreateHelmReleaseModal: React.FC<CreateHelmReleaseModalProps> = ({
         labels: values.labels ? values.labels.split(',').map((l: string) => l.trim()).filter(Boolean) : [],
         chart_repo_name: values.chart_repo_name || '',
         original_chart_repo_name: values.chart_repo_name || '',
+        // CC-Loop01 P0-2: 必填目标镜像仓
+        image_registry_id: values.image_registry_id,
         services,
       };
 
@@ -308,6 +321,26 @@ export const CreateHelmReleaseModal: React.FC<CreateHelmReleaseModalProps> = ({
               </Form.Item>
             </Col>
             <Col span={12}>
+              {/* CC-Loop01 P0-2: 目标镜像仓必填 */}
+              <Form.Item
+                name="image_registry_id"
+                label="目标镜像仓（image_registry_id）"
+                rules={[{ required: true, message: '请选择目标镜像仓' }]}
+              >
+                <Select
+                  placeholder="选择镜像推送目标仓库"
+                  showSearch={{ optionFilterProp: 'label' }}
+                  options={registries.map((r) => ({
+                    value: r.id,
+                    label: `${r.reg_addr}${r.namespace ? ` / ${r.namespace}` : ''}${r.is_default ? ' (默认)' : ''}`,
+                  }))}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={24}>
               <Form.Item name="labels" label="版本标签 (逗号分隔)">
                 <Input placeholder="例如: release, stable, prod" />
               </Form.Item>
