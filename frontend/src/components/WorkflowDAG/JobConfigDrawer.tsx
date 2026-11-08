@@ -82,6 +82,13 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
   // REA-S5-2: 当前 Job 可引用的动态占位变量
   const [dynamicVariables, setDynamicVariables] = useState<string[]>([]);
   const [loadingDynamicVariables, setLoadingDynamicVariables] = useState(false);
+  // LOOP3-A1: 工作流插件 Job 模板与动态入参
+  const [pluginTemplates, setPluginTemplates] = useState<any[]>([]);
+  const [selectedPluginTemplate, setSelectedPluginTemplate] = useState<any | null>(null);
+  const [pluginLoading, setPluginLoading] = useState(false);
+
+  const pluginKeyOf = (tpl: { name?: string; version?: string } | null | undefined) =>
+    tpl ? `${tpl.name || ''}@@@${tpl.version || ''}` : '';
 
   useEffect(() => {
     if (job) {
@@ -142,7 +149,13 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         // custom-deploy
         cluster_id: job.spec?.cluster_id || '',
         namespace: job.spec?.namespace || '',
-        timeout: job.spec?.timeout || 60,
+        // LOOP3-B1: plugin 读 advanced_setting.timeout；其它 Job 沿用 spec.timeout
+        timeout:
+          job.type === 'plugin'
+            ? Number(
+                (job.spec?.advanced_setting as { timeout?: number } | undefined)?.timeout ?? 600
+              ) || 600
+            : job.spec?.timeout || 60,
         cd_skip_check_run_status: !!job.spec?.skip_check_run_status,
         cd_source: cdSrc,
         cd_job_name: job.spec?.job_name || '',
@@ -257,9 +270,104 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
           : Array.isArray((job.spec?.jobs as Array<Record<string, any>>)?.[0]?.parameters)
           ? (job.spec?.jobs as Array<Record<string, any>>)[0].parameters
           : [],
+        // LOOP3-A1: plugin 模板与入参回填
+        ...(job.type === 'plugin'
+          ? (() => {
+              const plugin = (job.spec?.plugin as Record<string, any>) || {};
+              const inputFields: Record<string, unknown> = {};
+              if (Array.isArray(plugin.inputs)) {
+                for (const input of plugin.inputs) {
+                  if (input?.name) {
+                    inputFields[`plugin_input_${input.name}`] =
+                      input.value ?? input.default ?? '';
+                  }
+                }
+              }
+              return {
+                plugin_id: plugin.name ? `${plugin.name}@@@${plugin.version || ''}` : undefined,
+                ...inputFields,
+              };
+            })()
+          : {}),
       });
+      // 同步已保存的 plugin 模板选中态（模板列表加载后会再次对齐）
+      if (job.type === 'plugin' && job.spec?.plugin) {
+        setSelectedPluginTemplate(job.spec.plugin as Record<string, any>);
+      } else if (job.type !== 'plugin') {
+        setSelectedPluginTemplate(null);
+      }
     }
   }, [job, form]);
+
+  // LOOP3-A1: 打开 plugin Job 时拉取插件模板并回填选中项
+  useEffect(() => {
+    if (!visible || !job || job.type !== 'plugin') {
+      return;
+    }
+    let cancelled = false;
+    setPluginLoading(true);
+    workflowApi
+      .listPluginTemplates()
+      .then((res) => {
+        if (cancelled) return;
+        const list = Array.isArray(res) ? res : [];
+        setPluginTemplates(list);
+        const existing = (job.spec?.plugin as { name?: string; version?: string } | undefined) || undefined;
+        if (existing?.name) {
+          const matched =
+            list.find(
+              (tpl) => tpl.name === existing.name && (tpl.version || '') === (existing.version || '')
+            ) || list.find((tpl) => tpl.name === existing.name);
+          if (matched) {
+            // 保留已保存的 inputs value，覆盖模板默认值
+            const savedInputs = Array.isArray((job.spec?.plugin as { inputs?: any[] })?.inputs)
+              ? ((job.spec?.plugin as { inputs?: any[] }).inputs as any[])
+              : [];
+            const mergedInputs = (matched.inputs || []).map((input: any) => {
+              const saved = savedInputs.find((s) => s?.name === input?.name);
+              return {
+                ...input,
+                value: saved?.value ?? input.value ?? input.default ?? '',
+              };
+            });
+            const merged = { ...matched, inputs: mergedInputs };
+            setSelectedPluginTemplate(merged);
+            const patch: Record<string, unknown> = { plugin_id: pluginKeyOf(matched) };
+            for (const input of mergedInputs) {
+              if (input?.name) {
+                patch[`plugin_input_${input.name}`] = input.value ?? '';
+              }
+            }
+            form.setFieldsValue(patch);
+          }
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPluginTemplates([]);
+          feedback.message.warning('插件模板列表加载失败，请检查插件仓库配置');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPluginLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, job, form]);
+
+  const handlePluginTemplateChange = (pluginId: string) => {
+    const matched = pluginTemplates.find((tpl) => pluginKeyOf(tpl) === pluginId) || null;
+    setSelectedPluginTemplate(matched);
+    if (!matched) return;
+    const patch: Record<string, unknown> = { plugin_id: pluginId };
+    for (const input of matched.inputs || []) {
+      if (input?.name) {
+        patch[`plugin_input_${input.name}`] = input.value ?? input.default ?? '';
+      }
+    }
+    form.setFieldsValue(patch);
+  };
 
   // 按需加载环境/测试/扫描/集群/服务列表/审批用户列表/Jenkins
   useEffect(() => {
@@ -846,6 +954,28 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
                     },
                   ]
                 : [],
+            }
+          : {}),
+        // LOOP3-A1 / LOOP3-B1: plugin 模板 + 动态入参 + advanced_setting.timeout
+        ...(job.type === 'plugin'
+          ? {
+              plugin: {
+                ...(selectedPluginTemplate || (job.spec?.plugin as Record<string, unknown>) || {}),
+                inputs: (selectedPluginTemplate?.inputs || (job.spec?.plugin as { inputs?: any[] })?.inputs || []).map(
+                  (input: any) => ({
+                    ...input,
+                    value:
+                      values[`plugin_input_${input.name}`] ??
+                      input.value ??
+                      input.default ??
+                      '',
+                  })
+                ),
+              },
+              advanced_setting: {
+                ...((job.spec?.advanced_setting as Record<string, unknown>) || {}),
+                timeout: Number(values.timeout) || 600,
+              },
             }
           : {}),
       },
@@ -3218,6 +3348,150 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
                 </Form.List>
               </Form.Item>
             )}
+          </>
+        )}
+
+        {/* LOOP3-A1: 插件任务配置 — 模板选择 / 动态入参 / 出参说明 / 超时 */}
+        {job?.type === 'plugin' && (
+          <>
+            <Divider titlePlacement="start">插件任务配置</Divider>
+            <Form.Item
+              name="plugin_id"
+              label="选择插件"
+              rules={[{ required: true, message: '请选择插件模板' }]}
+              extra={pluginLoading ? '正在加载插件模板…' : undefined}
+            >
+              <Select
+                showSearch={{ optionFilterProp: 'label' }}
+                loading={pluginLoading}
+                placeholder="请选择插件模板"
+                options={pluginTemplates.map((tpl) => ({
+                  value: pluginKeyOf(tpl),
+                  label: `${tpl.name} (${tpl.version || '-'}) - ${tpl.category || '通用'}`,
+                }))}
+                onChange={(val: string) => handlePluginTemplateChange(val)}
+                notFoundContent={pluginLoading ? '加载中…' : '暂无插件模板，请先在系统「插件管理」配置仓库'}
+              />
+            </Form.Item>
+
+            {selectedPluginTemplate && (
+              <Card
+                size="small"
+                variant="borderless"
+                style={{ marginBottom: 16, background: 'var(--ant-color-fill-quaternary, #fafafa)' }}
+                title={
+                  <Space orientation="horizontal" wrap>
+                    <span>{selectedPluginTemplate.name}</span>
+                    <Tag color="blue">v{selectedPluginTemplate.version || '-'}</Tag>
+                    {selectedPluginTemplate.is_offical ? (
+                      <Tag color="success">官方</Tag>
+                    ) : (
+                      <Tag>自定义</Tag>
+                    )}
+                    {selectedPluginTemplate.category ? (
+                      <Tag color="processing">{selectedPluginTemplate.category}</Tag>
+                    ) : null}
+                  </Space>
+                }
+              >
+                {selectedPluginTemplate.description ? (
+                  <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+                    {selectedPluginTemplate.description}
+                  </Typography.Paragraph>
+                ) : null}
+                {selectedPluginTemplate.image ? (
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    镜像：{selectedPluginTemplate.image}
+                  </Typography.Text>
+                ) : null}
+              </Card>
+            )}
+
+            {(selectedPluginTemplate?.inputs || []).length > 0 && (
+              <>
+                <Divider titlePlacement="start" plain>
+                  插件入参 (Inputs)
+                </Divider>
+                {(selectedPluginTemplate.inputs as any[]).map((param: any) => {
+                  const fieldName = `plugin_input_${param.name}`;
+                  const paramType = String(param.type || param.params_type || 'string').toLowerCase();
+                  const isCredential = Boolean(param.is_credential);
+                  const rules = param.required
+                    ? [{ required: true, message: `请填写 ${param.name}` }]
+                    : undefined;
+                  let control: React.ReactNode;
+                  if (isCredential || paramType === 'password') {
+                    control = <Input.Password placeholder={param.description || param.name} />;
+                  } else if (paramType === 'choice' || paramType === 'select' || paramType === 'multi-select') {
+                    control = (
+                      <Select
+                        mode={paramType === 'multi-select' ? 'multiple' : undefined}
+                        allowClear
+                        placeholder={param.description || `选择 ${param.name}`}
+                        options={(param.choice_option || []).map((opt: string) => ({
+                          label: opt,
+                          value: opt,
+                        }))}
+                      />
+                    );
+                  } else if (paramType === 'text' || paramType === 'textarea' || paramType === 'multiline') {
+                    control = <Input.TextArea rows={3} placeholder={param.description || param.name} />;
+                  } else {
+                    control = <Input placeholder={param.description || param.name} />;
+                  }
+                  return (
+                    <Form.Item
+                      key={fieldName}
+                      name={fieldName}
+                      label={param.name}
+                      tooltip={param.description}
+                      extra={param.description}
+                      rules={rules}
+                    >
+                      {control}
+                    </Form.Item>
+                  );
+                })}
+              </>
+            )}
+
+            {(selectedPluginTemplate?.outputs || []).length > 0 && (
+              <>
+                <Divider titlePlacement="start" plain>
+                  插件出参 (Outputs)
+                </Divider>
+                <Alert
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                  title="以下输出变量可在下游任务中引用"
+                  description={
+                    <Space orientation="vertical" size={4} style={{ width: '100%' }}>
+                      {(selectedPluginTemplate.outputs as any[]).map((out: any) => (
+                        <div key={out.name || out.key}>
+                          <Tag color="geekblue">{out.name}</Tag>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            {out.description || '无描述'}
+                          </Typography.Text>
+                        </div>
+                      ))}
+                    </Space>
+                  }
+                />
+              </>
+            )}
+
+            <Divider titlePlacement="start" plain>
+              高级设置
+            </Divider>
+            <Form.Item
+              name="timeout"
+              label="任务超时时间 (秒)"
+              tooltip="写入 spec.advanced_setting.timeout，默认 600 秒"
+              rules={[{ required: true, message: '请设置超时时间' }]}
+            >
+              <InputNumber min={1} max={86400} style={{ width: '100%' }} placeholder="600" />
+            </Form.Item>
           </>
         )}
       </Form>
