@@ -131,17 +131,28 @@ export interface StatDashboardBasicData {
   production_deploy_success: number;
 }
 
-export interface DeployHealthStat {
-  success: number;
-  failure: number;
-}
+  export interface DeployHealthStat {
+    success: number;
+    failure: number;
+  }
 
-export interface RollbackServiceCountItem {
-  project_name?: string;
-  service_name?: string;
-  count: number;
-  production: boolean;
-}
+  export interface RollbackServiceCountItem {
+    project_name?: string;
+    service_name?: string;
+    count: number;
+    production: boolean;
+  }
+
+  /** LOOP7-A2: 研发效能五维雷达模型 */
+  export interface EfficiencyRadarData {
+    name: string;
+    alias?: string;
+    test_success_rate: number;
+    release_frequency: number;
+    build_frequency: number;
+    release_success_rate: number;
+    requirement_development_lead_time: number;
+  }
 
 export const statApi = {
   // --- Group A: 质量/效能度量 (POST /stat/quality/* & GET /stat/v2/quality/rollback/stat) ---
@@ -339,7 +350,7 @@ export const statApi = {
 
   // ---------- R7 任务1: L3 效能洞察 v2/ai 端点（stat/handler/router.go:83-87，start_time/end_time 秒级） ----------
   // 效能雷达 (GET /stat/v2/ai/radar)
-  getEfficiencyRadar(startTime: number, endTime: number, projects?: string[]): Promise<any> {
+  getEfficiencyRadar(startTime: number, endTime: number, projects?: string[]): Promise<EfficiencyRadarData[]> {
     const q = new URLSearchParams();
     q.set('start_time', String(startTime));
     q.set('end_time', String(endTime));

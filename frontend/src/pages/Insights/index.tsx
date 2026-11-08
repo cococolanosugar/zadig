@@ -22,6 +22,7 @@ import {
   Segmented,
   Alert,
   Spin,
+  Progress,
 } from 'antd';
 import {
   CheckCircleOutlined,
@@ -47,6 +48,7 @@ import { useProjectStore } from '../../stores/project';
 import { AiAnalysisDrawer } from '../../components/InsightAI/AiAnalysisDrawer';
 import {
   statApi,
+  type EfficiencyRadarData,
   type StatDashboardConfig,
   type StatDashboardByProject,
   type StatDashboardBasicData,
@@ -141,6 +143,7 @@ export const InsightsPage: React.FC = () => {
     totalDeploys: 0,
     activeServices: 0,
   });
+  const [radarData, setRadarData] = useState<EfficiencyRadarData[]>([]);
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
   const [successRateData, setSuccessRateData] = useState<SuccessRateItem[]>([]);
   const [durationData, setDurationData] = useState<DailyCountItem[]>([]);
@@ -163,7 +166,8 @@ export const InsightsPage: React.FC = () => {
       const endDate = Math.floor(Date.now() / 1000);
       const startDate = endDate - daysCount * 86400;
 
-      const [buildRes, deployRes, svcRes] = await Promise.allSettled([
+      // LOOP7-A2: 并发拉取效能雷达五维模型
+      const [buildRes, deployRes, svcRes, radarRes] = await Promise.allSettled([
         http.get<DashboardStatResp>(`/api/aslan/stat/dashboard/build?startDate=${startDate}&endDate=${endDate}`, {
           skipErrorHandler: true,
         }),
@@ -175,6 +179,7 @@ export const InsightsPage: React.FC = () => {
               skipErrorHandler: true,
             })
           : Promise.resolve([]),
+        statApi.getEfficiencyRadar(startDate, endDate, currentProject ? [currentProject] : undefined),
       ]);
 
       const buildData: DashboardStatResp =
@@ -183,6 +188,9 @@ export const InsightsPage: React.FC = () => {
         deployRes.status === 'fulfilled' && deployRes.value ? deployRes.value : {};
       const serviceList =
         svcRes.status === 'fulfilled' && Array.isArray(svcRes.value) ? svcRes.value : [];
+      setRadarData(
+        radarRes.status === 'fulfilled' && Array.isArray(radarRes.value) ? radarRes.value : []
+      );
 
       const dailyCount = (d: { total?: number; success?: number; failure?: number; rollback?: number; timeout?: number }) =>
         d.total ?? (d.success || 0) + (d.failure || 0) + (d.rollback || 0) + (d.timeout || 0);
@@ -745,6 +753,64 @@ export const InsightsPage: React.FC = () => {
                   suffix="个"
                   loading={loading}
                 />
+              </Card>
+            </Col>
+          </Row>
+
+          {/* LOOP7-A2: 研发效能五维健康度 */}
+          <Row gutter={[16, 16]}>
+            <Col span={24}>
+              <Card
+                variant="borderless"
+                title="研发效能五维健康度 (5-Dimension R&D Efficiency)"
+                style={{ borderRadius: 8 }}
+              >
+                {(() => {
+                  const matched =
+                    (currentProject
+                      ? radarData.find((r) => r.name === currentProject || r.alias === currentProject)
+                      : undefined) || radarData[0];
+                  const avg = (key: keyof EfficiencyRadarData) => {
+                    if (matched && typeof matched[key] === 'number') return Number(matched[key]) || 0;
+                    if (!radarData.length) return 0;
+                    const sum = radarData.reduce((acc, r) => acc + (Number(r[key]) || 0), 0);
+                    return Number((sum / radarData.length).toFixed(2));
+                  };
+                  if (!radarData.length) {
+                    return (
+                      <Empty
+                        description="暂无效能雷达数据，请调整时间范围或确认项目存在构建/发布记录"
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                      />
+                    );
+                  }
+                  const testRate = avg('test_success_rate');
+                  const releaseRate = avg('release_success_rate');
+                  const buildFreq = avg('build_frequency');
+                  const releaseFreq = avg('release_frequency');
+                  const leadTime = avg('requirement_development_lead_time');
+                  return (
+                    <Row gutter={[24, 16]}>
+                      <Col xs={24} sm={12} md={8} lg={4}>
+                        <Statistic title="测试通过率" value={testRate} precision={1} suffix="%" />
+                        <Progress percent={Math.min(100, testRate)} size="small" status="active" />
+                      </Col>
+                      <Col xs={24} sm={12} md={8} lg={4}>
+                        <Statistic title="发布成功率" value={releaseRate} precision={1} suffix="%" />
+                        <Progress percent={Math.min(100, releaseRate)} size="small" status="active" />
+                      </Col>
+                      <Col xs={24} sm={12} md={8} lg={5}>
+                        <Statistic title="构建频次" value={buildFreq} precision={2} suffix="次/周" />
+                      </Col>
+                      <Col xs={24} sm={12} md={8} lg={5}>
+                        <Statistic title="发布频次" value={releaseFreq} precision={2} suffix="次/周" />
+                      </Col>
+                      <Col xs={24} sm={12} md={8} lg={6}>
+                        <Statistic title="需求研发周期" value={leadTime} precision={1} suffix="天" />
+                      </Col>
+                    </Row>
+                  );
+                })()}
               </Card>
             </Col>
           </Row>

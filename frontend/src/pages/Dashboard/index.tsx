@@ -35,6 +35,7 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import http from '../../api/client';
+import statApi from '../../api/stat';
 import { feedback } from '../../utils/feedback';
 
 const { Text } = Typography;
@@ -145,15 +146,17 @@ export const DashboardPage: React.FC = () => {
         );
       } else if (card.type === 'deploy_statistics') {
         try {
-          // 官方契约：GET /api/aslan/stat/v2/quality/deploy/health
-          const health = await http.get<{ success?: number; failure?: number }>(
-            '/api/aslan/stat/v2/quality/deploy/health',
-            { skipErrorHandler: true }
-          );
+          // LOOP7-A1: 必填 type/startDate/endDate，避免后端 invlid production type 500
+          const now = Math.floor(Date.now() / 1000);
+          const past30 = now - 30 * 86400;
+          const health = await statApi.getDeployHealthStats({
+            startDate: past30,
+            endDate: now,
+            type: 'both',
+          });
           const success = health?.success || 0;
           const failure = health?.failure || 0;
           const total = success + failure;
-          // R11 任务四: 无数据时如实展示 0/-，不再回落 100% 或捏造指标
           const successRate = total > 0 ? Number(((success / total) * 100).toFixed(1)) : null;
           data = {
             total_deploys: total,
@@ -169,11 +172,15 @@ export const DashboardPage: React.FC = () => {
         }
       } else if (card.type === 'service_rollback_ranking') {
         try {
-          // 官方契约：GET /api/aslan/stat/v2/quality/rollback/service/top
-          const res = await http.get<Array<{ project_name?: string; service_name?: string; count?: number; production?: boolean }>>(
-            '/api/aslan/stat/v2/quality/rollback/service/top?top=5',
-            { skipErrorHandler: true }
-          );
+          // LOOP7-A1: 必填 type/startDate/endDate
+          const now = Math.floor(Date.now() / 1000);
+          const past30 = now - 30 * 86400;
+          const res = await statApi.getTopRollbackedServices({
+            startDate: past30,
+            endDate: now,
+            top: 5,
+            type: 'both',
+          });
           if (Array.isArray(res) && res.length > 0) {
             data = res.map((item, idx) => ({
               rank: idx + 1,
