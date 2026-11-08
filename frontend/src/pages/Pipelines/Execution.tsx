@@ -214,6 +214,19 @@ export const PipelineExecutionPage: React.FC = () => {
     return `/api/logs/sse/v4/workflow/${encodeURIComponent(effWorkflowName)}/${effTaskId}/${encodeURIComponent(selectedJob)}/1000`;
   }, [effWorkflowName, effTaskId, selectedJob]);
 
+  // LOOP4-B2: 全量归档日志下载（非 tails 窗口）
+  const handleDownloadArchiveLogs = useCallback(async () => {
+    if (!effWorkflowName || !effTaskId || !selectedJob) {
+      throw new Error('缺少工作流 / 任务 / Job 信息，无法下载归档日志');
+    }
+    const content = await workflowApi.getWorkflowJobArchiveLogs(
+      effWorkflowName,
+      effTaskId,
+      selectedJob
+    );
+    return typeof content === 'string' ? content : String(content ?? '');
+  }, [effWorkflowName, effTaskId, selectedJob]);
+
   // Job 级 K8s 事件查看（对齐旧版执行详情）
   const [eventsOpen, setEventsOpen] = useState(false);
   const [jobEvents, setJobEvents] = useState<Array<{ event_type: string; time: string; message: string }>>([]);
@@ -946,7 +959,11 @@ export const PipelineExecutionPage: React.FC = () => {
         styles={{ body: { padding: 0 } }}
         style={{ borderRadius: 8, overflow: 'hidden' }}
       >
-        <LogViewer height={480} streamUrl={sseStreamUrl} />
+        <LogViewer
+          height={480}
+          streamUrl={sseStreamUrl}
+          onDownloadArchive={handleDownloadArchiveLogs}
+        />
       </Card>
 
       {/* Job K8s Events Drawer */}

@@ -1167,6 +1167,21 @@ export const workflowApi = {
   },
 
   /**
+   * 获取工作流 V4 任务 Job 历史全量归档日志
+   * GET /api/aslan/logs/log/v4/workflow/:workflowName/tasks/:taskID/jobs/:jobName
+   */
+  async getWorkflowJobArchiveLogs(
+    workflowName: string,
+    taskId: number | string,
+    jobName: string
+  ): Promise<string> {
+    return http.get(
+      `/api/aslan/logs/log/v4/workflow/${encodeURIComponent(workflowName)}/tasks/${taskId}/jobs/${encodeURIComponent(jobName)}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
    * 下载工作流任务产物 (通用)
    * GET /api/aslan/workflow/v4/workflowtask/workflow/:workflowName/taskId/:taskId/job/:jobName
    * (pkg/microservice/aslan/core/workflow/handler/router.go:150)

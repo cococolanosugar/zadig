@@ -3,6 +3,8 @@ import { useAuthStore } from '../stores/auth';
 export interface SSEOptions<T = unknown> {
   onMessage: (data: T) => void;
   onError?: (err: unknown) => void;
+  /** 服务端正常结束流（reader done）时回调；不触发重连 */
+  onComplete?: () => void;
   autoReconnect?: boolean; // 默认 true：流中断后自动重连
   maxRetries?: number;     // 最大重试次数，默认 5
   retryDelayMs?: number;   // 初始重试延迟，默认 1000ms
@@ -115,8 +117,10 @@ export function subscribeSSE<T = unknown>(url: string, options: SSEOptions<T>): 
             }
           }
         }
-        // 服务端正常关流（done）：视为中断，进入重连判定
-        scheduleReconnect(new Error('SSE stream closed by server'));
+        // LOOP4-B1: 服务端正常关流（done=true）视为成功结束，不重连
+        if (!isDestroyed && !controller.signal.aborted) {
+          options.onComplete?.();
+        }
       })
       .catch((err) => {
         // 用户主动 abort：静默退出，不触发 onError / 重连

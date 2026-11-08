@@ -12,6 +12,7 @@ import {
   FullscreenOutlined,
   FullscreenExitOutlined,
   FileTextOutlined,
+  CloudDownloadOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { subscribeSSE } from '../../utils/sse';
@@ -24,13 +25,28 @@ export interface LogViewerProps {
   streamUrl?: string;
   height?: number | string;
   title?: string;
+  /** 拉取全量归档日志；返回字符串时触发浏览器下载 */
+  onDownloadArchive?: () => Promise<string | void> | void;
 }
+
+const triggerTextDownload = (text: string, filename: string) => {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
 
 export const LogViewer: React.FC<LogViewerProps> = ({
   logs = [],
   streamUrl,
   height = 420,
   title = '实时控制台日志',
+  onDownloadArchive,
 }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermInstance = useRef<Terminal | null>(null);
@@ -43,6 +59,8 @@ export const LogViewer: React.FC<LogViewerProps> = ({
 
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [lineCount, setLineCount] = useState<number>(0);
+  const [streamEnded, setStreamEnded] = useState<boolean>(false);
+  const [archiveDownloading, setArchiveDownloading] = useState<boolean>(false);
 
   const handleClear = useCallback(() => {
     if (xtermInstance.current) {
@@ -84,17 +102,37 @@ export const LogViewer: React.FC<LogViewerProps> = ({
       feedback.message.warning('当前无日志内容可下载');
       return;
     }
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `pipeline-log-${dayjs().format('YYYYMMDD-HHmmss')}.log`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    triggerTextDownload(text, `pipeline-log-${dayjs().format('YYYYMMDD-HHmmss')}.log`);
     feedback.message.success('日志文件下载已触发');
   }, []);
+
+  const handleDownloadArchive = useCallback(async () => {
+    if (!onDownloadArchive) return;
+    setArchiveDownloading(true);
+    try {
+      const content = await onDownloadArchive();
+      if (typeof content === 'string') {
+        if (!content.trim()) {
+          feedback.message.warning('归档日志为空');
+          return;
+        }
+        triggerTextDownload(
+          content,
+          `pipeline-archive-log-${dayjs().format('YYYYMMDD-HHmmss')}.log`
+        );
+        feedback.message.success('全量归档日志下载已触发');
+      }
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { description?: string; message?: string } } })?.response?.data
+          ?.description ||
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        (err instanceof Error ? err.message : '归档日志下载失败');
+      feedback.message.error(msg);
+    } finally {
+      setArchiveDownloading(false);
+    }
+  }, [onDownloadArchive]);
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => !prev);
@@ -105,6 +143,8 @@ export const LogViewer: React.FC<LogViewerProps> = ({
 
   useEffect(() => {
     if (!terminalRef.current) return;
+
+    setStreamEnded(false);
 
     const term = new Terminal({
       theme: {
@@ -141,7 +181,9 @@ export const LogViewer: React.FC<LogViewerProps> = ({
     let unsubscribe: (() => void) | null = null;
     if (streamUrl) {
       try {
+        // LOOP4-B1: 任务日志流结束后不应自动重连刷屏
         unsubscribe = subscribeSSE<string | { message?: string }>(streamUrl, {
+          autoReconnect: false,
           onMessage: (data) => {
             let lineStr = '';
             if (typeof data === 'string') {
@@ -158,7 +200,12 @@ export const LogViewer: React.FC<LogViewerProps> = ({
               term.scrollToBottom();
             }
           },
+          onComplete: () => {
+            setStreamEnded(true);
+            term.writeln('\r\n\x1b[32m[日志流已正常结束]\x1b[0m');
+          },
           onError: () => {
+            setStreamEnded(true);
             term.writeln('\r\n\x1b[33m[日志流已结束]\x1b[0m');
           },
         });
@@ -228,6 +275,11 @@ export const LogViewer: React.FC<LogViewerProps> = ({
               {lineCount} 行
             </Tag>
           )}
+          {streamEnded && (
+            <Tag color="success" style={{ margin: 0, fontSize: 11, lineHeight: '18px', padding: '0 6px' }}>
+              已结束
+            </Tag>
+          )}
         </Space>
 
         <Space orientation="horizontal" size={4}>
@@ -279,7 +331,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({
             />
           </Tooltip>
 
-          <Tooltip title="下载日志文件 (Download)">
+          <Tooltip title="下载当前窗口日志 (Download Buffer)">
             <Button
               type="text"
               size="small"
@@ -287,6 +339,18 @@ export const LogViewer: React.FC<LogViewerProps> = ({
               onClick={handleDownload}
             />
           </Tooltip>
+
+          {onDownloadArchive ? (
+            <Tooltip title="下载完整归档日志 (Download Archive)">
+              <Button
+                type="text"
+                size="small"
+                loading={archiveDownloading}
+                icon={<CloudDownloadOutlined style={{ color: '#69b1ff' }} />}
+                onClick={handleDownloadArchive}
+              />
+            </Tooltip>
+          ) : null}
 
           <Tooltip title={isFullscreen ? '退出全屏 (Exit Fullscreen)' : '全屏展示 (Fullscreen)'}>
             <Button
