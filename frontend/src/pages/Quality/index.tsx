@@ -99,6 +99,8 @@ export interface TestItem {
   script_type?: string;
   scripts?: string;
   test_result_path?: string;
+  /** LOOP5-B2: 测试通过率门禁阈值 */
+  threshold?: number;
   junit_test_result_pass_rate?: number;
   test_report_path?: string;
   coverage_report_path?: string;
@@ -598,6 +600,7 @@ export const QualityCenterPage: React.FC = () => {
       envs: [],
       repos: [{ repo_name: '', branch: 'main', checkout_path: '' }],
       test_result_path: 'report.xml',
+      threshold: 100,
       junit_test_result_pass_rate: 100,
       test_report_path: 'report.html',
       artifact_paths: [{ path: 'test-results/' }],
@@ -664,7 +667,9 @@ export const QualityCenterPage: React.FC = () => {
           ? fullRecord.repos
           : [{ repo_name: '', branch: 'main', checkout_path: '' }],
       test_result_path: fullRecord.test_result_path || '',
-      junit_test_result_pass_rate: fullRecord.junit_test_result_pass_rate ?? 100,
+      // LOOP5-B2: 回填门禁阈值（threshold 优先，兼容旧字段）
+      threshold: fullRecord.threshold ?? fullRecord.junit_test_result_pass_rate ?? 100,
+      junit_test_result_pass_rate: fullRecord.threshold ?? fullRecord.junit_test_result_pass_rate ?? 100,
       test_report_path: fullRecord.test_report_path || '',
       coverage_report_path: fullRecord.coverage_report_path || '',
       artifact_paths:
@@ -720,6 +725,14 @@ export const QualityCenterPage: React.FC = () => {
             .filter(Boolean)
         : [];
 
+      // LOOP5-B2: threshold 与 junit_test_result_pass_rate 统一注入
+      const passRate =
+        values.threshold != null
+          ? Number(values.threshold)
+          : values.junit_test_result_pass_rate != null
+            ? Number(values.junit_test_result_pass_rate)
+            : 100;
+
       const payload: Record<string, unknown> = {
         name: values.name,
         desc: values.desc || '',
@@ -735,7 +748,8 @@ export const QualityCenterPage: React.FC = () => {
         script_type: values.script_type || 'shell',
         scripts: values.scripts || '',
         test_result_path: values.test_result_path || '',
-        junit_test_result_pass_rate: Number(values.junit_test_result_pass_rate) || 100,
+        threshold: passRate,
+        junit_test_result_pass_rate: passRate,
         test_report_path: values.test_report_path || '',
         coverage_report_path: values.coverage_report_path || '',
         artifact_paths: artifactList,
@@ -1708,13 +1722,15 @@ export const QualityCenterPage: React.FC = () => {
                           </Form.Item>
                         </Col>
                         <Col span={10}>
+                          {/* LOOP5-B2: 测试通过率门禁阈值 */}
                           <Form.Item
-                            name="junit_test_result_pass_rate"
-                            label="用例通过率阈值 (%)"
-                            tooltip="低于该阈值时测试步骤将被标记为失败"
+                            name="threshold"
+                            label="测试通过率门禁阈值 (%)"
+                            tooltip="执行自动化测试时，若测试用例通过率低于该阈值，测试任务将被判定为失败并阻断工作流"
+                            initialValue={100}
                             style={{ marginBottom: 0 }}
                           >
-                            <InputNumber min={0} max={100} style={{ width: '100%' }} />
+                            <InputNumber min={0} max={100} suffix="%" style={{ width: 160 }} />
                           </Form.Item>
                         </Col>
                       </Row>

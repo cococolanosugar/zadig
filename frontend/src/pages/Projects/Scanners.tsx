@@ -155,6 +155,17 @@ export interface ScannerItem {
   update_time?: number;
   update_by?: string;
   last_status?: 'passed' | 'failed' | 'running' | 'untested';
+  /** LOOP5-B1: Sonar 质量门禁开关 */
+  check_quality_gate?: boolean;
+  /** LOOP5-A1: 后端任务/详情真实 Sonar 指标 */
+  sonar_metrics?: {
+    quality_gate_status?: string;
+    bugs?: string | number;
+    vulnerabilities?: string | number;
+    code_smells?: string | number;
+    coverage?: string | number;
+    ncloc?: string | number;
+  };
   quality_metrics?: {
     bugs?: number;
     vulnerabilities?: number;
@@ -198,6 +209,7 @@ export const ScannersPage: React.FC = () => {
   const selectedCacheEnable = Form.useWatch('cache_enable', form);
   const selectedCacheDirType = Form.useWatch('cache_dir_type', form);
   const selectedClusterId = Form.useWatch('cluster_id', form);
+  const selectedScannerType = Form.useWatch('scanner_type', form);
 
   // 加载扫描代码库列表 (F9)
   const fetchScanningRepos = useCallback(async () => {
@@ -242,6 +254,8 @@ export const ScannersPage: React.FC = () => {
       name: target.name,
       description: target.description,
       scanner_type: scannerType,
+      // LOOP5-B1: 回填质量门禁开关
+      check_quality_gate: !!target.check_quality_gate,
       repo_name: currentRepo,
       artifact_paths: adv?.artifact_paths || [],
       timeout: adv?.timeout ?? 600,
@@ -283,6 +297,7 @@ export const ScannersPage: React.FC = () => {
       form.resetFields();
       form.setFieldsValue({
         scanner_type: isAi ? 'ai-review' : 'sonar',
+        check_quality_gate: false,
         timeout: 600,
         concurrency_limit: 1,
         res_req: 'low',
@@ -585,7 +600,8 @@ export const ScannersPage: React.FC = () => {
         repos: repoPayload,
         script: editingScanner?.script || '#!/bin/bash\nset -e',
         advanced_settings: adv,
-        check_quality_gate: false,
+        // LOOP5-B1: 真实消费表单质量门禁开关
+        check_quality_gate: Boolean(values.check_quality_gate),
         outputs: editingScanner?.outputs || [],
       };
 
@@ -944,6 +960,18 @@ export const ScannersPage: React.FC = () => {
               </Form.Item>
             </Col>
           </Row>
+
+          {/* LOOP5-B1: Sonar / SonarQube 质量门禁开关 */}
+          {(selectedScannerType === 'sonar' || selectedScannerType === 'sonarQube') && (
+            <Form.Item
+              name="check_quality_gate"
+              label="质量门禁检查"
+              valuePropName="checked"
+              tooltip="启用后，若 SonarQube 质量门禁状态未达到 Passed，扫描任务将被置为失败并阻断下游"
+            >
+              <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+            </Form.Item>
+          )}
 
           <Form.Item name="description" label="规则描述">
             <Input placeholder="说明该审查模块的检测规范与门禁目标" />
@@ -1542,7 +1570,19 @@ export const ScannersPage: React.FC = () => {
                 {selectedScanner.scanner_type}
               </Descriptions.Item>
               <Descriptions.Item label="门禁状态">
-                <Tag color="success">达标 (Passed)</Tag>
+                {(() => {
+                  // LOOP5-A1: 真实质量门禁状态，无数据时不伪造 Passed
+                  const gateStatus = selectedScanner.sonar_metrics?.quality_gate_status;
+                  if (!gateStatus) {
+                    return <Tag>未上报</Tag>;
+                  }
+                  const passed = String(gateStatus).toLowerCase() === 'passed';
+                  return (
+                    <Tag color={passed ? 'success' : 'error'}>
+                      {passed ? '达标 (Passed)' : `未达标 (${gateStatus})`}
+                    </Tag>
+                  );
+                })()}
               </Descriptions.Item>
               <Descriptions.Item label="更新时间" span={2}>
                 {selectedScanner.update_time
@@ -1561,31 +1601,57 @@ export const ScannersPage: React.FC = () => {
                 <Col span={12}>
                   <Statistic
                     title="Bugs (漏洞缺陷)"
-                    value={selectedScanner.quality_metrics?.bugs ?? 0}
+                    value={Number(
+                      selectedScanner.sonar_metrics?.bugs ??
+                        selectedScanner.quality_metrics?.bugs ??
+                        0
+                    )}
                     styles={{ content: { color: '#52c41a', fontWeight: 600 } }}
                   />
                 </Col>
                 <Col span={12}>
                   <Statistic
                     title="Vulnerabilities (安全风险)"
-                    value={selectedScanner.quality_metrics?.vulnerabilities ?? 0}
+                    value={Number(
+                      selectedScanner.sonar_metrics?.vulnerabilities ??
+                        selectedScanner.quality_metrics?.vulnerabilities ??
+                        0
+                    )}
                     styles={{ content: { color: '#52c41a', fontWeight: 600 } }}
                   />
                 </Col>
                 <Col span={12}>
                   <Statistic
                     title="Code Smells (代码异味)"
-                    value={selectedScanner.quality_metrics?.code_smells ?? 0}
+                    value={Number(
+                      selectedScanner.sonar_metrics?.code_smells ??
+                        selectedScanner.quality_metrics?.code_smells ??
+                        0
+                    )}
                     styles={{ content: { color: '#faad14', fontWeight: 600 } }}
                   />
                 </Col>
                 <Col span={12}>
-                  <Statistic
-                    title="测试覆盖率"
-                    value={selectedScanner.quality_metrics?.coverage ?? 85}
-                    suffix="%"
-                    styles={{ content: { color: '#0066ff', fontWeight: 600 } }}
-                  />
+                  {/* LOOP5-A1: 剔除 coverage ?? 85 假兜底 */}
+                  {selectedScanner.sonar_metrics?.coverage != null ||
+                  selectedScanner.quality_metrics?.coverage != null ? (
+                    <Statistic
+                      title="测试覆盖率"
+                      value={Number(
+                        selectedScanner.sonar_metrics?.coverage ??
+                          selectedScanner.quality_metrics?.coverage
+                      )}
+                      suffix="%"
+                      styles={{ content: { color: '#0066ff', fontWeight: 600 } }}
+                    />
+                  ) : (
+                    <div>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        测试覆盖率
+                      </Text>
+                      <div style={{ fontSize: 24, fontWeight: 600, color: '#0066ff' }}>-</div>
+                    </div>
+                  )}
                 </Col>
               </Row>
             </Card>
