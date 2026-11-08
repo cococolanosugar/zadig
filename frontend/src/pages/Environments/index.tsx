@@ -20,6 +20,8 @@ import {
   Alert,
   Popconfirm,
   Tooltip,
+  Segmented,
+  Checkbox,
 } from 'antd';
 import {
   ClusterOutlined,
@@ -105,6 +107,26 @@ interface PodItem {
   status: string;
   images?: string[];
   create_time?: number;
+  /** 若后端透传服务名则优先使用 */
+  service_name?: string;
+}
+
+/** CC-Loop02 P0-4: 从 Pod 名解析真实服务名，禁止把 Pod 名当服务名 */
+function resolveServiceNameFromPod(record: PodItem, knownServices: string[] = []): string {
+  if (record.service_name) return record.service_name;
+  const podName = record.name || '';
+  if (!podName) return '';
+  if (knownServices.length > 0) {
+    const sorted = [...knownServices].sort((a, b) => b.length - a.length);
+    const hit = sorted.find((s) => podName === s || podName.startsWith(`${s}-`));
+    if (hit) return hit;
+  }
+  // Deployment Pod: <svc>-<rsHash>-<podHash>
+  const stripped = podName.replace(/-[a-z0-9]{4,10}-[a-z0-9]{5}$/i, '');
+  if (stripped && stripped !== podName) return stripped;
+  const parts = podName.split('-');
+  if (parts.length >= 3) return parts.slice(0, -2).join('-');
+  return podName;
 }
 
 interface EnvOperationLogItem {
@@ -145,8 +167,20 @@ export const EnvironmentsPage: React.FC = () => {
   const deepLinkPod = searchParams.get('podName') || '';
   const isSAEChangeOrderRoute = location.pathname.includes('/sae/changeOrder');
 
+  // CC-Loop02 P0-1: 测试/生产环境切换
+  const [isProdMode, setIsProdMode] = useState(
+    searchParams.get('envType') === 'prod' || searchParams.get('production') === 'true'
+  );
+
   const [environments, setEnvironments] = useState<EnvironmentItem[]>([]);
   const [currentEnv, setCurrentEnv] = useState<string>(deepLinkMode ? '' : routeEnvName || '');
+  // 服务名 → 类型（用于 isHelmChart 判定）
+  const [envServiceTypeMap, setEnvServiceTypeMap] = useState<Record<string, string>>({});
+  // CC-Loop02 P0-3: 生产环境删除强确认
+  const [prodDeleteOpen, setProdDeleteOpen] = useState(false);
+  const [prodDeleteInput, setProdDeleteInput] = useState('');
+  const [prodDeleteAlsoServices, setProdDeleteAlsoServices] = useState(false);
+  const [prodDeleting, setProdDeleting] = useState(false);
   const [pods, setPods] = useState<PodItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -353,21 +387,21 @@ export const EnvironmentsPage: React.FC = () => {
     }
     setLoading(true);
     try {
-      const res = await http.get<EnvironmentItem[] | { data: EnvironmentItem[] }>(
-        `/api/aslan/environment/environments?projectName=${activeProject}`
-      );
-      const rawList = Array.isArray(res) ? res : ('data' in res && Array.isArray(res.data) ? res.data : []);
-      const list = [...rawList].sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0));
-      setEnvironments(list);
+      // CC-Loop02 P0-1: 生产模式透传 production=true
+      const listRaw = await environmentApi.getEnvironments(activeProject, isProdMode || undefined);
+      const list = [...listRaw].sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0));
+      setEnvironments(list as EnvironmentItem[]);
       if (deepLinkMode) {
         // 深链模式：环境名来自 ?envName=，不在路径段上；缺失时落到默认环境或安全列表态
         const target = deepLinkEnv ? list.find((e) => e.name === deepLinkEnv) : undefined;
         if (target) setCurrentEnv(target.name);
         else if (list.length > 0 && !currentEnv) setCurrentEnv(list[0].name);
-      } else if (routeEnvName) {
+      } else if (routeEnvName && !DEEP_LINK_MODES.includes(routeEnvName)) {
         setCurrentEnv(routeEnvName);
       } else if (list.length > 0 && !currentEnv) {
         setCurrentEnv(list[0].name);
+      } else if (currentEnv && !list.find((e) => e.name === currentEnv)) {
+        setCurrentEnv(list[0]?.name || '');
       }
     } catch {
       setEnvironments([]);
@@ -376,11 +410,40 @@ export const EnvironmentsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeProject, routeEnvName, currentEnv, deepLinkMode, deepLinkEnv]);
+  }, [activeProject, routeEnvName, currentEnv, deepLinkMode, deepLinkEnv, isProdMode]);
 
   useEffect(() => {
     loadEnvironments();
   }, [loadEnvironments]);
+
+  // CC-Loop02 P0-5: 拉取当前环境服务类型映射（helm_chart 判定）
+  useEffect(() => {
+    const loadServiceTypes = async () => {
+      if (!activeProject || !currentEnv) {
+        setEnvServiceTypeMap({});
+        return;
+      }
+      try {
+        const detail = await environmentApi.getEnvironmentDetail(
+          activeProject,
+          currentEnv,
+          Boolean(currentEnvObj?.production || isProdMode)
+        );
+        const map: Record<string, string> = {};
+        const services = (detail?.services as Array<Array<{ service_name?: string; type?: string }>>) || [];
+        services.forEach((group) => {
+          (group || []).forEach((s) => {
+            if (s.service_name) map[s.service_name] = s.type || 'k8s';
+          });
+        });
+        setEnvServiceTypeMap(map);
+      } catch {
+        setEnvServiceTypeMap({});
+      }
+    };
+    loadServiceTypes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject, currentEnv, isProdMode, currentEnvObj?.production]);
 
   const toggleFavorite = async () => {
     if (!activeProject || !currentEnv) return;
@@ -725,14 +788,17 @@ export const EnvironmentsPage: React.FC = () => {
       title: '容器操作',
       valueType: 'option',
       key: 'option',
-      render: (_, record) => [
+      render: (_, record) => {
+        // CC-Loop02 P0-4: 使用解析后的服务名，禁止直接传 Pod 名
+        const svcName = resolveServiceNameFromPod(record, Object.keys(envServiceTypeMap));
+        return [
         <Button
           key="detail"
           type="link"
           icon={<FileSearchOutlined />}
           onClick={() =>
             navigate(
-              `/v1/projects/detail/${activeProject}/envs/${currentEnv}/k8s/${record.name}?service=${record.name}`
+              `/v1/projects/detail/${activeProject}/envs/${currentEnv}/k8s/${encodeURIComponent(svcName)}?service=${encodeURIComponent(svcName)}`
             )
           }
         >
@@ -743,7 +809,7 @@ export const EnvironmentsPage: React.FC = () => {
           type="link"
           icon={<HistoryOutlined />}
           onClick={() => {
-            setHistoryServiceName(record.name);
+            setHistoryServiceName(svcName);
             setHistoryDrawerOpen(true);
           }}
         >
@@ -754,7 +820,7 @@ export const EnvironmentsPage: React.FC = () => {
           type="link"
           icon={<DiffOutlined />}
           onClick={() => {
-            setDiffTargetService(record.name);
+            setDiffTargetService(svcName);
             setDiffModalOpen(true);
           }}
         >
@@ -815,7 +881,7 @@ export const EnvironmentsPage: React.FC = () => {
                 type="link"
                 icon={<GlobalOutlined />}
                 onClick={() => {
-                  setPortalTargetService(record.name);
+                  setPortalTargetService(svcName);
                   setPortalIsGrayscale(Boolean(currentEnvObj?.istio_grayscale_is_base));
                   setPortalModalOpen(true);
                 }}
@@ -824,7 +890,8 @@ export const EnvironmentsPage: React.FC = () => {
               </Button>,
             ]
           : []),
-      ],
+      ];
+      },
     },
   ];
 
@@ -840,7 +907,25 @@ export const EnvironmentsPage: React.FC = () => {
                 <Title level={4} style={{ margin: 0 }}>
                   环境与容器集群管理
                 </Title>
-                <Space orientation="horizontal" style={{ marginTop: 4 }}>
+                <Space orientation="horizontal" style={{ marginTop: 4 }} wrap>
+                  {/* CC-Loop02 P0-1: 测试/生产环境切换 */}
+                  <Segmented
+                    size="small"
+                    value={isProdMode ? 'prod' : 'test'}
+                    options={[
+                      { label: '测试环境', value: 'test' },
+                      { label: '生产环境', value: 'prod' },
+                    ]}
+                    onChange={(v) => {
+                      const next = v === 'prod';
+                      setIsProdMode(next);
+                      setCurrentEnv('');
+                      const params = new URLSearchParams(location.search);
+                      if (next) params.set('envType', 'prod');
+                      else params.delete('envType');
+                      navigate({ search: params.toString() ? `?${params.toString()}` : '' }, { replace: true });
+                    }}
+                  />
                   <Text type="secondary" style={{ fontSize: 13 }}>
                     所属项目: <Tag color="blue">{activeProject || '全局工作区'}</Tag>
                   </Text>
@@ -848,8 +933,9 @@ export const EnvironmentsPage: React.FC = () => {
                     当前环境:
                   </Text>
                   <Select
-                    value={currentEnv}
+                    value={currentEnv || undefined}
                     onChange={setCurrentEnv}
+                    placeholder={isProdMode ? '选择生产环境' : '选择测试环境'}
                     style={{ minWidth: 160 }}
                     size="small"
                     options={environments.map((e) => {
@@ -1213,9 +1299,15 @@ export const EnvironmentsPage: React.FC = () => {
                       disabled: !currentEnv,
                       onClick: () => {
                         if (!currentEnv || !activeProject) return;
-                        const currentEnvObj = environments.find((e) => e.name === currentEnv);
-                        const isProd = currentEnvObj?.production ?? false;
-                        const prodParam = isProd ? '&production=true' : '';
+                        const envObj = environments.find((e) => e.name === currentEnv);
+                        const isProd = envObj?.production ?? false;
+                        // CC-Loop02 P0-3: 生产环境强安全删除确认
+                        if (isProd) {
+                          setProdDeleteInput('');
+                          setProdDeleteAlsoServices(false);
+                          setProdDeleteOpen(true);
+                          return;
+                        }
                         feedback.modal?.confirm({
                           title: `确认删除环境 [${currentEnv}]？`,
                           content: '环境下的服务实例与配置将被移除，该操作不可恢复。',
@@ -1225,7 +1317,7 @@ export const EnvironmentsPage: React.FC = () => {
                           onOk: async () => {
                             try {
                               await http.delete(
-                                `/api/aslan/environment/environments/${currentEnv}?projectName=${activeProject}&is_delete=true${prodParam}`
+                                `/api/aslan/environment/environments/${currentEnv}?projectName=${activeProject}&is_delete=true`
                               );
                               feedback.message.success(`环境 [${currentEnv}] 已删除`);
                               setCurrentEnv('');
@@ -1530,7 +1622,8 @@ export const EnvironmentsPage: React.FC = () => {
         projectName={activeProject || ''}
         envName={currentEnv || ''}
         serviceName={historyServiceName}
-        isHelmChart={Boolean(isHelmEnv)}
+        // CC-Loop02 P0-5: isHelmChart 由服务类型决定，禁止用环境级 isHelmEnv
+        isHelmChart={envServiceTypeMap[historyServiceName] === 'helm_chart'}
         production={currentEnvObj?.production ?? false}
         onRollbackSuccess={() => {
           loadWorkloadPods();
@@ -1772,6 +1865,69 @@ export const EnvironmentsPage: React.FC = () => {
           setShareModalOpen(true);
         }}
       />
+
+      {/* CC-Loop02 P0-3: 生产环境删除强安全防护 */}
+      <Modal
+        title="删除生产环境（高危操作）"
+        open={prodDeleteOpen}
+        onCancel={() => setProdDeleteOpen(false)}
+        okText="确认删除生产环境"
+        okButtonProps={{
+          danger: true,
+          disabled: prodDeleteInput !== currentEnv,
+          loading: prodDeleting,
+        }}
+        cancelText="取消"
+        onOk={async () => {
+          if (!currentEnv || !activeProject || prodDeleteInput !== currentEnv) return;
+          setProdDeleting(true);
+          try {
+            const isDeleteParam = prodDeleteAlsoServices ? 'true' : 'false';
+            await http.delete(
+              `/api/aslan/environment/environments/${encodeURIComponent(currentEnv)}?projectName=${encodeURIComponent(activeProject)}&is_delete=${isDeleteParam}&production=true`
+            );
+            feedback.message.success(`生产环境 [${currentEnv}] 已删除`);
+            setProdDeleteOpen(false);
+            setCurrentEnv('');
+            await loadEnvironments();
+          } catch (err: unknown) {
+            const msg =
+              (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+              '删除生产环境失败';
+            feedback.message.error(msg);
+          } finally {
+            setProdDeleting(false);
+          }
+        }}
+      >
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginBottom: 16 }}
+          title="生产环境删除属于高危操作"
+          description="删除后不可恢复。请确认已完成备份与流量切换，并在下方输入框中完整输入环境名称以继续。"
+        />
+        <div style={{ marginBottom: 12 }}>
+          <Text type="secondary">请输入环境名 </Text>
+          <Text code strong>
+            {currentEnv}
+          </Text>
+          <Text type="secondary"> 以确认删除：</Text>
+          <Input
+            style={{ marginTop: 8 }}
+            placeholder={currentEnv}
+            value={prodDeleteInput}
+            onChange={(e) => setProdDeleteInput(e.target.value)}
+            status={prodDeleteInput && prodDeleteInput !== currentEnv ? 'error' : undefined}
+          />
+        </div>
+        <Checkbox
+          checked={prodDeleteAlsoServices}
+          onChange={(e) => setProdDeleteAlsoServices(e.target.checked)}
+        >
+          同时删除当前环境管理的服务（is_delete）
+        </Checkbox>
+      </Modal>
 
       {/* Ephemeral Debug Container Injection Modal */}
       <Modal

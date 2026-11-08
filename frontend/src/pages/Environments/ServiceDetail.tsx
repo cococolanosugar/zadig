@@ -115,6 +115,8 @@ export const ServiceDetailPage: React.FC = () => {
   const [yamlLoading, setYamlLoading] = useState(false);
   // 环境服务 YAML 编辑保存（对齐旧版；PUT /environments/:envName/services/:serviceName）
   const [svcCurrentRevision, setSvcCurrentRevision] = useState<number>(0);
+  // CC-Loop02: 服务类型（用于 isHelmChart）
+  const [serviceDetailType, setServiceDetailType] = useState<string>('');
   const [savingYaml, setSavingYaml] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [isBaseEnv, setIsBaseEnv] = useState(false);
@@ -224,7 +226,7 @@ export const ServiceDetailPage: React.FC = () => {
     try {
       // 可编辑的是环境内服务的模板 YAML（variable_yaml）；同时取 current_revision 供保存
       const detail = await http.get<{
-        services?: Array<Array<{ service_name?: string; revision?: number; variable_yaml?: string }>>;
+        services?: Array<Array<{ service_name?: string; revision?: number; variable_yaml?: string; type?: string }>>;
         share_env_is_base?: boolean;
         istio_grayscale_is_base?: boolean;
       }>(
@@ -237,9 +239,11 @@ export const ServiceDetailPage: React.FC = () => {
         .flatMap((g) => g || [])
         .find((s) => s.service_name === serviceName);
       setSvcCurrentRevision(Number(svcEntry?.revision) || 0);
+      setServiceDetailType(svcEntry?.type || serviceType || '');
       setYamlContent(svcEntry?.variable_yaml || '');
     } catch {
       setSvcCurrentRevision(0);
+      setServiceDetailType('');
       setYamlContent('');
       setIsBaseEnv(false);
       setIsGrayscaleBase(false);
@@ -466,7 +470,15 @@ export const ServiceDetailPage: React.FC = () => {
             <Space orientation="horizontal" style={{ marginTop: 4 }}>
               <Tag color="blue">{projectName || '-'}</Tag>
               <Tag color="geekblue">环境: {envName}</Tag>
-              <Tag color="cyan">{serviceType === 'pm' ? '主机服务' : 'K8s 服务'}</Tag>
+              {/* CC-Loop02: 生产环境鲜明红色 Tag */}
+              {envProduction && <Tag color="red">生产环境</Tag>}
+              <Tag color="cyan">
+                {serviceDetailType === 'helm_chart' || serviceType === 'helm'
+                  ? 'Helm Chart'
+                  : serviceType === 'pm'
+                    ? '主机服务'
+                    : 'K8s 服务'}
+              </Tag>
             </Space>
           </div>
           <div style={{ flex: 1 }} />
@@ -538,16 +550,33 @@ export const ServiceDetailPage: React.FC = () => {
                     <Button size="small" icon={<ReloadOutlined />} onClick={fetchYaml}>
                       重置
                     </Button>
-                    <Button
-                      size="small"
-                      danger
-                      icon={<ExclamationCircleOutlined />}
-                      loading={restarting}
-                      onClick={handleRestartSvc}
+                    <Popconfirm
+                      title={
+                        envProduction
+                          ? `生产环境警告：确认重启服务 [${serviceName}]？`
+                          : `确认重启服务 [${serviceName}]？`
+                      }
+                      description={
+                        envProduction
+                          ? '生产环境重启可能导致短暂不可用，请确认已完成变更窗口审批。'
+                          : '将按最新配置重启工作负载使变更生效。'
+                      }
+                      onConfirm={handleRestartSvc}
+                      okText="确认重启"
+                      cancelText="取消"
+                      okButtonProps={{ danger: true }}
                       disabled={serviceType === 'pm'}
                     >
-                      重启生效
-                    </Button>
+                      <Button
+                        size="small"
+                        danger
+                        icon={<ExclamationCircleOutlined />}
+                        loading={restarting}
+                        disabled={serviceType === 'pm'}
+                      >
+                        重启生效
+                      </Button>
+                    </Popconfirm>
                     <Button type="primary" size="small" icon={<SaveOutlined />} loading={savingYaml} onClick={handleSaveSvcYaml}>
                       保存配置
                     </Button>
@@ -729,7 +758,8 @@ export const ServiceDetailPage: React.FC = () => {
         projectName={projectName || ''}
         envName={envName || ''}
         serviceName={serviceName || ''}
-        isHelmChart={false}
+        // CC-Loop02: isHelmChart 依据服务类型，禁止硬编码 false
+        isHelmChart={serviceDetailType === 'helm_chart'}
         production={envProduction}
         onRollbackSuccess={() => {
           fetchPods();

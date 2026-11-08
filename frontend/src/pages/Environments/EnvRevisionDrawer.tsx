@@ -12,7 +12,6 @@ import {
   Alert,
   Spin,
   Modal,
-  InputNumber,
   App,
   Descriptions,
 } from 'antd';
@@ -20,12 +19,10 @@ import type { ColumnsType } from 'antd/es/table';
 import {
   HistoryOutlined,
   EyeOutlined,
-  RollbackOutlined,
   ReloadOutlined,
   ClusterOutlined,
   CheckCircleOutlined,
   SyncOutlined,
-  CameraOutlined,
   DeploymentUnitOutlined,
 } from '@ant-design/icons';
 import MonacoEditor from '@monaco-editor/react';
@@ -52,13 +49,10 @@ export const EnvRevisionDrawer: React.FC<EnvRevisionDrawerProps> = ({
   projectName,
   envName,
   production = false,
-  onSuccess,
 }) => {
   const { message } = App.useApp();
   const [loading, setLoading] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'revisions' | 'snaps'>('revisions');
   const [revisions, setRevisions] = useState<EnvProductRevision[]>([]);
-  const [snaps, setSnaps] = useState<EnvProductRevision[]>([]);
 
   // YAML Detail Modal state
   const [detailModalOpen, setDetailModalOpen] = useState<boolean>(false);
@@ -69,23 +63,13 @@ export const EnvRevisionDrawer: React.FC<EnvRevisionDrawerProps> = ({
   const [activeYamlKey, setActiveYamlKey] = useState<'rendered' | 'variable'>('rendered');
   const [versionYamlData, setVersionYamlData] = useState<EnvServiceVersionYaml | null>(null);
 
-  // Rollback state
-  const [rollbackModalOpen, setRollbackModalOpen] = useState<boolean>(false);
-  const [rollbackService, setRollbackService] = useState<string>('');
-  const [rollbackCurrentRev, setRollbackCurrentRev] = useState<number>(1);
-  const [targetRevision, setTargetRevision] = useState<number>(1);
-  const [rollbackLoading, setRollbackLoading] = useState<boolean>(false);
-
   const fetchRevisionData = useCallback(async () => {
     if (!projectName || !envName) return;
     setLoading(true);
     try {
-      const [revRes, snapRes] = await Promise.all([
-        environmentApi.getProductsRevision(projectName, envName, production),
-        environmentApi.getProductsRevisionSnaps(projectName, envName, production),
-      ]);
+      // CC-Loop02 P0-6: 仅使用项目鉴权的 getProductsRevision，禁止 cron 内部 snaps 接口
+      const revRes = await environmentApi.getProductsRevision(projectName, envName, production);
       setRevisions(revRes);
-      setSnaps(snapRes);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '获取环境版本记录失败';
       message.error(msg);
@@ -99,69 +83,33 @@ export const EnvRevisionDrawer: React.FC<EnvRevisionDrawerProps> = ({
       fetchRevisionData();
     } else {
       setRevisions([]);
-      setSnaps([]);
     }
   }, [open, fetchRevisionData]);
 
-  // View YAML handler
-  const handleViewYaml = async (serviceName: string, rev: number) => {
+  // View YAML handler — isHelmChart 按服务类型动态判断
+  const handleViewYaml = async (serviceName: string, rev: number, serviceType?: string) => {
     setDetailService(serviceName);
     setDetailRevision(rev);
     setDetailModalOpen(true);
     setDetailLoading(true);
     try {
+      // CC-Loop02 P0-6 / P0-5: 禁止硬编码 false，仅 helm_chart 为 true
+      const isHelmChart = serviceType === 'helm_chart';
       const res = await environmentApi.getServiceVersionYaml(
         projectName,
         envName,
         serviceName,
         rev,
-        false,
+        isHelmChart,
         production
       );
       setVersionYamlData(res);
-      setYamlContent(res.yaml || '# 暂无渲染配置 YAML');
+      setYamlContent(res.yaml || res.variable_yaml || '# 暂无渲染配置 YAML');
     } catch {
       setVersionYamlData(null);
       setYamlContent('# 加载 YAML 详情失败');
     } finally {
       setDetailLoading(false);
-    }
-  };
-
-  // Open Rollback Modal
-  const handleOpenRollback = (serviceName: string, currentRev: number) => {
-    setRollbackService(serviceName);
-    setRollbackCurrentRev(currentRev);
-    setTargetRevision(Math.max(1, currentRev - 1));
-    setRollbackModalOpen(true);
-  };
-
-  // Execute Rollback
-  const handleExecuteRollback = async () => {
-    if (!targetRevision || targetRevision <= 0) {
-      message.error('请输入有效的回滚目标版本号');
-      return;
-    }
-    setRollbackLoading(true);
-    try {
-      await environmentApi.rollbackServiceVersion(
-        projectName,
-        envName,
-        rollbackService,
-        targetRevision,
-        '',
-        false,
-        production
-      );
-      message.success(`服务 [${rollbackService}] 已成功发起回滚至版本 #${targetRevision}`);
-      setRollbackModalOpen(false);
-      fetchRevisionData();
-      onSuccess?.();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '回滚失败，请检查服务状态';
-      message.error(msg);
-    } finally {
-      setRollbackLoading(false);
     }
   };
 
@@ -186,8 +134,10 @@ export const EnvRevisionDrawer: React.FC<EnvRevisionDrawerProps> = ({
       title: '服务类型',
       dataIndex: 'type',
       key: 'type',
-      width: 100,
-      render: (t) => <Tag color={t === 'helm' ? 'purple' : 'geekblue'}>{t || 'k8s'}</Tag>,
+      width: 120,
+      render: (t) => (
+        <Tag color={t === 'helm_chart' || t === 'helm' ? 'purple' : 'geekblue'}>{t || 'k8s'}</Tag>
+      ),
     },
     {
       title: '当前版本',
@@ -229,62 +179,18 @@ export const EnvRevisionDrawer: React.FC<EnvRevisionDrawerProps> = ({
     {
       title: '操作',
       key: 'action',
-      width: 170,
+      width: 120,
       render: (_, record) => (
-        <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => handleViewYaml(record.service_name, record.current_revision)}
-          >
-            详情
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            icon={<RollbackOutlined />}
-            disabled={record.current_revision <= 1}
-            onClick={() => handleOpenRollback(record.service_name, record.current_revision)}
-          >
-            回滚
-          </Button>
-        </Space>
-      ),
-    },
-  ];
-
-  const snapColumns: ColumnsType<EnvProductRevision> = [
-    {
-      title: '环境名称',
-      dataIndex: 'env_name',
-      key: 'env_name',
-      render: (text) => <Text strong>{text}</Text>,
-    },
-    {
-      title: '当前版本',
-      dataIndex: 'current_revision',
-      key: 'current_revision',
-      render: (rev) => <Tag color="blue">#{rev ?? 0}</Tag>,
-    },
-    {
-      title: '包含服务数量',
-      key: 'service_count',
-      render: (_, record) => (
-        <Badge count={record.services?.length || 0} showZero color="#108ee9" />
-      ),
-    },
-    {
-      title: '服务清单',
-      key: 'services',
-      render: (_, record) => (
-        <Space wrap size={[4, 4]}>
-          {(record.services || []).map((s) => (
-            <Tag key={s.service_name}>
-              {s.service_name} (#{s.current_revision})
-            </Tag>
-          ))}
-        </Space>
+        <Button
+          type="link"
+          size="small"
+          icon={<EyeOutlined />}
+          onClick={() =>
+            handleViewYaml(record.service_name, record.current_revision, record.type)
+          }
+        >
+          详情
+        </Button>
       ),
     },
   ];
@@ -295,7 +201,7 @@ export const EnvRevisionDrawer: React.FC<EnvRevisionDrawerProps> = ({
         title={
           <Space>
             <HistoryOutlined style={{ color: '#0066ff' }} />
-            <span>环境版本与快照记录: {envName}</span>
+            <span>环境服务版本清单: {envName}</span>
           </Space>
         }
         open={open}
@@ -310,7 +216,14 @@ export const EnvRevisionDrawer: React.FC<EnvRevisionDrawerProps> = ({
       >
         <Spin spinning={loading}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* Environment Revision Header Banner */}
+            {/* CC-Loop02 P0-6: 引导通过服务版本历史安全回滚 */}
+            <Alert
+              type="info"
+              showIcon
+              title="安全回滚说明"
+              description="本抽屉仅展示各服务当前/待更新版本。如需回滚，请到对应服务的「版本历史」抽屉中选择历史 revision 执行安全回滚，勿使用未鉴权的内部快照接口。"
+            />
+
             <Card
               variant="borderless"
               style={{ backgroundColor: '#fafafa', border: '1px solid #f0f0f0' }}
@@ -343,8 +256,6 @@ export const EnvRevisionDrawer: React.FC<EnvRevisionDrawerProps> = ({
             </Card>
 
             <Tabs
-              activeKey={activeTab}
-              onChange={(k) => setActiveTab(k as 'revisions' | 'snaps')}
               items={[
                 {
                   key: 'revisions',
@@ -360,24 +271,6 @@ export const EnvRevisionDrawer: React.FC<EnvRevisionDrawerProps> = ({
                       columns={serviceColumns}
                       dataSource={serviceList}
                       pagination={false}
-                      size="middle"
-                    />
-                  ),
-                },
-                {
-                  key: 'snaps',
-                  label: (
-                    <Space>
-                      <CameraOutlined />
-                      <span>版本快照记录 ({snaps.length})</span>
-                    </Space>
-                  ),
-                  children: (
-                    <Table
-                      rowKey={(r, idx) => r.id || `${r.env_name}-${idx}`}
-                      columns={snapColumns}
-                      dataSource={snaps}
-                      pagination={{ pageSize: 5 }}
                       size="middle"
                     />
                   ),
@@ -443,53 +336,6 @@ export const EnvRevisionDrawer: React.FC<EnvRevisionDrawerProps> = ({
             />
           </div>
         </Spin>
-      </Modal>
-
-      {/* Service Rollback Modal */}
-      <Modal
-        title={
-          <Space>
-            <RollbackOutlined style={{ color: '#fa8c16' }} />
-            <span>回滚服务版本: {rollbackService}</span>
-          </Space>
-        }
-        open={rollbackModalOpen}
-        onCancel={() => setRollbackModalOpen(false)}
-        destroyOnHidden
-        confirmLoading={rollbackLoading}
-        onOk={handleExecuteRollback}
-        okText="确认回滚"
-        cancelText="取消"
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
-          <Alert
-            type="warning"
-            showIcon
-            title="版本回滚确认"
-            description={`回滚操作将重置服务 [${rollbackService}] 至指定的历史版本配置并重新部署，请确认目标版本是否可用。`}
-          />
-
-          <div>
-            <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>
-              当前运行版本:
-            </Text>
-            <Tag color="blue">#{rollbackCurrentRev}</Tag>
-          </div>
-
-          <div>
-            <Text strong style={{ display: 'block', marginBottom: 6 }}>
-              回滚目标版本 (Revision):
-            </Text>
-            <InputNumber
-              min={1}
-              max={Math.max(1, rollbackCurrentRev - 1)}
-              value={targetRevision}
-              onChange={(v) => setTargetRevision(v || 1)}
-              style={{ width: '100%' }}
-              placeholder="请输入目标版本号"
-            />
-          </div>
-        </div>
       </Modal>
     </>
   );

@@ -55,6 +55,37 @@ export interface K8sEventItem {
 
 export const environmentApi = {
   /**
+   * CC-Loop02 P0-1: 环境列表（支持 production 过滤）
+   * GET /api/aslan/environment/environments?projectName=&production=
+   */
+  async getEnvironments(projectName: string, production?: boolean): Promise<EnvironmentItem[]> {
+    const prodParam = production ? '&production=true' : '';
+    const res = await http.get<EnvironmentItem[] | { data?: EnvironmentItem[] }>(
+      `/api/aslan/environment/environments?projectName=${encodeURIComponent(projectName)}${prodParam}`,
+      { skipErrorHandler: true }
+    );
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.data)) return res.data;
+    return [];
+  },
+
+  /**
+   * CC-Loop02 P0-1: 环境详情（支持 production 透传）
+   * GET /api/aslan/environment/environments/:envName?projectName=&production=
+   */
+  async getEnvironmentDetail(
+    projectName: string,
+    envName: string,
+    production?: boolean
+  ): Promise<Record<string, unknown>> {
+    const prodParam = production ? '&production=true' : '';
+    return http.get(
+      `/api/aslan/environment/environments/${encodeURIComponent(envName)}?projectName=${encodeURIComponent(projectName)}${prodParam}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
    * List K8s workloads by type (deployments, statefulsets, daemonsets, jobs, cronjobs).
    * GET /api/aslan/environment/kube/workloads/:workloadType?projectName=&envName=&page=&pageSize=&production=
    */
@@ -721,19 +752,18 @@ export const environmentApi = {
   },
 
   /**
-   * List environment product revision snapshots.
-   * GET /api/aslan/environment/revision/productsnaps?projectName=&envName=&production=
+   * @deprecated CC-Loop02 P0-6: 后端 cron 内部接口（/revision/productsnaps），无项目级鉴权，禁止前端调用。
+   * 请改用 getProductsRevision 获取各环境服务版本清单，并通过服务「版本历史」抽屉安全回滚。
    */
   async getProductsRevisionSnaps(
-    projectName: string,
-    envName: string,
-    production = false
+    _projectName: string,
+    _envName: string,
+    _production = false
   ): Promise<EnvProductRevision[]> {
-    const prodParam = production ? '&production=true' : '';
-    const res = await http.get<EnvProductRevision[]>(
-      `/api/aslan/environment/revision/productsnaps?projectName=${encodeURIComponent(projectName)}&envName=${encodeURIComponent(envName)}${prodParam}`
+    console.warn(
+      '[environmentApi.getProductsRevisionSnaps] deprecated: cron-internal endpoint without project auth; use getProductsRevision instead'
     );
-    return Array.isArray(res) ? res : [];
+    return [];
   },
   /**
    * 启动临时调试容器 (Ephemeral Debug Container)
@@ -1248,6 +1278,7 @@ export interface EnvironmentItem {
   production?: boolean;
   update_time?: number;
   source?: string;
+  is_favorite?: boolean;
   // 自动回收天数（models.Product.RecycleDay，0 = 永不回收）
   recycle_day?: number;
   // ShareEnv (自测模式 / 基准环境)

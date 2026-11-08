@@ -211,14 +211,17 @@ export const EnvironmentWizardPage: React.FC = () => {
           },
         ];
 
+        // CC-Loop02 P0-2: 创建请求显式携带 production query，对齐生产 RBAC
         await http.post(
-          `/api/aslan/environment/environments?projectName=${encodeURIComponent(projectName)}&type=${envType}`,
+          `/api/aslan/environment/environments?projectName=${encodeURIComponent(projectName)}&type=${envType}&production=${Boolean(values.production)}`,
           payload
         );
       }
 
       feedback.message.success(`环境 [${values.env_name}] 创建成功！正在调度初始化...`);
-      navigate(`/v1/projects/detail/${projectName}/envs`);
+      // CC-Loop02 P0-2: 按生产/测试语境跳转
+      const envTypeQ = values.production ? '?envType=prod' : '';
+      navigate(`/v1/projects/detail/${projectName}/envs${envTypeQ}`);
     } catch (err: any) {
       feedback.message.error(err?.message || '环境创建失败，请检查参数与集群配额');
     } finally {
@@ -406,7 +409,7 @@ export const EnvironmentWizardPage: React.FC = () => {
                 name="production"
                 label="生产环境标记 (Production Flag)"
                 valuePropName="checked"
-                extra="开启后将启用生产级别发布审批及敏感配置保护策略"
+                extra="标记为生产环境（受生产权限与审批保护）"
               >
                 <Switch checkedChildren="生产环境" unCheckedChildren="测试环境" />
               </Form.Item>

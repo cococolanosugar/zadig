@@ -509,11 +509,13 @@ export const ServicesPage: React.FC = () => {
   const handleViewRevision = async (revision: number) => {
     if (!selectedService || !activeProject) return;
     try {
-      const res = await http.get<{ yaml?: string }>(
+      // CC-Loop02: Helm 服务可能只返回 variable_yaml
+      const res = await http.get<{ yaml?: string; variable_yaml?: string }>(
         `/api/aslan/service/version/${encodeURIComponent(selectedService)}/revision/${revision}?projectName=${activeProject}&production=${isProduction}`,
         { skipErrorHandler: true }
       );
-      setVersionYaml({ revision, yaml: res?.yaml || '' });
+      const yamlContent = res.variable_yaml || res.yaml || '';
+      setVersionYaml({ revision, yaml: yamlContent });
     } catch {
       setVersionYaml(null);
       feedback.message.error('版本 YAML 获取失败');
