@@ -171,6 +171,17 @@ export const authApi = {
   },
 
   /**
+   * 更新系统特性开关（如开放注册 RegisterTrigger）
+   * PUT /api/v1/features/:name
+   */
+  async updateFeature(name: string, enabled: boolean): Promise<void> {
+    await http.put(`/api/v1/features/${encodeURIComponent(name)}`, {
+      name,
+      enabled,
+    });
+  },
+
+  /**
    * 获取当前登录用户个人资料详情
    * GET /api/v1/users/:uid/personal (pkg/microservice/user/core/handler/user/user.go:192)
    */

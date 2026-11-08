@@ -524,11 +524,28 @@ export const QualityCenterPage: React.FC = () => {
     [detailTest, projectName]
   );
 
+  // FULL-A-03: 测试列表优先走 picket RBAC/OPA 鉴权代理，失败时降级至 aslan 原生接口
+  const fetchTestList = useCallback(async (): Promise<TestItem[]> => {
+    const query = activeProject ? `?projectName=${encodeURIComponent(activeProject)}` : '';
+    try {
+      const res = await http.get<TestItem[]>(`/api/v1/picket/testing${query}`, {
+        skipErrorHandler: true,
+      });
+      return Array.isArray(res) ? res : [];
+    } catch {
+      // picket 代理不可用（如 404 / 租户策略未注入）时回退 aslan 接口
+      const res = await http.get<TestItem[]>(`/api/aslan/testing/test${query}`, {
+        skipErrorHandler: true,
+      });
+      return Array.isArray(res) ? res : [];
+    }
+  }, [activeProject]);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [testsRes, statRes] = await Promise.all([
-        http.get<TestItem[]>('/api/aslan/testing/test'),
+        fetchTestList(),
         http.get<{ total?: number; success?: number; pass_rate?: number; avg_duration?: number }>(
           '/api/aslan/stat/v2/quality/test/count',
           { skipErrorHandler: true }
@@ -546,7 +563,7 @@ export const QualityCenterPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchTestList]);
 
   useEffect(() => {
     fetchData();

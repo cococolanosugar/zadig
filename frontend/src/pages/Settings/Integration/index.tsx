@@ -312,6 +312,90 @@ export const SystemIntegrationPage: React.FC = () => {
           { skipErrorHandler: true }
         );
         feedback.message.success('Jenkins CI 服务连通性握手验证成功！');
+      } else if (currentCategory.key === 'im') {
+        // FULL-A-04: 即时通讯 IM 凭据真实连通性校验 (POST /api/aslan/system/im_app/validate)
+        const vendor = String(values.vendor || '').toLowerCase();
+        const imType =
+          vendor.includes('lark') || vendor.includes('飞书')
+            ? 'lark'
+            : vendor.includes('dingtalk') || vendor.includes('钉钉')
+            ? 'dingtalk'
+            : vendor.includes('workwx') || vendor.includes('企微') || vendor.includes('企业微信')
+            ? 'workwx'
+            : '';
+        await http.post(
+          '/api/aslan/system/im_app/validate',
+          {
+            type: imType,
+            ...(imType === 'lark'
+              ? {
+                  app_id: values.app_id || values.appId,
+                  app_secret: values.app_secret || values.appSecret,
+                }
+              : imType === 'dingtalk'
+              ? {
+                  dingtalk_app_key: values.dingtalk_app_key || values.app_key,
+                  dingtalk_app_secret: values.dingtalk_app_secret || values.app_secret,
+                }
+              : {
+                  host: values.host || values.url,
+                  corp_id: values.corp_id || values.corpId,
+                  agent_id: values.agent_id || values.agentId,
+                  agent_secret: values.agent_secret || values.agentSecret,
+                }),
+          },
+          { skipErrorHandler: true }
+        );
+        feedback.message.success('即时通讯 (IM) 凭据连接验证成功！');
+      } else if (currentCategory.key === 'gateway') {
+        // FULL-A-05: API 网关真实连通性握手 (POST /api/aslan/system/api_gateways/validate)
+        await http.post(
+          '/api/aslan/system/api_gateways/validate',
+          {
+            name: values.name || 'test-gateway',
+            alias: values.name || 'test-gateway',
+            type: values.type || 'apisix',
+            address: values.address || values.url,
+            token: values.token || values.admin_key,
+          },
+          { skipErrorHandler: true }
+        );
+        feedback.message.success('API 网关服务连通性握手验证成功！');
+      } else if (currentCategory.key === 'monitor') {
+        // FULL-A-06: 监控系统 / 可观测性真实连通性校验 (POST /api/aslan/system/observability/validate)
+        const monitorVendor = String(values.vendor || '').toLowerCase();
+        const monitorType =
+          values.type ||
+          (monitorVendor.includes('guance') || monitorVendor.includes('观测云') ? 'guanceyun' : 'grafana');
+        await http.post(
+          '/api/aslan/system/observability/validate',
+          {
+            name: values.name || 'test-monitor',
+            type: monitorType,
+            host: values.host || values.url,
+            grafana_token: values.grafana_token || values.token,
+            api_key: values.api_key || values.token,
+          },
+          { skipErrorHandler: true }
+        );
+        feedback.message.success('监控系统服务连通性验证成功！');
+      } else if (currentCategory.key === 'cloudService') {
+        // FULL-A-07: 云服务凭据与权限校验 (POST /api/aslan/system/cloud_service/validate)
+        // 后端 models.CloudService 使用 access_key_id / access_key_secret 字段
+        await http.post(
+          '/api/aslan/system/cloud_service/validate',
+          {
+            name: values.name || 'test-sae',
+            type: values.type || 'sae',
+            access_key: values.access_key || values.ak,
+            secret_key: values.secret_key || values.sk,
+            access_key_id: values.access_key || values.ak,
+            access_key_secret: values.secret_key || values.sk,
+            region: values.region,
+          },
+          { skipErrorHandler: true }
+        );
+        feedback.message.success('云服务凭据与权限验证成功！');
       } else {
         const url = await buildListUrl(currentCategory);
         await http.get(url, { skipErrorHandler: true });

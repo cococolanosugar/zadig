@@ -16,6 +16,8 @@ import {
   Col,
   App,
   Select,
+  Form,
+  Modal,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -73,6 +75,10 @@ export const HelmRendersetDrawer: React.FC<HelmRendersetDrawerProps> = ({
   const [defaultValLoading, setDefaultValLoading] = useState(false);
   const [defaultValuesYaml, setDefaultValuesYaml] = useState<string>('');
   const [savingDefaultValues, setSavingDefaultValues] = useState(false);
+  // FULL-A-02: 从外部 Git 仓库提取 Values 回填默认变量
+  const [gitValuesModalOpen, setGitValuesModalOpen] = useState(false);
+  const [fetchingGitYaml, setFetchingGitYaml] = useState(false);
+  const [gitValuesForm] = Form.useForm();
 
   // Tab 3: Global Variables
   const [gvLoading, setGvLoading] = useState(false);
@@ -134,6 +140,37 @@ export const HelmRendersetDrawer: React.FC<HelmRendersetDrawerProps> = ({
       message.error(msg);
     } finally {
       setSavingDefaultValues(false);
+    }
+  };
+
+  // FULL-A-02: 从外部 Git 仓库 (codehost/repo) 提取 Values YAML 并回填
+  const handleFetchGitValues = async () => {
+    let values: { repo?: string; branch?: string; valuesPath?: string } = {};
+    try {
+      values = await gitValuesForm.validateFields();
+    } catch {
+      // 表单校验失败，交由 Form 内联错误提示
+      return;
+    }
+    setFetchingGitYaml(true);
+    try {
+      const res = await environmentApi.getYamlContent({
+        repo: values.repo,
+        branch: values.branch,
+        valuesPath: values.valuesPath,
+      });
+      setDefaultValuesYaml(res.content || '');
+      setGitValuesModalOpen(false);
+      gitValuesForm.resetFields();
+      message.success('已成功从 Git 仓库提取 Values 并回填');
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string; description?: string } } })?.response?.data
+          ?.description ||
+        (err instanceof Error ? err.message : '从 Git 仓库提取 Values 失败，请检查仓库地址、分支与文件路径');
+      message.error(msg);
+    } finally {
+      setFetchingGitYaml(false);
     }
   };
 
@@ -411,6 +448,13 @@ export const HelmRendersetDrawer: React.FC<HelmRendersetDrawerProps> = ({
                     <Space>
                       <Button
                         size="small"
+                        icon={<CodeOutlined />}
+                        onClick={() => setGitValuesModalOpen(true)}
+                      >
+                        从 Git 提取 Values
+                      </Button>
+                      <Button
+                        size="small"
                         onClick={() => {
                           navigator.clipboard.writeText(defaultValuesYaml);
                           message.success('默认配置已复制');
@@ -581,6 +625,41 @@ export const HelmRendersetDrawer: React.FC<HelmRendersetDrawerProps> = ({
           },
         ]}
       />
+
+      <Modal
+        title="从 Git 仓库提取 Values"
+        open={gitValuesModalOpen}
+        onCancel={() => setGitValuesModalOpen(false)}
+        onOk={handleFetchGitValues}
+        confirmLoading={fetchingGitYaml}
+        okText="提取并回填"
+        cancelText="取消"
+        destroyOnHidden
+      >
+        <Form form={gitValuesForm} layout="vertical" initialValues={{ branch: 'main' }}>
+          <Form.Item
+            name="repo"
+            label="仓库名称 / 链接"
+            rules={[{ required: true, message: '请输入仓库名称或仓库链接' }]}
+          >
+            <Input placeholder="例如: my-org/helm-charts 或 https://git.example.com/helm.git" />
+          </Form.Item>
+          <Form.Item
+            name="branch"
+            label="分支名称"
+            rules={[{ required: true, message: '请输入分支名称' }]}
+          >
+            <Input placeholder="main / master" />
+          </Form.Item>
+          <Form.Item
+            name="valuesPath"
+            label="Values YAML 相对路径"
+            rules={[{ required: true, message: '请输入 Values 文件相对路径' }]}
+          >
+            <Input placeholder="例如: charts/app/values.yaml" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Drawer>
   );
 };

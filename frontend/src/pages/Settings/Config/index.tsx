@@ -74,6 +74,7 @@ import systemConfigApi, {
   type GitWebhookConfig,
 } from '../../../api/systemConfig';
 import emailApi from '../../../api/email';
+import authApi from '../../../api/auth';
 import settingsApi, { type ProxyConfig } from '../../../api/settings';
 import workflowApi from '../../../api/workflow';
 import { feedback } from '../../../utils/feedback';
@@ -256,6 +257,11 @@ export const SystemConfigPage: React.FC = () => {
   const [existingHostSaved, setExistingHostSaved] = useState(false);
   const [savingEmail, setSavingEmail] = useState(false);
   const [testingEmail, setTestingEmail] = useState(false);
+  // FULL-A-11: 业务发信人配置 (EmailService)
+  const [emailServiceName, setEmailServiceName] = useState<string>('default');
+  // FULL-A-12: 开放注册特性开关 (RegisterTrigger)
+  const [registerEnabled, setRegisterEnabled] = useState(false);
+  const [savingRegisterFeature, setSavingRegisterFeature] = useState(false);
 
   // Navigation states
   const [navigationConfig, setNavigationConfig] = useState<CustomNavigationConfig | null>(null);
@@ -278,7 +284,10 @@ export const SystemConfigPage: React.FC = () => {
     setLoading(true);
     try {
       if (tab === 'mail') {
-        const emailRes = await emailApi.getEmailHost();
+        const [emailRes, emailServiceRes] = await Promise.all([
+          emailApi.getEmailHost(),
+          emailApi.getEmailService(),
+        ]);
         if (emailRes) {
           setExistingHostSaved(Boolean(emailRes.name));
           emailForm.setFieldsValue({
@@ -286,6 +295,14 @@ export const SystemConfigPage: React.FC = () => {
             port: emailRes.port || 465,
             user_name: emailRes.username || emailRes.user_name || '',
             is_ssl: emailRes.isTLS !== undefined ? emailRes.isTLS : emailRes.is_ssl !== false,
+          });
+        }
+        if (emailServiceRes) {
+          // FULL-A-11: 回填业务发信人配置
+          setEmailServiceName(emailServiceRes.name || 'default');
+          emailForm.setFieldsValue({
+            address: emailServiceRes.address || '',
+            display_name: emailServiceRes.display_name || '',
           });
         }
       } else if (tab === 'concurrency' || tab === 'workflowTasks') {
@@ -394,7 +411,11 @@ export const SystemConfigPage: React.FC = () => {
         }
       } else if (tab === 'security') {
         try {
-          const res = await systemConfigApi.getSecuritySettings();
+          const [res, registerFeature] = await Promise.all([
+            systemConfigApi.getSecuritySettings(),
+            authApi.getFeature('RegisterTrigger'),
+          ]);
+          setRegisterEnabled(Boolean(registerFeature?.enabled));
           if (res) {
             securityForm.setFieldsValue({
               token_expiration_time: res.token_expiration_time ?? 24,
@@ -652,6 +673,22 @@ export const SystemConfigPage: React.FC = () => {
       feedback.message.error(msg);
     } finally {
       setSavingSecurity(false);
+    }
+  };
+
+  // FULL-A-12: 开放注册特性开关写操作
+  const handleToggleRegister = async (checked: boolean) => {
+    setSavingRegisterFeature(true);
+    try {
+      await authApi.updateFeature('RegisterTrigger', checked);
+      setRegisterEnabled(checked);
+      feedback.message.success(checked ? '已开启用户自主注册' : '已关闭用户自主注册');
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '更新注册开关失败';
+      feedback.message.error(msg);
+    } finally {
+      setSavingRegisterFeature(false);
     }
   };
 
@@ -1057,6 +1094,15 @@ export const SystemConfigPage: React.FC = () => {
         password: values.password ? String(values.password) : undefined,
         isTLS: values.is_ssl !== false,
       });
+      // FULL-A-11: 填写了业务发信人配置时，同步保存 EmailService（地址 + 显示名称）
+      const senderAddress = String(values.address || '').trim();
+      if (senderAddress) {
+        await emailApi.saveEmailService({
+          name: emailServiceName || 'default',
+          address: senderAddress,
+          display_name: String(values.display_name || '').trim(),
+        });
+      }
       setExistingHostSaved(true);
       feedback.message.success('SMTP 邮箱配置保存成功');
     } catch (err: unknown) {
@@ -1466,6 +1512,20 @@ export const SystemConfigPage: React.FC = () => {
 
               <Form.Item name="is_ssl" label="启用 SSL / TLS 加密传输" valuePropName="checked">
                 <Switch />
+              </Form.Item>
+
+              <Divider style={{ margin: '8px 0 20px' }}>发信人业务配置 (Email Service)</Divider>
+
+              <Form.Item
+                name="address"
+                label="发信邮箱地址 (Sender Address)"
+                extra="用于系统通知邮件的 From 地址，例如 noreply@company.com。留空则仅保存 SMTP 服务器配置。"
+              >
+                <Input placeholder="例如: noreply@company.com" />
+              </Form.Item>
+
+              <Form.Item name="display_name" label="发信人显示名称 (Display Name)">
+                <Input placeholder="例如: Zadig 通知中心" />
               </Form.Item>
 
               <Form.Item style={{ marginTop: 24 }}>
@@ -2224,6 +2284,22 @@ export const SystemConfigPage: React.FC = () => {
                 >
                   <Switch />
                 </Form.Item>
+
+                <Divider style={{ margin: '16px 0' }} />
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                  <div>
+                    <Text strong>允许用户自主注册 (RegisterTrigger)</Text>
+                    <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 4 }}>
+                      开启后登录页将展示注册入口，用户可自助注册账号；关闭则仅管理员可创建账号。
+                    </div>
+                  </div>
+                  <Switch
+                    checked={registerEnabled}
+                    loading={savingRegisterFeature}
+                    onChange={handleToggleRegister}
+                  />
+                </div>
               </Card>
 
               <Card

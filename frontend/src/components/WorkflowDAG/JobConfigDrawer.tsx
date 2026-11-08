@@ -382,8 +382,15 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         .catch(() => setClusterOptions([]));
     }
     if (job.type === 'zadig-test') {
+      // FULL-A-03: 优先走 picket 鉴权代理（租户隔离/OPA 一致），失败降级 aslan 原生接口
+      const testQuery = projectName ? `?projectName=${encodeURIComponent(projectName)}` : '';
       http
-        .get<Array<{ name: string }>>('/api/aslan/testing/test', { skipErrorHandler: true })
+        .get<Array<{ name: string }>>(`/api/v1/picket/testing${testQuery}`, { skipErrorHandler: true })
+        .catch(() =>
+          http.get<Array<{ name: string }>>(`/api/aslan/testing/test${testQuery}`, {
+            skipErrorHandler: true,
+          })
+        )
         .then((res) => {
           const list = Array.isArray(res) ? res : [];
           setTestOptions(list.map((t) => ({ label: t.name, value: t.name })));
