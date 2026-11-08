@@ -21,7 +21,6 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import http from '../../api/client';
-import { feedback } from '../../utils/feedback';
 
 const { Title, Text } = Typography;
 
@@ -64,7 +63,6 @@ export const CollaborationTopologyDrawer: React.FC<CollaborationTopologyDrawerPr
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [envServicesMap, setEnvServicesMap] = useState<Record<string, string[]>>({});
-  const [syncingEnv, setSyncingEnv] = useState<string | null>(null);
 
   // 区分基准环境与子环境
   const baseEnvs = environments.filter((e) => e.share_env_is_base);
@@ -113,24 +111,8 @@ export const CollaborationTopologyDrawer: React.FC<CollaborationTopologyDrawerPr
     }
   }, [open, defaultBase, selectedBaseEnv, fetchEnvServices]);
 
-  // 环境同步触发
-  const handleSyncEnv = async (subEnvName: string) => {
-    if (!selectedBaseEnv || !subEnvName) return;
-    setSyncingEnv(subEnvName);
-    try {
-      await http.post(
-        `/api/aslan/environment/environments/${encodeURIComponent(subEnvName)}/sync?projectName=${encodeURIComponent(projectName)}&baseEnv=${encodeURIComponent(selectedBaseEnv)}`,
-        {},
-        { skipErrorHandler: true }
-      );
-      feedback.message.success(`已向子环境 [${subEnvName}] 下发基准服务同步指令`);
-      fetchEnvServices();
-    } catch {
-      feedback.message.info(`已下发同步请求，正在由调度器执行环境编排`);
-    } finally {
-      setSyncingEnv(null);
-    }
-  };
+  const envDetailPath = (envName: string) =>
+    `/v1/projects/detail/${projectName}/envs?envName=${encodeURIComponent(envName)}`;
 
   const baseServices = envServicesMap[selectedBaseEnv] || [];
 
@@ -140,7 +122,7 @@ export const CollaborationTopologyDrawer: React.FC<CollaborationTopologyDrawerPr
         <Space orientation="horizontal" size={8}>
           <ApartmentOutlined style={{ color: '#1677ff', fontSize: 18 }} />
           <Title level={5} style={{ margin: 0 }}>
-            环境协作模式与微服务调用拓扑 (Collaboration Topology)
+            自测模式环境拓扑 (ShareEnv Istio 流量路由)
           </Title>
         </Space>
       }
@@ -161,11 +143,12 @@ export const CollaborationTopologyDrawer: React.FC<CollaborationTopologyDrawerPr
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Header Description Alert */}
           <Alert
-            title="微服务协作模式拓扑说明"
+            title="自测模式环境拓扑说明"
             description={
               <div>
-                在环境协作模式下，每个开发者可拉起仅包含受测服务的轻量级<strong>「子环境」</strong>。未受测的服务流量将基于
-                Istio VirtualService 动态回落 (Fallback) 至<strong>「基准环境 (Base)」</strong>公共服务，节省 80% 以上集群计算资源。
+                在 ShareEnv 自测模式下，每个开发者可拉起仅包含受测服务的轻量级<strong>「子环境」</strong>。
+                基于服务清单与流量 Header (<code>x-env</code>)，Istio VirtualService 将未覆盖服务的请求回落至
+                <strong>「基准环境 (Base)」</strong>公共链路；「独占」指子环境本地覆盖部署的服务，「回落」指走基准环境路由解析。
               </div>
             }
             type="info"
@@ -195,7 +178,7 @@ export const CollaborationTopologyDrawer: React.FC<CollaborationTopologyDrawerPr
                 <Button
                   type="link"
                   size="small"
-                  onClick={() => navigate(`/v1/projects/detail/${projectName}/envs/detail/${selectedBaseEnv}`)}
+                  onClick={() => navigate(envDetailPath(selectedBaseEnv))}
                 >
                   进入基准环境
                 </Button>
@@ -298,18 +281,9 @@ export const CollaborationTopologyDrawer: React.FC<CollaborationTopologyDrawerPr
                                   size="small"
                                   type="primary"
                                   ghost
-                                  onClick={() =>
-                                    navigate(`/v1/projects/detail/${projectName}/envs/detail/${sub.name}`)
-                                  }
+                                  onClick={() => navigate(envDetailPath(sub.name))}
                                 >
                                   进入环境
-                                </Button>
-                                <Button
-                                  size="small"
-                                  loading={syncingEnv === sub.name}
-                                  onClick={() => handleSyncEnv(sub.name)}
-                                >
-                                  同步基准
                                 </Button>
                               </Space>
                             </Space>
@@ -321,7 +295,7 @@ export const CollaborationTopologyDrawer: React.FC<CollaborationTopologyDrawerPr
                               {/* Private overrides */}
                               <div>
                                 <span style={{ fontSize: 12, color: '#52c41a', fontWeight: 600, marginRight: 8 }}>
-                                  [覆盖部署] 子环境独占服务 ({privateServices.length}):
+                                  [独占覆盖] 子环境本地服务 ({privateServices.length}):
                                 </span>
                                 <div style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
                                   {privateServices.length > 0 ? (
@@ -339,7 +313,7 @@ export const CollaborationTopologyDrawer: React.FC<CollaborationTopologyDrawerPr
                               {/* Fallback to base */}
                               <div>
                                 <span style={{ fontSize: 12, color: '#8c8c8c', fontWeight: 500, marginRight: 8 }}>
-                                  [透明回落] 自动路由至基准环境 ({sharedFallbackServices.length}):
+                                  [回落] 经 x-env 路由至基准环境 ({sharedFallbackServices.length}):
                                 </span>
                                 <div style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
                                   {sharedFallbackServices.slice(0, 8).map((svc) => (

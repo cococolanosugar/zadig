@@ -29,7 +29,9 @@ import type { ColumnsType } from 'antd/es/table';
 import collaborationApi, {
   type CollaborationModeItem,
   type CollaborationNewResp,
+  type Identity,
 } from '../../api/collaboration';
+import { settingsApi, type UserManagementItem } from '../../api/settings';
 import { feedback } from '../../utils/feedback';
 
 const { Text } = Typography;
@@ -38,6 +40,10 @@ export interface CollaborationDrawerProps {
   open: boolean;
   projectName: string;
   onClose: () => void;
+}
+
+function buildMemberInfo(members: string[]): Identity[] {
+  return members.map((uid) => ({ identity_type: 'user' as const, uid }));
 }
 
 export const CollaborationDrawer: React.FC<CollaborationDrawerProps> = ({
@@ -49,6 +55,7 @@ export const CollaborationDrawer: React.FC<CollaborationDrawerProps> = ({
   const [modes, setModes] = useState<CollaborationModeItem[]>([]);
   const [syncStatus, setSyncStatus] = useState<CollaborationNewResp | null>(null);
   const [syncing, setSyncing] = useState<boolean>(false);
+  const [usersBrief, setUsersBrief] = useState<UserManagementItem[]>([]);
 
   // 新建 / 编辑 Modal
   const [modalOpen, setModalOpen] = useState<boolean>(false);
@@ -81,12 +88,22 @@ export const CollaborationDrawer: React.FC<CollaborationDrawerProps> = ({
     }
   }, [projectName]);
 
+  const fetchUsersBrief = useCallback(async () => {
+    try {
+      const users = await settingsApi.getUsersBrief();
+      setUsersBrief(users);
+    } catch {
+      setUsersBrief([]);
+    }
+  }, []);
+
   useEffect(() => {
     if (open) {
       fetchModes();
       checkSync();
+      fetchUsersBrief();
     }
-  }, [open, fetchModes, checkSync]);
+  }, [open, fetchModes, checkSync, fetchUsersBrief]);
 
   const handleSync = async () => {
     if (!projectName) return;
@@ -110,6 +127,7 @@ export const CollaborationDrawer: React.FC<CollaborationDrawerProps> = ({
     form.setFieldsValue({
       recycle_day: 7,
       deploy_type: 'k8s',
+      members: [],
     });
     setModalOpen(true);
   };
@@ -120,7 +138,7 @@ export const CollaborationDrawer: React.FC<CollaborationDrawerProps> = ({
       name: item.name,
       members: item.members || [],
       deploy_type: item.deploy_type || 'k8s',
-      recycle_day: item.recycle_day || 7,
+      recycle_day: item.recycle_day ?? 7,
     });
     setModalOpen(true);
   };
@@ -130,19 +148,30 @@ export const CollaborationDrawer: React.FC<CollaborationDrawerProps> = ({
     try {
       const values = await form.validateFields();
       setSubmitting(true);
+      const members: string[] = Array.isArray(values.members) ? values.members : [];
+      const member_info = buildMemberInfo(members);
+
       if (editingMode) {
+        // P0-3: 更新时完整保留 products / workflows / deploy_type / project_name，避免 $set 清空
         await collaborationApi.updateCollaborationMode(projectName, editingMode.name, {
           name: values.name.trim(),
-          members: values.members || [],
-          deploy_type: values.deploy_type,
+          project_name: projectName,
+          members,
+          member_info,
+          deploy_type: values.deploy_type || editingMode.deploy_type || 'k8s',
           recycle_day: Number(values.recycle_day),
+          products: editingMode.products || [],
+          workflows: editingMode.workflows || [],
+          revision: editingMode.revision,
         });
         feedback.message.success('更新协同模式成功');
       } else {
         await collaborationApi.createCollaborationMode(projectName, {
           name: values.name.trim(),
-          members: values.members || [],
-          deploy_type: values.deploy_type,
+          project_name: projectName,
+          members,
+          member_info,
+          deploy_type: values.deploy_type || 'k8s',
           recycle_day: Number(values.recycle_day),
           products: [],
           workflows: [],
@@ -173,6 +202,25 @@ export const CollaborationDrawer: React.FC<CollaborationDrawerProps> = ({
     }
   };
 
+  const userOptions = usersBrief.map((u) => ({
+    value: u.uid,
+    label: `${u.name || u.account || u.uid}${u.account && u.name ? ` (${u.account})` : ''}`,
+  }));
+
+  const resolveMemberLabel = (uid: string) => {
+    const found = usersBrief.find((u) => u.uid === uid);
+    if (!found) return uid;
+    return found.name || found.account || uid;
+  };
+
+  // P0-4: product / workflow / ifSync 任一有内容即展示同步提示
+  const showSyncAlert = Boolean(
+    syncStatus &&
+      (syncStatus.ifSync ||
+        (syncStatus.product && syncStatus.product.length > 0) ||
+        (syncStatus.workflow && syncStatus.workflow.length > 0))
+  );
+
   const columns: ColumnsType<CollaborationModeItem> = [
     {
       title: '协同模式名称',
@@ -197,7 +245,7 @@ export const CollaborationDrawer: React.FC<CollaborationDrawerProps> = ({
           <Space wrap size={[4, 4]}>
             {members.slice(0, 3).map((m) => (
               <Tag key={m} color="blue">
-                {m}
+                {resolveMemberLabel(m)}
               </Tag>
             ))}
             {members.length > 3 && <Tag>+{members.length - 3}</Tag>}
@@ -222,7 +270,7 @@ export const CollaborationDrawer: React.FC<CollaborationDrawerProps> = ({
       dataIndex: 'recycle_day',
       key: 'recycle_day',
       width: 110,
-      render: (d) => (d ? `${d} 天` : '永不过期'),
+      render: (d) => (d ? `${d} 天` : '永不自动回收'),
     },
     {
       title: '操作',
@@ -278,8 +326,8 @@ export const CollaborationDrawer: React.FC<CollaborationDrawerProps> = ({
           </Space>
         }
       >
-        {/* 同步状态提醒 */}
-        {syncStatus?.ifSync && (
+        {/* P0-4: ifSync | product | workflow 任一有内容即展示 */}
+        {showSyncAlert && (
           <Alert
             title="协同资源待同步"
             description="检测到团队协同策略已调整，包含为当前用户自动派生的专属环境或工作流，建议立即同步更新。"
@@ -354,18 +402,35 @@ export const CollaborationDrawer: React.FC<CollaborationDrawerProps> = ({
               </Form.Item>
             </Col>
             <Col span={10}>
-              <Form.Item name="recycle_day" label="资源回收周期 (天)">
-                <InputNumber min={1} max={365} style={{ width: '100%' }} />
+              <Form.Item
+                name="recycle_day"
+                label="资源回收周期 (天)"
+                extra="0 为永不自动回收"
+              >
+                <InputNumber min={0} max={365} style={{ width: '100%' }} />
               </Form.Item>
             </Col>
           </Row>
 
-          <Form.Item name="members" label="参与成员" extra="不选则默认对项目内所有成员开放协作">
+          <Form.Item
+            name="members"
+            label="参与成员"
+            extra="按姓名/账号搜索选择；提交时 members 与 member_info 等长且集合一致。不选则默认对项目内所有成员开放协作"
+          >
             <Select
-              mode="tags"
-              placeholder="输入或选择成员账号"
+              mode="multiple"
+              showSearch={{
+                optionFilterProp: 'label',
+                filterOption: (input, option) => {
+                  const label = String(option?.label ?? '').toLowerCase();
+                  const value = String(option?.value ?? '').toLowerCase();
+                  const q = input.toLowerCase();
+                  return label.includes(q) || value.includes(q);
+                },
+              }}
+              placeholder="搜索并选择成员"
               style={{ width: '100%' }}
-              tokenSeparators={[',', ' ']}
+              options={userOptions}
             />
           </Form.Item>
         </Form>

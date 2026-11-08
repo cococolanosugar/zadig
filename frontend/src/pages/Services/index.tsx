@@ -55,7 +55,6 @@ import HelmServiceDrawer from './HelmServiceDrawer';
 import PmServiceModal from './PmServiceModal';
 import ImportFromKubeWorkloadsModal from './ImportFromKubeWorkloadsModal';
 import { WorkspaceBrowserDrawer } from '../../components/Workspace/WorkspaceBrowserDrawer';
-import { useAuthStore } from '../../stores/auth';
 import { CollaborationAwarenessBar } from './CollaborationAwarenessBar';
 
 const { Title, Text } = Typography;
@@ -120,9 +119,7 @@ export const ServicesPage: React.FC = () => {
   // 工作空间代码库浏览器抽屉
   const [workspaceDrawerOpen, setWorkspaceDrawerOpen] = useState(false);
 
-  // 协同编辑在线状态与只读互斥锁
-  const { userInfo } = useAuthStore();
-  const [serviceLocks, setServiceLocks] = useState<Record<string, { isLocked: boolean; lockedBy: string }>>({});
+  // 协同编辑：仅保留远端 YAML 同步，移除未与后端通信的假独占锁
   const [syncingRemote, setSyncingRemote] = useState<boolean>(false);
 
   // 服务标签（R1-A2：GET/POST/DELETE /api/aslan/service/labels 接线）
@@ -133,29 +130,6 @@ export const ServicesPage: React.FC = () => {
   const [labelSaving, setLabelSaving] = useState(false);
   const [newLabelId, setNewLabelId] = useState<string | undefined>(undefined);
   const [newLabelValue, setNewLabelValue] = useState('');
-
-  const currentUserName = userInfo?.name || userInfo?.account || '当前用户';
-  const isLockedByOther = Boolean(
-    selectedService &&
-    serviceLocks[selectedService]?.isLocked &&
-    serviceLocks[selectedService]?.lockedBy &&
-    serviceLocks[selectedService]?.lockedBy !== currentUserName
-  );
-
-  const handleToggleLock = (serviceName: string, nextLock: boolean) => {
-    setServiceLocks((prev) => ({
-      ...prev,
-      [serviceName]: {
-        isLocked: nextLock,
-        lockedBy: nextLock ? currentUserName : '',
-      },
-    }));
-    if (nextLock) {
-      feedback.message.success(`已锁定服务 [${serviceName}] 的独占编辑权`);
-    } else {
-      feedback.message.info(`已释放服务 [${serviceName}] 的独占编辑权`);
-    }
-  };
 
   const handleSyncRemoteYaml = async () => {
     if (!selectedService || !activeProject) return;
@@ -365,12 +339,6 @@ export const ServicesPage: React.FC = () => {
 
   const handleSaveYaml = async () => {
     if (!selectedService || !activeProject) return;
-    if (isLockedByOther) {
-      feedback.message.error(
-        `该服务已被协作者 [${serviceLocks[selectedService]?.lockedBy}] 独占锁定，禁止覆盖保存！`
-      );
-      return;
-    }
     try {
       // 对齐旧版 saveServiceAPI（zadig-portal/src/api/index.js:388）：
       // POST /service/services?projectName=<product>&force=true。
@@ -1014,9 +982,6 @@ spec:
                 </div>
                 <CollaborationAwarenessBar
                   serviceName={selectedService}
-                  isLocked={Boolean(serviceLocks[selectedService]?.isLocked)}
-                  lockedBy={serviceLocks[selectedService]?.lockedBy}
-                  onToggleLock={(locked) => handleToggleLock(selectedService, locked)}
                   onSyncRemote={handleSyncRemoteYaml}
                   syncing={syncingRemote}
                 />
@@ -1033,7 +998,6 @@ spec:
                     onChange={setYamlContent}
                     theme={editorTheme}
                     height={520}
-                    readOnly={isLockedByOther}
                   />
                 )}
               </>
