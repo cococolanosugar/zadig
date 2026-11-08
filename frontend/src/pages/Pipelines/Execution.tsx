@@ -20,6 +20,7 @@ import {
   Modal,
   Popover,
   Checkbox,
+  Tooltip,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -40,7 +41,7 @@ import {
   FileOutlined,
   DownloadOutlined,
 } from '@ant-design/icons';
-import { workflowApi, type WorkflowTaskExecution } from '../../api/workflow';
+import { workflowApi, type WorkflowTaskExecution, type TaskJobApproverItem } from '../../api/workflow';
 import { useProjectStore } from '../../stores/project';
 import { useAuthStore } from '../../stores/auth';
 import { feedback } from '../../utils/feedback';
@@ -56,7 +57,7 @@ const findPendingApproval = (task: WorkflowTaskExecution | null) => {
   for (const stage of task.stages) {
     for (const job of stage.jobs || []) {
       if (job.type === 'approval' && (job.status === 'wait_for_approval' || job.status === 'waiting')) {
-        return { jobName: job.name, stageName: stage.name };
+        return { jobName: job.name, stageName: stage.name, spec: job.spec };
       }
     }
   }
@@ -101,6 +102,45 @@ export const PipelineExecutionPage: React.FC = () => {
 
   const pendingApproval = findPendingApproval(task);
   const pendingManualExec = useMemo(() => findPendingManualExecStage(task), [task]);
+
+  // REA-S6-2: 当前登录用户 + 待审批 Job 的审批人名单
+  const { userInfo: user } = useAuthStore();
+  const approvalApprovers = useMemo<TaskJobApproverItem[]>(() => {
+    const spec = pendingApproval?.spec;
+    if (!spec) return [];
+    if (Array.isArray(spec.approve_users) && spec.approve_users.length > 0) {
+      return spec.approve_users;
+    }
+    return Array.isArray(spec.native_approval?.approve_users)
+      ? spec.native_approval.approve_users
+      : [];
+  }, [pendingApproval]);
+
+  // 名单非空且不含用户组时，仅名单内授权人可操作；用户组审批无法在前端解析成员，交由后端鉴权
+  const approvalRestricted = useMemo(() => {
+    if (approvalApprovers.length === 0) return false;
+    if (approvalApprovers.some((a) => a.group_id || a.type === 'group')) return false;
+    if (!user) return true;
+    return !approvalApprovers.some(
+      (a) =>
+        (!!a.user_id && a.user_id === user.uid) ||
+        (!!a.user_name && (a.user_name === user.name || a.user_name === user.account))
+    );
+  }, [approvalApprovers, user]);
+
+  // REA-S7-1: 任务成功时提取本次部署的目标环境，提供环境深链
+  const deployedTargetEnv = useMemo(() => {
+    if (task?.status !== 'passed') return '';
+    const deployJobTypes = new Set(['zadig-deploy', 'custom-deploy', 'zadig-helm-deploy']);
+    for (const stage of task.stages || []) {
+      for (const job of stage.jobs || []) {
+        if (!deployJobTypes.has(job.type) || job.status !== 'passed') continue;
+        const env = job.spec?.env || job.spec?.env_name;
+        if (env) return env;
+      }
+    }
+    return '';
+  }, [task]);
 
   const handleApprove = async (approve: boolean) => {
     if (!pendingApproval || !task) return;
@@ -645,6 +685,19 @@ export const PipelineExecutionPage: React.FC = () => {
                   </Button>
                 </Popconfirm>
               )}
+              {deployedTargetEnv && (
+                <Button
+                  type="link"
+                  icon={<ExportOutlined />}
+                  onClick={() =>
+                    navigate(
+                      `/v1/projects/detail/${encodeURIComponent(activeProject)}/envs/${encodeURIComponent(deployedTargetEnv)}`
+                    )
+                  }
+                >
+                  前往目标环境 ({deployedTargetEnv}) 查看部署结果
+                </Button>
+              )}
               <Button
                 icon={<SyncOutlined />}
                 loading={loading}
@@ -677,12 +730,36 @@ export const PipelineExecutionPage: React.FC = () => {
             style={{ marginBottom: 12 }}
           />
           <Space>
-            <Button type="primary" icon={<CheckCircleOutlined />} loading={approving} onClick={() => handleApprove(true)}>
-              同意，继续执行
-            </Button>
-            <Button danger icon={<CloseCircleOutlined />} loading={approving} onClick={() => handleApprove(false)}>
-              驳回，终止任务
-            </Button>
+            <Tooltip
+              title={approvalRestricted ? '当前登录账号不在审批人名单中，仅授权审批人可操作' : undefined}
+            >
+              <span>
+                <Button
+                  type="primary"
+                  icon={<CheckCircleOutlined />}
+                  loading={approving}
+                  disabled={approvalRestricted}
+                  onClick={() => handleApprove(true)}
+                >
+                  同意，继续执行
+                </Button>
+              </span>
+            </Tooltip>
+            <Tooltip
+              title={approvalRestricted ? '当前登录账号不在审批人名单中，仅授权审批人可操作' : undefined}
+            >
+              <span>
+                <Button
+                  danger
+                  icon={<CloseCircleOutlined />}
+                  loading={approving}
+                  disabled={approvalRestricted}
+                  onClick={() => handleApprove(false)}
+                >
+                  驳回，终止任务
+                </Button>
+              </span>
+            </Tooltip>
           </Space>
         </Card>
       )}

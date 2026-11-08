@@ -1,0 +1,296 @@
+[
+  {
+    "url": "/api/v1/codehosts/validate",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 851645
+  },
+  {
+    "url": "/api/aslan/system/workflowHook",
+    "method": "call:I.put",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 864920
+  },
+  {
+    "url": "plutus/project/detail/:plutus_project_name",
+    "method": "property:path",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 196435
+  },
+  {
+    "url": "/api/aslan/system/registry/namespaces",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 867670
+  },
+  {
+    "url": "integration/project",
+    "method": "property:path",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 228765
+  },
+  {
+    "url": "projects/create/:project_name/helm/service",
+    "method": "property:path",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 209880
+  },
+  {
+    "url": "/api/aslan/template/build",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 896388
+  },
+  {
+    "url": "/api/aslan/service/labels",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 828512
+  },
+  {
+    "url": "/api/aslan/environment/rendersets/yamlContent",
+    "method": "call:I.get",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 903430
+  },
+  {
+    "url": "/api/v1/emails/service",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 866491
+  },
+  {
+    "url": "/api/aslan/system/project_management",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 854194
+  },
+  {
+    "url": "/api/aslan/template/workflow",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 897692
+  },
+  {
+    "url": "projects/create/:project_name/pm/delivery",
+    "method": "property:path",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 212768
+  },
+  {
+    "url": "plutus/project/detail/:plutus_project_name/customer/detail/:customer_name",
+    "method": "property:path",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 192782
+  },
+  {
+    "url": "/api/aslan/workflow/v4/lint",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 921589
+  },
+  {
+    "url": "/api/aslan/stat/quality/buildDailyMeasure",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 909147
+  },
+  {
+    "url": "/api/aslan/workflow/v4/patch",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 924473
+  },
+  {
+    "url": "/api/aslan/workflow/favorite",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 843264
+  },
+  {
+    "url": "projects/detail/:project_name/workflows/custom/:workflow_name",
+    "method": "property:path",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 239686
+  },
+  {
+    "url": "/api/aslan/cluster/clusters/validate",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 868911
+  },
+  {
+    "url": "projects/detail/:project_name/services",
+    "method": "property:path",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 216492
+  },
+  {
+    "url": "/api/v1/codehosts",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 851818
+  },
+  {
+    "url": "/api/aslan/environment/operations",
+    "method": "call:I.get",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 790591
+  },
+  {
+    "url": "/api/aslan/system/registry/validate",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 867506
+  },
+  {
+    "url": "projects/create/:project_name/k8s/service",
+    "method": "property:path",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 207471
+  },
+  {
+    "url": "/api/plutus/services/getHelmServices",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 886887
+  },
+  {
+    "url": "projects/create/:project_name/helm/delivery",
+    "method": "property:path",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 210846
+  },
+  {
+    "url": "/api/v1/picket/projects?ignoreNoVersions=false&verbosity=detailed",
+    "method": "call:I.get",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 881536
+  },
+  {
+    "url": "/api/aslan/project/templates/info",
+    "method": "call:I.get",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 826257
+  },
+  {
+    "url": "/api/v1/picket/testing",
+    "method": "call:I.get",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 924004
+  },
+  {
+    "url": "/api/aslan/system/dashboard/workflow/running",
+    "method": "call:I.get",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 926010
+  },
+  {
+    "url": "/api/aslan/environment/operations?production=true",
+    "method": "call:I.get",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 790667
+  },
+  {
+    "url": "/api/aslan/system/project_management/validate",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 854265
+  },
+  {
+    "url": "/api/aslan/stat/quality/buildHealthMeasure",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 908867
+  },
+  {
+    "url": "/api/aslan/cluster/clusters",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 869127
+  },
+  {
+    "url": "/api/aslan/service/services/variable/convert",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 828237
+  },
+  {
+    "url": "/api/aslan/stat/quality/buildAverageMeasure",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 908985
+  },
+  {
+    "url": "projects/create/:project_name/k8s/delivery",
+    "method": "property:path",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 208435
+  },
+  {
+    "url": "/api/aslan/stat/quality/buildTrend",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 909264
+  },
+  {
+    "url": "/api/aslan/stat/quality/buildTenDurationMeasure",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 908744
+  },
+  {
+    "url": "/api/aslan/workflow/v4/dynamicVariable/available",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 925198
+  },
+  {
+    "url": "/api/aslan/workflow/plugin",
+    "method": "call:I.get",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 923739
+  },
+  {
+    "url": "/api/aslan/system/concurrency/workflow",
+    "method": "call:I.get",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 865262
+  },
+  {
+    "url": "/api/aslan/workflow/plugin/template",
+    "method": "call:I.get",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 923540
+  },
+  {
+    "url": "/api/aslan/workflow/v4/sql/validate",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 861243
+  },
+  {
+    "url": "/api/aslan/stat/quality/buildLatestTenMeasure",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 908623
+  },
+  {
+    "url": "/api/v1/picket/projects",
+    "method": "call:I.post",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 877145
+  },
+  {
+    "url": "/api/aslan/project/group",
+    "method": "call:I.get",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 825448
+  },
+  {
+    "url": "plutus/project/create",
+    "method": "property:path",
+    "source": "static/js/94.f10e6ea486b4e85dd1a7.js",
+    "col": 192309
+  }
+]

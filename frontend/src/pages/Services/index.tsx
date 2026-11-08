@@ -46,7 +46,7 @@ import YamlEditor from '../../components/Editor/YamlEditor';
 import YamlDiffEditor from '../../components/Editor/YamlDiffEditor';
 import http from '../../api/client';
 import { feedback } from '../../utils/feedback';
-import { serviceApi, ServiceDetail } from '../../api/service';
+import { serviceApi, ServiceDetail, type ServiceVariableKV } from '../../api/service';
 import ImportFromRepoModal, { SyncServiceInfo } from './ImportFromRepoModal';
 import ImportFromTemplateModal, { SyncTemplateServiceInfo } from './ImportFromTemplateModal';
 import ServiceModulesDrawer from './ServiceModulesDrawer';
@@ -368,12 +368,12 @@ export const ServicesPage: React.FC = () => {
       // visibility 沿用当前服务值（缺失则 'private'），variable_yaml 需先取详情保留。
       let visibility = 'private';
       let variableYaml = '';
-      let serviceVariableKVs: unknown[] = [];
+      let serviceVariableKVs: ServiceVariableKV[] = [];
       try {
         const detail = await http.get<{
           visibility?: string;
           variable_yaml?: string;
-          service_variable_kvs?: unknown[];
+          service_variable_kvs?: ServiceVariableKV[];
         }>(
           `/api/aslan/service/services/${encodeURIComponent(selectedService)}/k8s?projectName=${activeProject}&production=${isProduction}`,
           { skipErrorHandler: true }
@@ -401,6 +401,24 @@ export const ServicesPage: React.FC = () => {
         }
       } catch {
         // 校验端点异常不阻断保存流程
+      }
+
+      // REA-S2-1: 若存在 variable_yaml，保存前将 YAML 占位变量转换为 service_variable_kvs，
+      // 确保 YAML 与后端结构体 100% 同步，杜绝变量漂移。
+      // 后端契约: ConvertVaraibleKVAndYamlArgs { action: 'toKV', yaml, kvs }
+      if (variableYaml && variableYaml.trim()) {
+        try {
+          const converted = await serviceApi.convertVariableKVAndYaml({
+            action: 'toKV',
+            yaml: variableYaml,
+            kvs: serviceVariableKVs,
+          });
+          if (converted && Array.isArray(converted.kvs)) {
+            serviceVariableKVs = converted.kvs;
+          }
+        } catch {
+          // 转换失败不阻断保存，沿用详情中的 service_variable_kvs
+        }
       }
 
       await http.post(

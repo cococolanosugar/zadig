@@ -234,6 +234,31 @@ spec:
                   },
                 ],
               },
+              // REA-S6-1: 选中生产环境时，在「构建」与「部署」之间自动插入人工审批门禁
+              ...(selectedEnvs.some((e: string) => e.toLowerCase().includes('prod'))
+                ? [
+                    {
+                      name: '人工卡点',
+                      parallel: false,
+                      jobs: [
+                        {
+                          name: 'approval',
+                          type: 'approval',
+                          spec: {
+                            type: 'native',
+                            source: 'runtime',
+                            timeout: 60,
+                            native_approval: {
+                              timeout: 60,
+                              needed_approvers: 1,
+                              approve_users: [],
+                            },
+                          },
+                        },
+                      ],
+                    },
+                  ]
+                : []),
               {
                 name: '部署',
                 parallel: false,

@@ -265,6 +265,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
       <JobConfigDrawer
         visible={drawerVisible}
         job={selectedJob}
+        projectName={projectName}
         onClose={() => setDrawerVisible(false)}
         onSave={handleSaveJob}
       />

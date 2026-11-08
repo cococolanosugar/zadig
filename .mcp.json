@@ -15,6 +15,10 @@
     "chrome-devtools": {
       "command": "npx",
       "args": ["-y", "chrome-devtools-mcp@latest"]
+    },
+    "rea": {
+      "command": "rea",
+      "args": ["--mcp"]
     }
   }
 }

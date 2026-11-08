@@ -289,8 +289,25 @@ export interface WorkflowTaskExecution {
       error_policy?: { policy?: string } | null;
       breakpoint_before?: boolean;
       breakpoint_after?: boolean;
+      // 任务执行时后端返回的 JobTask Spec（models.TaskJob.Spec，json:"spec"）
+      // 部署类 Job 通过 env 回填目标环境；审批类 Job 通过 native_approval 回填审批人。
+      spec?: {
+        env?: string;
+        env_name?: string;
+        approve_users?: TaskJobApproverItem[];
+        native_approval?: { approve_users?: TaskJobApproverItem[] };
+      };
     }[];
   }[];
+}
+
+// 审批人条目（models.User）：user_id/user_name 为用户，group_id/group_name 为用户组
+export interface TaskJobApproverItem {
+  type?: string;
+  user_id?: string;
+  user_name?: string;
+  group_id?: string;
+  group_name?: string;
 }
 
 export interface WorkflowTaskPreview {
@@ -792,6 +809,26 @@ export const workflowApi = {
         },
         skipErrorHandler: true,
       }
+    );
+  },
+
+  /**
+   * Extract patch params from patch content YAML.
+   * POST /api/aslan/workflow/v4/patch
+   */
+  async getPatchParams(payload: {
+    resource_name?: string;
+    resource_kind?: string;
+    resource_group?: string;
+    resource_version?: string;
+    patch_content: string;
+    params?: Array<{ name: string; params_type?: string }>;
+    patch_strategy?: string;
+  }): Promise<Array<{ name: string; params_type?: string }>> {
+    return http.post<Array<{ name: string; params_type?: string }>>(
+      '/api/aslan/workflow/v4/patch',
+      payload,
+      { skipErrorHandler: true }
     );
   },
 

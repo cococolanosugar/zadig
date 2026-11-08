@@ -293,6 +293,30 @@ export const environmentApi = {
   },
 
   /**
+   * Helm rendersets: Get YAML content from codehost/repo for Helm Values.
+   * GET /api/aslan/environment/rendersets/yamlContent
+   */
+  async getYamlContent(params: {
+    codehostID?: number;
+    owner?: string;
+    repo?: string;
+    namespace?: string;
+    branch?: string;
+    repoLink?: string;
+    valuesPath?: string;
+  }): Promise<{ content: string }> {
+    const data = await http.get<string | { content?: string }>(
+      '/api/aslan/environment/rendersets/yamlContent',
+      { params, skipErrorHandler: true }
+    );
+    // 后端 handler 通过 c.String(200, content) 直接返回纯文本；此处兼容 JSON 包装形态
+    if (typeof data === 'string') {
+      return { content: data };
+    }
+    return { content: data?.content || '' };
+  },
+
+  /**
    * Rendersets: Get service variables (compatible with GET on live server and fallback POST).
    */
   async getServiceVariables(

@@ -15,8 +15,17 @@ import {
   Col,
   InputNumber,
   Divider,
+  Tag,
+  Alert,
+  Tooltip,
 } from 'antd';
-import { SaveOutlined, PlusOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  SaveOutlined,
+  PlusOutlined,
+  DeleteOutlined,
+  ReloadOutlined,
+  ThunderboltOutlined,
+} from '@ant-design/icons';
 import { workflowApi, type WorkflowJob } from '../../api/workflow';
 import { settingsApi } from '../../api/settings';
 import { feedback } from '../../utils/feedback';
@@ -28,6 +37,8 @@ const { Title } = Typography;
 export interface JobConfigDrawerProps {
   visible: boolean;
   job: WorkflowJob | null;
+  /** 所属项目名，用于请求工作流动态可用变量 */
+  projectName?: string;
   onClose: () => void;
   onSave: (updatedJob: WorkflowJob) => void;
 }
@@ -35,6 +46,7 @@ export interface JobConfigDrawerProps {
 export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
   visible,
   job,
+  projectName,
   onClose,
   onSave,
 }) => {
@@ -62,6 +74,14 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
   const [triggerableWorkflows, setTriggerableWorkflows] = useState<Array<{ label: string; value: string }>>([]);
   const [loadingJenkinsJobs, setLoadingJenkinsJobs] = useState(false);
   const [loadingJenkinsArgs, setLoadingJenkinsArgs] = useState(false);
+  // REA-S5-1: k8s-resource-patch 从 patch 内容提取出的变量参数（按 patch_items 下标缓存）
+  const [patchParamsMap, setPatchParamsMap] = useState<
+    Record<number, Array<{ name: string; params_type?: string }>>
+  >({});
+  const [extractingPatchIndex, setExtractingPatchIndex] = useState<number | null>(null);
+  // REA-S5-2: 当前 Job 可引用的动态占位变量
+  const [dynamicVariables, setDynamicVariables] = useState<string[]>([]);
+  const [loadingDynamicVariables, setLoadingDynamicVariables] = useState(false);
 
   useEffect(() => {
     if (job) {
@@ -380,6 +400,77 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
         .catch(() => setScanOptions([]));
     }
   }, [visible, job]);
+
+  // REA-S5-2: 打开抽屉时按 projectName + job.name 拉取可用动态占位变量，供用户引用上游变量
+  useEffect(() => {
+    const effectiveProjectName = projectName || (job?.spec?.project_name as string) || '';
+    if (!visible || !job || !effectiveProjectName) {
+      setDynamicVariables([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingDynamicVariables(true);
+    workflowApi
+      .getAvailableDynamicVariables(
+        effectiveProjectName,
+        job.name,
+        {
+          name: '',
+          stages: [{ name: 'job-config-preview', parallel: false, jobs: [job] }],
+        },
+        false
+      )
+      .then((vars) => {
+        if (!cancelled) setDynamicVariables(Array.isArray(vars) ? vars : []);
+      })
+      .catch(() => {
+        if (!cancelled) setDynamicVariables([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDynamicVariables(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, job, projectName]);
+
+  // REA-S5-1: 从指定 Patch 项的 patch_content 中提取占位变量参数
+  const handleExtractPatchParams = async (index: number) => {
+    const items = (form.getFieldValue('patch_items') as Array<Record<string, unknown>>) || [];
+    const item = items[index];
+    const patchContent = item?.patch_content ? String(item.patch_content) : '';
+    if (!patchContent.trim()) {
+      feedback.message.warning('请先填写 Patch 内容再提取变量参数');
+      return;
+    }
+    setExtractingPatchIndex(index);
+    try {
+      const params = await workflowApi.getPatchParams({
+        resource_name: (item.resource_name as string) || undefined,
+        resource_kind: (item.resource_kind as string) || undefined,
+        resource_group: (item.resource_group as string) || undefined,
+        resource_version: (item.resource_version as string) || undefined,
+        patch_content: patchContent,
+        params: Array.isArray(item.params)
+          ? (item.params as Array<{ name: string; params_type?: string }>)
+          : undefined,
+        patch_strategy: (item.patch_strategy as string) || undefined,
+      });
+      const list = Array.isArray(params) ? params : [];
+      setPatchParamsMap((prev) => ({ ...prev, [index]: list }));
+      if (list.length === 0) {
+        feedback.message.info('未从 Patch 内容中解析到占位变量');
+      } else {
+        feedback.message.success(
+          `已提取 ${list.length} 个变量参数: ${list.map((p) => p.name).join(', ')}`
+        );
+      }
+    } catch {
+      feedback.message.error('提取 Patch 变量参数失败，请检查 Patch 内容格式');
+    } finally {
+      setExtractingPatchIndex(null);
+    }
+  };
 
   const handleMergeImage = async (overrideImage?: string) => {
     const targetImage = overrideImage !== undefined ? overrideImage : form.getFieldValue('image');
@@ -786,6 +877,30 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
           rules={[{ required: true, message: '请输入任务名称' }]}
         >
           <Input placeholder="例如: build-app, deploy-dev" />
+        </Form.Item>
+
+        <Form.Item
+          label={
+            <Space orientation="horizontal" size={6}>
+              <span>可用动态变量</span>
+              {loadingDynamicVariables && <span style={{ fontSize: 12, color: '#999' }}>加载中...</span>}
+            </Space>
+          }
+          tooltip="当前 Job 可引用的上游变量占位符，可直接复制到脚本或 YAML 内容中使用"
+        >
+          {dynamicVariables.length > 0 ? (
+            <Space orientation="horizontal" size={[4, 4]} wrap>
+              {dynamicVariables.map((v) => (
+                <Tag key={v} color="blue" style={{ fontFamily: 'monospace', marginInlineEnd: 0 }}>
+                  {v}
+                </Tag>
+              ))}
+            </Space>
+          ) : (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {loadingDynamicVariables ? '正在获取可用变量...' : '暂无可用动态变量'}
+            </Typography.Text>
+          )}
         </Form.Item>
 
         {job?.type === 'zadig-build' && (
@@ -1741,16 +1856,28 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
                         style={{ background: 'var(--ant-color-fill-quaternary, #f9f9f9)' }}
                         title={`Patch 项 #${name + 1}`}
                         extra={
-                          fields.length > 1 ? (
-                            <Button
-                              type="text"
-                              danger
-                              icon={<DeleteOutlined />}
-                              onClick={() => remove(name)}
-                            >
-                              删除
-                            </Button>
-                          ) : null
+                          <Space orientation="horizontal" size={4}>
+                            <Tooltip title="从 Patch 内容中解析 {{.variable}} 形式的占位变量参数">
+                              <Button
+                                type="text"
+                                icon={<ThunderboltOutlined />}
+                                loading={extractingPatchIndex === name}
+                                onClick={() => handleExtractPatchParams(name)}
+                              >
+                                提取变量参数
+                              </Button>
+                            </Tooltip>
+                            {fields.length > 1 && (
+                              <Button
+                                type="text"
+                                danger
+                                icon={<DeleteOutlined />}
+                                onClick={() => remove(name)}
+                              >
+                                删除
+                              </Button>
+                            )}
+                          </Space>
                         }
                       >
                         <Row gutter={16}>
@@ -1815,6 +1942,27 @@ export const JobConfigDrawer: React.FC<JobConfigDrawerProps> = ({
                             style={{ fontFamily: 'monospace' }}
                           />
                         </Form.Item>
+                        {Array.isArray(patchParamsMap[name]) && patchParamsMap[name].length > 0 && (
+                          <Alert
+                            type="info"
+                            showIcon
+                            title="已提取的变量参数"
+                            description={
+                              <Space orientation="horizontal" size={[4, 4]} wrap>
+                                {patchParamsMap[name].map((p) => (
+                                  <Tag
+                                    key={p.name}
+                                    color="geekblue"
+                                    style={{ fontFamily: 'monospace', marginInlineEnd: 0 }}
+                                  >
+                                    {p.name}
+                                    {p.params_type ? ` (${p.params_type})` : ''}
+                                  </Tag>
+                                ))}
+                              </Space>
+                            }
+                          />
+                        )}
                       </Card>
                     ))}
                     <Button
