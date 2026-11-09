@@ -79,5 +79,10 @@ debug/zadig-agent
 .claude/
 .agents/
 .omp/
+.codegraph/
+.codex/
+codegraph.json
+.gitnexusignore
+manifest/deploy/helm/values-local.yaml
 
 doc/
