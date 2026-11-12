@@ -203,8 +203,8 @@ Remove-Item "zadig-5.0.0.tgz" -Force
 * **镜像来源契约**：根据 `manifest/deploy/helm/values.yaml` 中声明的 `global.image.registry` 与 `frontend.image` 组合确定：
   * **Registry**：`koderover.tencentcloudcr.com/koderover-public`
   * **Repository**：`zadig-portal`
-  * **Tag**：`5.0.0-RELEASE.3-1020`
-  * **完整镜像名**：`koderover.tencentcloudcr.com/koderover-public/zadig-portal:5.0.0-RELEASE.3-1020`
+  * **Tag**：`5.0.0-RELEASE.3-1105`
+  * **完整镜像名**：`koderover.tencentcloudcr.com/koderover-public/zadig-portal:5.0.0-RELEASE.3-1105`
 * **容器文档根目录**：镜像内 Nginx 配置挂载路径为 `/zadig-ee-portal/`（包含 `index.html`、`static/`、`workers/`），版本信息记录于 `/zadig-ee-portal/static/version.json`。
 
 ### 8.2 获取、同步与纯净化流水线
@@ -212,7 +212,7 @@ Remove-Item "zadig-5.0.0.tgz" -Force
 
 ```bash
 # 1. 确保 Docker 守护进程运行并拉取最新官方镜像
-docker pull koderover.tencentcloudcr.com/koderover-public/zadig-portal:5.0.0-RELEASE.3-1020
+docker pull koderover.tencentcloudcr.com/koderover-public/zadig-portal:5.0.0-RELEASE.3-1105
 
 # 2. 清理本地 zadig-ee-portal 历史残留文件（防止新老 Chunk 混淆）
 # PowerShell:
@@ -224,7 +224,7 @@ if (Test-Path "zadig-ee-portal") {
 
 # 3. 创建临时无挂载容器并拷贝构建产物
 docker rm -f temp_zadig_portal 2>$null
-docker create --name temp_zadig_portal koderover.tencentcloudcr.com/koderover-public/zadig-portal:5.0.0-RELEASE.3-1020
+docker create --name temp_zadig_portal koderover.tencentcloudcr.com/koderover-public/zadig-portal:5.0.0-RELEASE.3-1105
 docker cp temp_zadig_portal:/zadig-ee-portal/. zadig-ee-portal/
 
 # 4. 彻底销毁临时容器
@@ -239,7 +239,7 @@ cat zadig-ee-portal/static/version.json
 1. **文件与 Chunk 数量对账**：
    * 静态资源总文件数精确为 **382** 个（包含 111 个 JS Chunk 及其 `.gz` 压缩包、77 个 CSS 样式文件、78 个字体/矢量图标）；
 2. **版本元数据对齐**：
-   * `static/version.json` 的 `COMMIT_ID` 与官方发布标签 Commit 完全一致（当前基准为 `92d17fd5b85cd580e1102404ea3e248c0788fae9`）；
+   * `static/version.json` 的 `COMMIT_ID` 与官方发布标签 Commit 完全一致（当前基准为 `cf7b5bcf763ea563fa552f71bc539546abb32290`）；
 3. **SHA-256 零差异验收**：
    * 若需校验本地目录与镜像产物一致性，可通过临时容器导出至独立临时目录，遍历所有 382 个文件进行 SHA-256 哈希比对，必须达到 0 缺失、0 冗余、0 mismatch。
 
@@ -295,7 +295,7 @@ curl.exe -s http://192.168.31.174/api/v1/login-enabled
 ```
 
 * 返回 `{"enabled":false}` 且 HTTP 200：说明网关 → user 服务链路正常；`enabled:false` 仅表示第三方/SSO 登录未开启，不是故障。
-* 门户首页 `/` 返回 200，`/static/version.json` 中 `VERSION` 应为 `5.0.0-RELEASE.3-1020`。
+* 门户首页 `/` 返回 200，`/static/version.json` 中 `VERSION` 应为 `5.0.0-RELEASE.3-1105`。
 
 ### 9.5 运行与登录验证凭据 (Authentication & Login)
 
