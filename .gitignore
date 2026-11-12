@@ -84,5 +84,7 @@ debug/zadig-agent
 codegraph.json
 .gitnexusignore
 manifest/deploy/helm/values-local.yaml
+rea-evidence.json
+*.evidence.json
 
 doc/
