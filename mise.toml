@@ -16,6 +16,7 @@ pnpm = "11.17.0"
 "npm:@colbymchenry/codegraph" = "1.6.0"
 "npm:gitnexus" = "1.6.11"
 "npm:@fission-ai/openspec" = "1.12.0"
+"npm:rea-agents" = "6.9.0"
 
 [env]
 # 设置 Go 代理以保证国内网络环境顺畅下载依赖（按需配置）

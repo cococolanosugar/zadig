@@ -118,7 +118,7 @@ zadig/
 
 ## 5. 本地 MCP 项目级配置与 AI 协同规范 (Local MCP Architecture)
 
-项目根目录声明了 [`.mcp.json`](.mcp.json)，激活了统一版本锁定的四大本地 MCP 服务：
+项目根目录声明了 [`.mcp.json`](.mcp.json)，激活了统一版本锁定的五大本地 MCP 服务：
 
 ```json
 {
@@ -138,6 +138,10 @@ zadig/
     "chrome-devtools": {
       "command": "npx",
       "args": ["-y", "chrome-devtools-mcp@latest"]
+    },
+    "rea": {
+      "command": "rea",
+      "args": ["--mcp"]
     }
   }
 }
@@ -147,6 +151,7 @@ zadig/
 * **`codegraph` (v1.6.0)**：本地持久化代码知识图谱，基于 AST 进行跨文件调用链追踪与精确符号定位。
 * **`gitnexus` (v1.6.11)**：基于知识图谱的代码变更影响面分析（Impact Analysis），精准预判函数/类型改动对下游调用者的破坏。
 * **`chrome-devtools`**：提供真实浏览器页面交互、Console 错误捕获与 DOM 检查支持。
+* **`rea` (v6.9.0)**：逆向工程分析套件，提供静态产物与 Bundle 逆向提取、符号结构与运行时调用追踪支持。
 
 ---
 
