@@ -225,21 +225,24 @@ export const authApi = {
   },
 
   /**
-   * 找回密码验证码发送
+   * 找回密码：发送重置链接邮件
    * GET /api/v1/retrieve?account=
-   * (pkg/microservice/user/core/handler/user/user.go:100)
+   * (pkg/microservice/user/core/handler/user/user.go:545)
    */
-  async retrievePassword(account: string): Promise<{ message: string }> {
-    return http.get(`/api/v1/retrieve?account=${encodeURIComponent(account)}`);
+  async retrievePassword(account: string): Promise<{ message?: string; email?: string }> {
+    return http.get(`/api/v1/retrieve?account=${encodeURIComponent(account)}`, { skipErrorHandler: true });
   },
 
   /**
    * 密码重置
    * POST /api/v1/reset
-   * (pkg/microservice/user/core/handler/user/user.go:106)
+   * (pkg/microservice/user/core/handler/user/user.go:563)
    */
-  async resetPassword(payload: { account: string; code: string; password: string }): Promise<{ message: string }> {
-    return http.post('/api/v1/reset', payload);
+  async resetPassword(payload: { password: string; token?: string }): Promise<{ message?: string }> {
+    return http.post('/api/v1/reset', payload, {
+      headers: payload.token ? { Authorization: `Bearer ${payload.token}` } : undefined,
+      skipErrorHandler: true,
+    });
   },
 };
 

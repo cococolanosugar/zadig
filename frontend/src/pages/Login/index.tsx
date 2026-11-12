@@ -71,6 +71,7 @@ export const LoginPage: React.FC = () => {
   const [resetting, setResetting] = useState(false);
   const [retrieveModalOpen, setRetrieveModalOpen] = useState(false);
   const [retrieving, setRetrieving] = useState(false);
+  const [retrieveStep, setRetrieveStep] = useState<'input' | 'sendmail'>('input');
   const [retrieveAccount, setRetrieveAccount] = useState('');
   const [retrieveResult, setRetrieveResult] = useState<string | null>(null);
   const [connectors, setConnectors] = useState<Array<{ id: string; name: string }>>([]);
@@ -142,17 +143,19 @@ export const LoginPage: React.FC = () => {
     setRetrieving(true);
     setRetrieveResult(null);
     try {
-      const res = await fetch(`/api/v1/retrieve?account=${encodeURIComponent(account)}`);
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setRetrieveResult(
-          `重置链接已发送至 ${data.email || '您的邮箱'}，请在 5 分钟内查收邮件并按提示重置密码。`
-        );
-      } else {
-        setRetrieveResult(data?.errorMsg || data?.description || data?.message || '发送失败，请确认账号或联系管理员配置 SMTP');
-      }
-    } catch {
-      setRetrieveResult('网络异常，请稍后重试');
+      await authApi.retrievePassword(account);
+      setRetrieveStep('sendmail');
+      setRetrieveResult(
+        '若账号已绑定邮箱，您将收到密码重置邮件，请注意查收。若长时间未收到，请联系管理员。'
+      );
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string; description?: string; errorMsg?: string } } })
+          ?.response?.data?.errorMsg ||
+        (err as { response?: { data?: { description?: string } } })?.response?.data?.description ||
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        '发送失败，请确认账号或联系管理员配置 SMTP';
+      setRetrieveResult(msg);
     } finally {
       setRetrieving(false);
     }
@@ -161,24 +164,18 @@ export const LoginPage: React.FC = () => {
   const handleResetPassword = async (values: { password: string }) => {
     setResetting(true);
     try {
-      const res = await fetch('/api/v1/reset', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({ password: values.password }),
-      });
-      if (res.ok) {
-        feedback.message.success('密码重置成功，请使用新密码登录');
-        setResetMode(false);
-        navigate('/signin', { replace: true });
-      } else {
-        setErrorMessage('密码重置失败，链接可能已过期（有效期 5 分钟），请重新申请找回密码');
-        setResetMode(false);
-      }
-    } catch {
-      setErrorMessage('网络异常，密码重置失败，请稍后重试');
+      await authApi.resetPassword({ password: values.password, token: idToken || undefined });
+      feedback.message.success('密码重置成功，请使用新密码登录');
+      setResetMode(false);
+      navigate('/signin', { replace: true });
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string; description?: string } } })?.response?.data
+          ?.description ||
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        '密码重置失败，链接可能已过期（有效期 5 分钟），请重新申请找回密码';
+      setErrorMessage(msg);
+      setResetMode(false);
     } finally {
       setResetting(false);
     }
@@ -697,7 +694,9 @@ export const LoginPage: React.FC = () => {
               )}
               <a
                 onClick={() => {
+                  setRetrieveAccount('');
                   setRetrieveResult(null);
+                  setRetrieveStep('input');
                   setRetrieveModalOpen(true);
                 }}
                 style={{ fontSize: 13, color: '#38bdf8' }}
@@ -777,59 +776,81 @@ export const LoginPage: React.FC = () => {
             </div>
           </Modal>
 
-          {/* Retrieve Password Modal */}          <Modal
+          {/* Retrieve Password Modal */}
+          <Modal
             title="找回密码"
             open={retrieveModalOpen}
             onCancel={() => setRetrieveModalOpen(false)}
             footer={null}
-            width={420}
+            width={440}
+            destroyOnHidden
           >
-            <div style={{ padding: '8px 0 16px' }}>
-              <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                输入注册的用户名，系统将向绑定邮箱发送重置链接（需管理员已配置 SMTP 邮箱服务器）。
-              </Text>
-              <Input
-                prefix={<UserOutlined style={{ color: '#94a3b8' }} />}
-                placeholder="请输入用户名"
-                style={{ height: 40, borderRadius: 6 }}
-                value={retrieveAccount}
-                onChange={(e) => {
-                  setRetrieveAccount(e.target.value);
-                  if (retrieveResult) setRetrieveResult(null);
-                }}
-                onPressEnter={() => {
-                  if (!retrieveAccount.trim()) {
-                    setRetrieveResult('请输入用户名');
-                    return;
-                  }
-                  handleRetrievePassword(retrieveAccount.trim());
-                }}
-                autoFocus
-              />
-              <Button
-                type="primary"
-                block
-                loading={retrieving}
-                style={{ marginTop: 12, height: 40, borderRadius: 6 }}
-                onClick={() => {
-                  if (!retrieveAccount.trim()) {
-                    setRetrieveResult('请输入用户名');
-                    return;
-                  }
-                  handleRetrievePassword(retrieveAccount.trim());
-                }}
-              >
-                发送重置链接
-              </Button>
-              {retrieveResult && (
-                <Alert
-                  title={retrieveResult}
-                  type={retrieveResult.includes('已发送') ? 'success' : 'warning'}
-                  showIcon
-                  style={{ marginTop: 12, borderRadius: 6 }}
+            {retrieveStep === 'input' ? (
+              <div style={{ padding: '8px 0 16px' }}>
+                <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+                  输入注册的用户名，系统将向绑定邮箱发送重置链接（需管理员已配置 SMTP 邮箱服务器）。
+                </Text>
+                <Input
+                  prefix={<UserOutlined style={{ color: '#94a3b8' }} />}
+                  placeholder="请输入用户名"
+                  style={{ height: 40, borderRadius: 6 }}
+                  value={retrieveAccount}
+                  onChange={(e) => {
+                    setRetrieveAccount(e.target.value);
+                    if (retrieveResult) setRetrieveResult(null);
+                  }}
+                  onPressEnter={() => {
+                    if (!retrieveAccount.trim()) {
+                      setRetrieveResult('请输入用户名');
+                      return;
+                    }
+                    handleRetrievePassword(retrieveAccount.trim());
+                  }}
+                  autoFocus
                 />
-              )}
-            </div>
+                <Button
+                  type="primary"
+                  block
+                  loading={retrieving}
+                  style={{ marginTop: 16, height: 40, borderRadius: 6 }}
+                  onClick={() => {
+                    if (!retrieveAccount.trim()) {
+                      setRetrieveResult('请输入用户名');
+                      return;
+                    }
+                    handleRetrievePassword(retrieveAccount.trim());
+                  }}
+                >
+                  下一步
+                </Button>
+                {retrieveResult && (
+                  <Alert
+                    title={retrieveResult}
+                    type="warning"
+                    showIcon
+                    style={{ marginTop: 12, borderRadius: 6 }}
+                  />
+                )}
+              </div>
+            ) : (
+              <div style={{ padding: '8px 0 16px', textAlign: 'center' }}>
+                <Alert
+                  type="success"
+                  showIcon
+                  title="密码重置邮件已发送"
+                  description="若账号已绑定邮箱，您将收到密码重置邮件，请注意查收。若长时间未收到，请联系管理员。"
+                  style={{ textAlign: 'left', marginBottom: 20, borderRadius: 6 }}
+                />
+                <Button
+                  type="primary"
+                  block
+                  style={{ height: 40, borderRadius: 6 }}
+                  onClick={() => setRetrieveModalOpen(false)}
+                >
+                  我知道了
+                </Button>
+              </div>
+            )}
           </Modal>
 
           {/* Bottom Copyright */}
