@@ -60,7 +60,7 @@ microservice:
   aslan:
     image:
       repository: aslan
-      tag: 5.0.0-RELEASE.3-1026
+      tag: 5.0.0-RELEASE.3-1105
     serviceStartTimeout: 600
     replicas: 1
     storageClass: ""
@@ -133,7 +133,7 @@ microservice:
   user:
     image:
       repository: user
-      tag: 5.0.0-RELEASE.3-0909
+      tag: 5.0.0-RELEASE.3-1105
     resources:
       limits:
         cpu: 1
@@ -148,7 +148,7 @@ init:
 frontend:
   image:
     repository: zadig-portal
-    tag: 5.0.0-RELEASE.3-1020
+    tag: 5.0.0-RELEASE.3-1105
   resources:
     limits:
       cpu: 1
