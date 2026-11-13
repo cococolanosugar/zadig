@@ -62,6 +62,8 @@ import { feedback } from '../../utils/feedback';
 import { normalizeJobName } from '../../utils/jobname';
 import { useProjectStore } from '../../stores/project';
 import { subscribeSSE } from '../../utils/sse';
+import { LogViewer } from '../../components/Terminal/LogViewer';
+import { logApi } from '../../api/log';
 
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -2009,59 +2011,35 @@ export const QualityCenterPage: React.FC = () => {
                       </Descriptions>
                     )}
 
-                    {/* 实时执行日志 */}
+                    {/* 实时执行日志 (基于 LogViewer 终端与归档下载) */}
                     <Card
                       size="small"
                       title={
                         <Space>
                           <CodeOutlined style={{ color: '#0066ff' }} />
-                          <span>实时执行日志流</span>
+                          <span>测试执行控制台日志</span>
                           <Badge
                             status={sseConnected ? 'processing' : 'default'}
-                            text={sseConnected ? '实时监听中' : '日志流已结束'}
+                            text={sseConnected ? '实时监听中' : '日志就绪'}
                           />
                         </Space>
                       }
-                      extra={
-                        <Button size="small" onClick={() => setTaskLogs([])}>
-                          清空日志
-                        </Button>
-                      }
                     >
-                      <div
-                        style={{
-                          background: '#1e1e1e',
-                          color: '#d4d4d4',
-                          padding: 12,
-                          borderRadius: 6,
-                          fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-                          fontSize: 12,
-                          lineHeight: 1.5,
-                          maxHeight: 300,
-                          overflowY: 'auto',
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-all',
+                      <LogViewer
+                        height={360}
+                        logs={taskLogs}
+                        streamUrl={
+                          reportTask
+                            ? `/api/aslan/logs/sse/testing/${encodeURIComponent(reportTask.name)}/tasks/${reportTask.taskId}`
+                            : undefined
+                        }
+                        onDownloadArchive={() => {
+                          if (reportTask) {
+                            const pName = detailTest?.product_name || projectName || '';
+                            return logApi.getTestingLogs(reportTask.name, reportTask.taskId, pName);
+                          }
                         }}
-                      >
-                        {taskLogs.length > 0 ? (
-                          taskLogs.map((log, index) => {
-                            const isError = log.includes('error') || log.includes('异常') || log.includes('failed');
-                            const isSuccess = log.includes('passed') || log.includes('成功');
-                            return (
-                              <div
-                                key={index}
-                                style={{
-                                  color: isError ? '#f87171' : isSuccess ? '#4ade80' : '#d4d4d4',
-                                }}
-                              >
-                                {log}
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <div style={{ color: '#94a3b8' }}>暂无日志输出，等待实时数据流推送...</div>
-                        )}
-                      </div>
+                      />
                     </Card>
 
                     {/* 任务事件 */}

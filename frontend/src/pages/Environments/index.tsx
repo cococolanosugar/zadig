@@ -48,6 +48,7 @@ import {
   StarOutlined,
   StarFilled,
   ClockCircleOutlined,
+  CloudSyncOutlined,
 } from '@ant-design/icons';
 import { ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
@@ -166,6 +167,9 @@ export const EnvironmentsPage: React.FC = () => {
   const deepLinkEnv = searchParams.get('envName') || '';
   const deepLinkPod = searchParams.get('podName') || '';
   const isSAEChangeOrderRoute = location.pathname.includes('/sae/changeOrder');
+  const saeOrderIdMatch = location.pathname.match(/\/sae\/changeOrder\/([^/]+)/);
+  const initialSaeOrderId = saeOrderIdMatch ? saeOrderIdMatch[1] : undefined;
+  const [saeDrawerOpen, setSaeDrawerOpen] = useState(false);
 
   // CC-Loop02 P0-1: 测试/生产环境切换
   const [isProdMode, setIsProdMode] = useState(
@@ -1029,6 +1033,14 @@ export const EnvironmentsPage: React.FC = () => {
               >
                 变更记录
               </Button>
+              <Button
+                icon={<CloudSyncOutlined />}
+                onClick={() => {
+                  setSaeDrawerOpen(true);
+                }}
+              >
+                SAE 变更单
+              </Button>
               <Tooltip
                 title={
                   currentEnvIsSleeping ? '环境处于睡眠状态，请先唤醒环境后再操作' : undefined
@@ -1587,12 +1599,18 @@ export const EnvironmentsPage: React.FC = () => {
         />
       )}
 
-      {/* SAE 变更单抽屉 (P0-02 专属交互；深链 /sae/changeOrder* 自动打开，?envName= 携带环境) */}
+      {/* SAE 变更单抽屉 (P0-02 专属交互；深链 /sae/changeOrder* 或工具栏按钮打开，?envName= 携带环境) */}
       <SAEChangeOrderDrawer
-        open={isSAEChangeOrderRoute}
+        open={isSAEChangeOrderRoute || saeDrawerOpen}
         projectName={activeProject || undefined}
-        envName={deepLinkEnv || undefined}
-        onClose={() => navigate(activeProject ? `/v1/projects/detail/${activeProject}/envs` : '/v1/envs')}
+        envName={deepLinkEnv || currentEnv || undefined}
+        initialOrderId={initialSaeOrderId}
+        onClose={() => {
+          setSaeDrawerOpen(false);
+          if (isSAEChangeOrderRoute) {
+            navigate(activeProject ? `/v1/projects/detail/${activeProject}/envs` : '/v1/envs');
+          }
+        }}
       />
 
       {/* 节点列表抽屉 (对齐旧版 kube GET /nodes 节点健康与 IP) */}

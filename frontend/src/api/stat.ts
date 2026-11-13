@@ -393,6 +393,11 @@ export const statApi = {
     if (projects) projects.forEach((p) => q.append('projects', p));
     return http.get(`/api/aslan/stat/v2/ai/requirement/period?${q.toString()}`, { skipErrorHandler: true });
   },
+
+  // 测试质量趋势 (POST /api/aslan/stat/quality/testTrend)
+  getQualityTestTrend(payload: QualityStatReq): Promise<unknown> {
+    return http.post('/api/aslan/stat/quality/testTrend', payload, { skipErrorHandler: true });
+  },
 };
 
 export default statApi;

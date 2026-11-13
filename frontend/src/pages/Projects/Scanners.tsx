@@ -49,6 +49,7 @@ import dayjs from 'dayjs';
 import LogViewer from '../../components/Terminal/LogViewer';
 import type { ColumnsType } from 'antd/es/table';
 import http from '../../api/client';
+import { logApi } from '../../api/log';
 import { normalizeJobName } from '../../utils/jobname';
 import { feedback } from '../../utils/feedback';
 import { settingsApi, type ClusterItem } from '../../api/settings';
@@ -1877,14 +1878,18 @@ export const ScannersPage: React.FC = () => {
         placement="right"
         open={!!taskDrawer}
         onClose={() => setTaskDrawer(null)}
+        destroyOnHidden
         size="large"
       >
         {taskDrawer && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <Card size="small" title="执行控制台日志 (SSE)">
               <LogViewer
-                height={320}
-                streamUrl={`/api/aslan/testing/scanning/${taskDrawer.scannerId}/task/${taskDrawer.taskId}/sse`}
+                height={360}
+                streamUrl={`/api/aslan/logs/sse/scanning/${encodeURIComponent(String(taskDrawer.scannerId))}/task/${taskDrawer.taskId}`}
+                onDownloadArchive={() =>
+                  logApi.getScanningLogs(String(taskDrawer.scannerId), taskDrawer.taskId, projectName)
+                }
               />
             </Card>
 

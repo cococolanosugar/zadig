@@ -223,6 +223,16 @@ export const projectApi = {
   async deleteProjectCodeProvider(projectName: string, id: string | number): Promise<any> {
     return http.delete(`/api/aslan/project/integration/${encodeURIComponent(projectName)}/codehosts/${id}`);
   },
+
+  /**
+   * 更新生产项目环境产品定义
+   * PATCH /api/aslan/project/production/products/:projectName?projectName=
+   */
+  async updateProductionProduct(projectName: string, payload: unknown): Promise<unknown> {
+    return http.patch(`/api/aslan/project/production/products/${encodeURIComponent(projectName)}?projectName=${encodeURIComponent(projectName)}`, payload, {
+      skipErrorHandler: true,
+    });
+  },
 };
 
 export interface CustomRule {

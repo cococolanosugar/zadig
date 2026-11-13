@@ -849,6 +849,41 @@ export const serviceApi = {
     );
     return Array.isArray(res) ? res : [];
   },
+
+  /**
+   * Harbor Chart 历史版本查询
+   * GET /api/aslan/service/harbor/project/:projectId/chart/:chartName/versions?projectName=
+   */
+  async getHarborChartVersions(projectId: string | number, chartName: string, projectName: string): Promise<unknown[]> {
+    const res = await http.get<unknown[]>(
+      `/api/aslan/service/harbor/project/${encodeURIComponent(String(projectId))}/chart/${encodeURIComponent(chartName)}/versions?projectName=${encodeURIComponent(projectName)}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 按项目与环境获取服务工作负载
+   * GET /api/aslan/service/workloads?projectName=&env=&production=
+   */
+  async getServiceWorkloads(projectName: string, env: string, production = false): Promise<unknown[]> {
+    const prodParam = production ? '&production=true' : '';
+    const res = await http.get<unknown[]>(
+      `/api/aslan/service/workloads?projectName=${encodeURIComponent(projectName)}&env=${encodeURIComponent(env)}${prodParam}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 校验服务更新可行性
+   * GET /api/aslan/services/validateUpdate/:serviceName?projectName=
+   */
+  async validateServiceUpdate(serviceName: string, projectName: string): Promise<unknown> {
+    return http.get(`/api/aslan/services/validateUpdate/${encodeURIComponent(serviceName)}?projectName=${encodeURIComponent(projectName)}`, {
+      skipErrorHandler: true,
+    });
+  },
 };
 
 export default serviceApi;

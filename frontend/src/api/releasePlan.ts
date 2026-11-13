@@ -120,6 +120,14 @@ export const releasePlanApi = {
       schedule_execute_time: executeTime,
     });
   },
+
+  /**
+   * 发布计划 Webhook 回调接收地址
+   * POST /api/callback/release_plan
+   */
+  getWebhookCallbackUrl(): string {
+    return `${window.location.origin}/api/callback/release_plan`;
+  },
 };
 
 export interface ReleasePlanHookSettings {

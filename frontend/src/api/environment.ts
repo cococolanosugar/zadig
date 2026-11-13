@@ -986,6 +986,297 @@ export const environmentApi = {
       { skipErrorHandler: true }
     );
   },
+
+  /**
+   * 确认并开始执行 SAE 变更单的下一个分批 (Batch)
+   * POST /api/aslan/environment/environments/sae/:envName/app/:appID/pipeline/:pipelineID/confirmPipelineBatch
+   */
+  async confirmSAEPipelineBatch(
+    envName: string,
+    appID: string,
+    pipelineID: string,
+    opts: SAEChangeOrderOptions = {}
+  ): Promise<unknown> {
+    const q = new URLSearchParams();
+    if (opts.projectName) q.set('projectName', opts.projectName);
+    if (opts.production !== undefined) q.set('production', String(opts.production));
+    return http.post(
+      `/api/aslan/environment/environments/sae/${encodeURIComponent(envName)}/app/${encodeURIComponent(appID)}/pipeline/${encodeURIComponent(pipelineID)}/confirmPipelineBatch?${q.toString()}`,
+      {},
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * 获取 SAE 变更单中特定分批流水线 (Pipeline) 的执行状态与实例详情
+   * GET /api/aslan/environment/environments/sae/:envName/app/:appID/pipeline/:pipelineID
+   */
+  async getSAEPipeline(
+    envName: string,
+    appID: string,
+    pipelineID: string,
+    opts: SAEChangeOrderOptions = {}
+  ): Promise<SAEPipelineItem> {
+    const q = new URLSearchParams();
+    if (opts.projectName) q.set('projectName', opts.projectName);
+    if (opts.production !== undefined) q.set('production', String(opts.production));
+    return http.get<SAEPipelineItem>(
+      `/api/aslan/environment/environments/sae/${encodeURIComponent(envName)}/app/${encodeURIComponent(appID)}/pipeline/${encodeURIComponent(pipelineID)}?${q.toString()}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * 获取指定集群和命名空间下的自定义工作负载列表
+   * GET /api/aslan/environment/kube/custom_workload/cluster/:clusterID/namespace/:namespace
+   */
+  async listCustomWorkload(clusterId: string, namespace: string): Promise<unknown[]> {
+    const res = await http.get<unknown[]>(
+      `/api/aslan/environment/kube/custom_workload/cluster/${encodeURIComponent(clusterId)}/namespace/${encodeURIComponent(namespace)}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 获取指定集群和命名空间下的 Deployment 名称列表
+   * GET /api/aslan/environment/kube/deployment/cluster/:clusterID/namespace/:namespace
+   */
+  async listDeploymentNames(clusterId: string, namespace: string): Promise<string[]> {
+    const res = await http.get<string[]>(
+      `/api/aslan/environment/kube/deployment/cluster/${encodeURIComponent(clusterId)}/namespace/${encodeURIComponent(namespace)}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 查询 K8s 资源部署状态
+   * POST /api/aslan/environment/kube/k8s/resources
+   */
+  async getK8sResourceDeployStatus(payload: K8sDeployStatusCheckRequest): Promise<Record<string, unknown>> {
+    return http.post<Record<string, unknown>>('/api/aslan/environment/kube/k8s/resources', payload, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 查询 Helm Release 部署状态
+   * POST /api/aslan/environment/kube/helm/releases
+   */
+  async getHelmDeployStatus(payload: HelmDeployStatusCheckRequest): Promise<Record<string, unknown>> {
+    return http.post<Record<string, unknown>>('/api/aslan/environment/kube/helm/releases', payload, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 查询 Helm Release Instance 部署状态
+   * POST /api/aslan/environment/kube/helm/releaseInstances
+   */
+  async getHelmInstanceDeployStatus(payload: HelmDeployStatusCheckRequest): Promise<Record<string, unknown>> {
+    return http.post<Record<string, unknown>>('/api/aslan/environment/kube/helm/releaseInstances', payload, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 获取指定集群的命名空间列表
+   * GET /api/aslan/environment/kube/namespace/cluster/:clusterID
+   */
+  async listClusterNamespaces(clusterId: string): Promise<string[]> {
+    const res = await http.get<string[]>(
+      `/api/aslan/environment/kube/namespace/cluster/${encodeURIComponent(clusterId)}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 获取集群命名空间下的所有 K8s 资源清单
+   * GET /api/aslan/environment/kube/resources/cluster/:clusterID/namespace/:namespace
+   */
+  async listClusterK8sResources(clusterId: string, namespace: string): Promise<unknown> {
+    return http.get(
+      `/api/aslan/environment/kube/resources/cluster/${encodeURIComponent(clusterId)}/namespace/${encodeURIComponent(namespace)}`,
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * 按资源类型获取 K8s 资源概览 (configmaps, secrets, ingresses, pvcs)
+   * GET /api/aslan/environment/kube/resources/:resourceType
+   */
+  async listK8sResourceOverview(resourceType: string, params: { envName: string; projectName: string }): Promise<unknown[]> {
+    const q = new URLSearchParams(params);
+    const res = await http.get<unknown[]>(
+      `/api/aslan/environment/kube/resources/${encodeURIComponent(resourceType)}?${q.toString()}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 按工作负载类型获取工作负载概览 (deployments, statefulsets, daemonsets, cronjobs, jobs)
+   * GET /api/aslan/environment/kube/workloads/:workloadType
+   */
+  async listK8sWorkloadOverview(workloadType: string, params: { envName: string; projectName: string }): Promise<unknown[]> {
+    const q = new URLSearchParams(params);
+    const res = await http.get<unknown[]>(
+      `/api/aslan/environment/kube/workloads/${encodeURIComponent(workloadType)}?${q.toString()}`,
+      { skipErrorHandler: true }
+    );
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 获取环境下的 ConfigMaps 资源
+   * GET /api/aslan/environment/kube/resources/configmaps?projectName=&envName=&page=&pageSize=
+   */
+  async getConfigMaps(projectName: string, envName: string, page = 1, pageSize = 999): Promise<unknown> {
+    return http.get(`/api/aslan/environment/kube/resources/configmaps?projectName=${encodeURIComponent(projectName)}&envName=${encodeURIComponent(envName)}&page=${page}&pageSize=${pageSize}`, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 获取环境下的 Ingresses 资源
+   * GET /api/aslan/environment/kube/resources/ingresses?projectName=&envName=&page=&pageSize=
+   */
+  async getIngresses(projectName: string, envName: string, page = 1, pageSize = 999): Promise<unknown> {
+    return http.get(`/api/aslan/environment/kube/resources/ingresses?projectName=${encodeURIComponent(projectName)}&envName=${encodeURIComponent(envName)}&page=${page}&pageSize=${pageSize}`, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 获取环境下的 PVCs 资源
+   * GET /api/aslan/environment/kube/resources/pvcs?projectName=&envName=&page=&pageSize=
+   */
+  async getPvcs(projectName: string, envName: string, page = 1, pageSize = 999): Promise<unknown> {
+    return http.get(`/api/aslan/environment/kube/resources/pvcs?projectName=${encodeURIComponent(projectName)}&envName=${encodeURIComponent(envName)}&page=${page}&pageSize=${pageSize}`, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 获取环境下的 Secrets 资源
+   * GET /api/aslan/environment/kube/resources/secrets?projectName=&envName=&page=&pageSize=
+   */
+  async getSecrets(projectName: string, envName: string, page = 1, pageSize = 999): Promise<unknown> {
+    return http.get(`/api/aslan/environment/kube/resources/secrets?projectName=${encodeURIComponent(projectName)}&envName=${encodeURIComponent(envName)}&page=${page}&pageSize=${pageSize}`, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 获取环境下的 Services 资源
+   * GET /api/aslan/environment/kube/resources/services?projectName=&envName=&page=&pageSize=
+   */
+  async getServices(projectName: string, envName: string, page = 1, pageSize = 999): Promise<unknown> {
+    return http.get(`/api/aslan/environment/kube/resources/services?projectName=${encodeURIComponent(projectName)}&envName=${encodeURIComponent(envName)}&page=${page}&pageSize=${pageSize}`, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 获取指定集群命名空间下的所有资源
+   * GET /api/aslan/environment/kube/resources/cluster/:clusterId/namespace/:namespace
+   */
+  async getClusterNamespaceResources(clusterId: string, namespace: string): Promise<unknown[]> {
+    const res = await http.get<unknown[]>(`/api/aslan/environment/kube/resources/cluster/${encodeURIComponent(clusterId)}/namespace/${encodeURIComponent(namespace)}`, {
+      skipErrorHandler: true,
+    });
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 获取指定集群命名空间下的 Deployments
+   * GET /api/aslan/environment/kube/deployment/cluster/:clusterId/namespace/:namespace
+   */
+  async getClusterNamespaceDeployments(clusterId: string, namespace: string): Promise<unknown[]> {
+    const res = await http.get<unknown[]>(`/api/aslan/environment/kube/deployment/cluster/${encodeURIComponent(clusterId)}/namespace/${encodeURIComponent(namespace)}`, {
+      skipErrorHandler: true,
+    });
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 获取指定集群命名空间下的工作负载列表
+   * GET /api/aslan/environment/kube/workload/cluster/:clusterId/namespace/:namespace
+   */
+  async getClusterNamespaceWorkloads(clusterId: string, namespace: string): Promise<unknown[]> {
+    const res = await http.get<unknown[]>(`/api/aslan/environment/kube/workload/cluster/${encodeURIComponent(clusterId)}/namespace/${encodeURIComponent(namespace)}`, {
+      skipErrorHandler: true,
+    });
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 细化 K8s 工作负载概览查询
+   */
+  async listDeploymentsOverview(params: { envName: string; projectName: string }): Promise<unknown[]> {
+    const q = new URLSearchParams(params);
+    const res = await http.get<unknown[]>(`/api/aslan/environment/kube/workloads/deployments?${q.toString()}`, { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
+  },
+
+  async listStatefulSetsOverview(params: { envName: string; projectName: string }): Promise<unknown[]> {
+    const q = new URLSearchParams(params);
+    const res = await http.get<unknown[]>(`/api/aslan/environment/kube/workloads/statefulsets?${q.toString()}`, { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
+  },
+
+  async listDaemonSetsOverview(params: { envName: string; projectName: string }): Promise<unknown[]> {
+    const q = new URLSearchParams(params);
+    const res = await http.get<unknown[]>(`/api/aslan/environment/kube/workloads/daemonsets?${q.toString()}`, { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
+  },
+
+  async listCronJobsOverview(params: { envName: string; projectName: string }): Promise<unknown[]> {
+    const q = new URLSearchParams(params);
+    const res = await http.get<unknown[]>(`/api/aslan/environment/kube/workloads/cronjobs?${q.toString()}`, { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
+  },
+
+  async listJobsOverview(params: { envName: string; projectName: string }): Promise<unknown[]> {
+    const q = new URLSearchParams(params);
+    const res = await http.get<unknown[]>(`/api/aslan/environment/kube/workloads/jobs?${q.toString()}`, { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 构造容器在线终端 Web Terminal WebSocket 连接地址
+   * 非生产: ws(s)://<host>/api/podexec/:projectName/:podName/:containerName/podExec/:envName?projectName=
+   * 生产:   ws(s)://<host>/api/podexec/production/:projectName/:podName/:containerName/podExec/:envName?projectName=
+   * 调试:   ws(s)://<host>/api/podexec/debug/:workflowName/:jobName/task/:taskId?projectName=&token=
+   */
+  getPodExecWsUrl(params: {
+    projectName: string;
+    envName: string;
+    podName: string;
+    containerName: string;
+    isProd?: boolean;
+  }): string {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const base = params.isProd ? '/api/podexec/production/' : '/api/podexec/';
+    return `${proto}//${window.location.host}${base}${encodeURIComponent(params.projectName)}/${encodeURIComponent(params.podName)}/${encodeURIComponent(params.containerName)}/podExec/${encodeURIComponent(params.envName)}?projectName=${encodeURIComponent(params.projectName)}`;
+  },
+
+  getWorkflowDebugPodExecWsUrl(params: {
+    projectName: string;
+    workflowName: string;
+    jobName: string;
+    taskId: number | string;
+    token?: string;
+  }): string {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const q = new URLSearchParams({
+      projectName: params.projectName,
+      token: params.token || '',
+    });
+    return `${proto}//${window.location.host}/api/podexec/debug/${encodeURIComponent(params.workflowName)}/${encodeURIComponent(params.jobName)}/task/${encodeURIComponent(String(params.taskId))}?${q.toString()}`;
+  },
 };
 
 export interface EnvSvcRevision {
@@ -1266,6 +1557,39 @@ export interface SAEChangeOrderOptions {
   production?: boolean;
   page?: number;
   per_page?: number;
+}
+
+export interface SAEPipelineItem {
+  pipeline_id?: string;
+  pipeline_name?: string;
+  status?: number;
+  next_pipeline_id?: string;
+  batch?: number;
+  parallel_count?: number;
+  instances?: Array<{
+    instance_id?: string;
+    ip?: string;
+    status?: string | number;
+    progress?: number;
+  }>;
+  [key: string]: unknown;
+}
+
+export interface K8sDeployStatusCheckRequest {
+  env_name: string;
+  services: Array<{
+    service_name: string;
+    type?: string;
+  }>;
+  cluster_id: string;
+  namespace: string;
+}
+
+export interface HelmDeployStatusCheckRequest {
+  env_name: string;
+  services: string[];
+  cluster_id: string;
+  namespace: string;
 }
 
 export interface EnvironmentItem {

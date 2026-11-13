@@ -1,34 +1,73 @@
-import React, { useEffect, useState } from 'react';
-import { Drawer, Table, Tag, Typography, Space, Button, Select, Alert, Tooltip } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  Drawer,
+  Table,
+  Tag,
+  Typography,
+  Space,
+  Button,
+  Select,
+  Alert,
+  Steps,
+  Card,
+  Descriptions,
+  Progress,
+} from 'antd';
+import {
+  ReloadOutlined,
+  PlayCircleOutlined,
+  RollbackOutlined,
+  StopOutlined,
+  SyncOutlined,
+} from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import environmentApi, {
   type SAEChangeOrderItem,
   type SAEAppItem,
   type SAEChangeOrderListResponse,
+  type SAEPipelineItem,
   type EnvironmentItem,
 } from '../../api/environment';
 import { feedback } from '../../utils/feedback';
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 interface SAEChangeOrderDrawerProps {
   open: boolean;
   projectName?: string;
   /** 深链 ?envName= 携带的环境名；为空时抽屉内提供 SAE 环境选择 */
   envName?: string;
+  initialOrderId?: string;
   onClose: () => void;
 }
 
-// 阿里云 SAE 变更单状态：0 准备 / 1 执行中 / 2 成功 / 3 失败（10+ 为系统/终止类，按进行中呈现）
+const ORDER_STATUS_MAP: Record<number, { text: string; color: string; badge: 'default' | 'processing' | 'success' | 'error' | 'warning' }> = {
+  0: { text: '准备中', color: 'default', badge: 'default' },
+  1: { text: '执行中', color: 'processing', badge: 'processing' },
+  2: { text: '执行成功', color: 'success', badge: 'success' },
+  3: { text: '执行失败', color: 'error', badge: 'error' },
+  6: { text: '已终止', color: 'warning', badge: 'warning' },
+  8: { text: '待手动确认', color: 'warning', badge: 'warning' },
+  9: { text: '回滚待确认', color: 'warning', badge: 'warning' },
+  10: { text: '回滚失败', color: 'error', badge: 'error' },
+  12: { text: '回滚终止', color: 'warning', badge: 'warning' },
+};
+
+const ORDER_TYPE_MAP: Record<string, string> = {
+  CoBatchUpdate: '分批更新',
+  CoRollback: '一键回滚',
+  CoScale: '容量伸缩',
+  CoRestart: '实例重启',
+  CoStop: '停止实例',
+  CoStart: '启动实例',
+};
+
 const renderOrderStatus = (status: number | string | undefined) => {
   if (status === undefined || status === null || status === '') return <Tag color="default">未知</Tag>;
   const s = typeof status === 'number' ? status : Number(status);
-  if (!Number.isNaN(s)) {
-    if (s === 2) return <Tag color="success">成功</Tag>;
-    if (s === 3) return <Tag color="error">失败</Tag>;
-    if (s === 0) return <Tag color="default">准备中</Tag>;
-    if (s === 1 || s >= 10) return <Tag color="processing">进行中</Tag>;
+  const cfg = ORDER_STATUS_MAP[s];
+  if (cfg) {
+    return <Tag color={cfg.color}>{cfg.text}</Tag>;
   }
   return <Tag color="default">{String(status)}</Tag>;
 };
@@ -37,18 +76,19 @@ const fmtTime = (t: number | string | undefined) => {
   if (t === undefined || t === null || t === '') return '-';
   const n = typeof t === 'string' && !/^\d+$/.test(t) ? t : Number(t);
   if (typeof n === 'number' && !Number.isNaN(n)) {
-    const ms = n < 1e12 ? n * 1000 : n; // 秒级时间戳兼容
+    const ms = n < 1e12 ? n * 1000 : n;
     return new Date(ms).toLocaleString();
   }
   return String(t);
 };
 
-/**
- * SAE 变更单抽屉（P0-02 专属交互）
- * 层级选择：SAE 环境 → SAE 应用 → 变更单列表；支持详情、中止与回滚（均带二次确认）。
- * 契约：pkg/microservice/aslan/core/environment/handler/router.go:232,237-245（列表/详情/中止/回滚需 SAE License 特性）
- */
-const SAEChangeOrderDrawer: React.FC<SAEChangeOrderDrawerProps> = ({ open, projectName, envName, onClose }) => {
+export const SAEChangeOrderDrawer: React.FC<SAEChangeOrderDrawerProps> = ({
+  open,
+  projectName,
+  envName,
+  initialOrderId,
+  onClose,
+}) => {
   const [envs, setEnvs] = useState<EnvironmentItem[]>([]);
   const [selectedEnv, setSelectedEnv] = useState<string | undefined>(undefined);
   const [production, setProduction] = useState<boolean>(false);
@@ -58,14 +98,18 @@ const SAEChangeOrderDrawer: React.FC<SAEChangeOrderDrawerProps> = ({ open, proje
   const [loading, setLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
-  // 详情内嵌展开（阿里云透传结构，防御性渲染已知字段）
+
+  // 变更单详情状态
   const [detail, setDetail] = useState<SAEChangeOrderItem | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [activePipeline, setActivePipeline] = useState<SAEPipelineItem | null>(null);
+  const [pipelineLoading, setPipelineLoading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setSelectedEnv(envName || undefined);
     setDetail(null);
+    setActivePipeline(null);
     setListError(null);
   }, [open, envName]);
 
@@ -110,7 +154,7 @@ const SAEChangeOrderDrawer: React.FC<SAEChangeOrderDrawerProps> = ({ open, proje
   }, [open, selectedEnv, production, projectName]);
 
   // 应用确定后拉取变更单列表
-  const fetchOrders = React.useCallback(async () => {
+  const fetchOrders = useCallback(async () => {
     if (!selectedEnv || !selectedApp) {
       setOrders([]);
       return;
@@ -123,14 +167,16 @@ const SAEChangeOrderDrawer: React.FC<SAEChangeOrderDrawerProps> = ({ open, proje
         production,
       });
       setOrders(res.change_order_list || []);
+      if (initialOrderId) {
+        handleViewDetail(initialOrderId);
+      }
     } catch (err: unknown) {
-      // 社区部署未启用 SAE License 时后端会返回许可错误，原样呈现给用户
       setOrders([]);
       setListError(err instanceof Error ? err.message : '变更单列表获取失败');
     } finally {
       setLoading(false);
     }
-  }, [selectedEnv, selectedApp, projectName, production]);
+  }, [selectedEnv, selectedApp, projectName, production, initialOrderId]);
 
   useEffect(() => {
     if (open) fetchOrders();
@@ -140,8 +186,26 @@ const SAEChangeOrderDrawer: React.FC<SAEChangeOrderDrawerProps> = ({ open, proje
     setSelectedEnv(name);
     setSelectedApp(undefined);
     setOrders([]);
+    setDetail(null);
+    setActivePipeline(null);
     const env = envs.find((e) => e.name === name);
     setProduction(Boolean(env?.production));
+  };
+
+  const loadPipelineDetail = async (pipelineId: string) => {
+    if (!selectedEnv || !selectedApp) return;
+    setPipelineLoading(true);
+    try {
+      const p = await environmentApi.getSAEPipeline(selectedEnv, selectedApp, pipelineId, {
+        projectName,
+        production,
+      });
+      setActivePipeline(p);
+    } catch {
+      // 容错处理
+    } finally {
+      setPipelineLoading(false);
+    }
   };
 
   const handleViewDetail = async (orderId: string) => {
@@ -153,10 +217,37 @@ const SAEChangeOrderDrawer: React.FC<SAEChangeOrderDrawerProps> = ({ open, proje
         production,
       });
       setDetail(res);
+
+      // 若包含流水线批次，默认加载第一批
+      const pipelines = (res.pipelines as Array<{ pipeline_id?: string }>) || [];
+      if (pipelines.length > 0 && pipelines[0].pipeline_id) {
+        loadPipelineDetail(pipelines[0].pipeline_id);
+      }
     } catch (err: unknown) {
       feedback.message.error(err instanceof Error ? err.message : '变更单详情获取失败');
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const handleStartNextBatch = async () => {
+    if (!selectedEnv || !selectedApp || !activePipeline?.next_pipeline_id) return;
+    setActing('next_batch');
+    try {
+      await environmentApi.confirmSAEPipelineBatch(
+        selectedEnv,
+        selectedApp,
+        activePipeline.next_pipeline_id,
+        { projectName, production }
+      );
+      feedback.message.success('已触发开始下一批次变更');
+      if (detail?.change_order_id) {
+        await handleViewDetail(String(detail.change_order_id));
+      }
+    } catch (err: unknown) {
+      feedback.message.error(err instanceof Error ? err.message : '执行下一批失败');
+    } finally {
+      setActing(null);
     }
   };
 
@@ -177,6 +268,9 @@ const SAEChangeOrderDrawer: React.FC<SAEChangeOrderDrawerProps> = ({ open, proje
           });
           feedback.message.success('变更单已中止');
           await fetchOrders();
+          if (detail?.change_order_id === order.change_order_id) {
+            handleViewDetail(order.change_order_id as string);
+          }
         } catch (err: unknown) {
           feedback.message.error(err instanceof Error ? err.message : '中止失败');
         } finally {
@@ -203,6 +297,9 @@ const SAEChangeOrderDrawer: React.FC<SAEChangeOrderDrawerProps> = ({ open, proje
           });
           feedback.message.success('回滚已发起');
           await fetchOrders();
+          if (detail?.change_order_id === order.change_order_id) {
+            handleViewDetail(order.change_order_id as string);
+          }
         } catch (err: unknown) {
           feedback.message.error(err instanceof Error ? err.message : '回滚失败');
         } finally {
@@ -214,39 +311,88 @@ const SAEChangeOrderDrawer: React.FC<SAEChangeOrderDrawerProps> = ({ open, proje
 
   const columns: ColumnsType<SAEChangeOrderItem> = [
     {
-      title: '变更单',
+      title: '变更单 ID',
       key: 'order',
       width: 220,
       render: (_, r) => (
         <div>
-          <Text strong style={{ display: 'block' }}>{r.change_order_name || r.change_order_id || '-'}</Text>
-          <Text type="secondary" style={{ fontSize: 12 }}>{r.change_order_id || ''}</Text>
+          <Text strong style={{ display: 'block' }}>
+            {r.change_order_name || r.change_order_id || '-'}
+          </Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {r.change_order_id || ''}
+          </Text>
         </div>
       ),
     },
-    { title: '变更类型', dataIndex: 'co_type', key: 'co_type', width: 120, render: (t) => <Tag color="geekblue">{String(t || '-')}</Tag> },
-    { title: '状态', dataIndex: 'status', key: 'status', width: 100, render: (s) => renderOrderStatus(s) },
-    { title: '创建人', dataIndex: 'create_user_id', key: 'create_user_id', width: 130, render: (u) => String(u || '-') },
-    { title: '创建时间', dataIndex: 'create_time', key: 'create_time', width: 160, render: (t) => fmtTime(t) },
+    {
+      title: '变更类型',
+      dataIndex: 'co_type',
+      key: 'co_type',
+      width: 120,
+      render: (t) => {
+        const name = ORDER_TYPE_MAP[String(t)] || String(t || '-');
+        return <Tag color="geekblue">{name}</Tag>;
+      },
+    },
+    {
+      title: '分批状态',
+      key: 'batch',
+      width: 120,
+      render: (_, r) => {
+        const count = typeof r.batch_count === 'number' ? r.batch_count : 1;
+        return (
+          <Tag color="cyan">
+            {count > 1 ? `${count} 批分步` : '全量单批'}
+          </Tag>
+        );
+      },
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 120,
+      render: (s) => renderOrderStatus(s),
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'create_time',
+      key: 'create_time',
+      width: 170,
+      render: (t) => fmtTime(t),
+    },
     {
       title: '操作',
       key: 'action',
-      width: 230,
+      width: 200,
       render: (_, r) => (
-        <Space size={0}>
-          <Button type="link" size="small" loading={detailLoading && detail?.change_order_id === r.change_order_id} onClick={() => handleViewDetail(r.change_order_id as string)}>
+        <Space size="small">
+          <Button
+            type="link"
+            size="small"
+            loading={detailLoading && detail?.change_order_id === r.change_order_id}
+            onClick={() => handleViewDetail(r.change_order_id as string)}
+          >
             详情
           </Button>
-          <Tooltip title="中止执行中的变更">
-            <Button type="link" size="small" danger loading={acting === r.change_order_id} onClick={() => handleAbort(r)}>
-              中止变更
-            </Button>
-          </Tooltip>
-          <Tooltip title="回滚到上一个稳定版本">
-            <Button type="link" size="small" danger onClick={() => handleRollback(r)}>
-              一键回滚
-            </Button>
-          </Tooltip>
+          <Button
+            type="link"
+            size="small"
+            danger
+            loading={acting === r.change_order_id}
+            onClick={() => handleAbort(r)}
+          >
+            中止
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            danger
+            onClick={() => handleRollback(r)}
+          >
+            回滚
+          </Button>
         </Space>
       ),
     },
@@ -258,7 +404,10 @@ const SAEChangeOrderDrawer: React.FC<SAEChangeOrderDrawerProps> = ({ open, proje
       placeholder="选择 SAE 环境"
       value={selectedEnv}
       onChange={handleEnvChange}
-      options={envs.map((e) => ({ label: `${e.alias || e.name}${e.production ? '（生产）' : ''}`, value: e.name }))}
+      options={envs.map((e) => ({
+        label: `${e.alias || e.name}${e.production ? '（生产）' : ''}`,
+        value: e.name,
+      }))}
       notFoundContent="当前项目暂无 SAE 环境"
     />
   );
@@ -268,41 +417,47 @@ const SAEChangeOrderDrawer: React.FC<SAEChangeOrderDrawerProps> = ({ open, proje
       style={{ width: 240 }}
       placeholder="选择 SAE 应用"
       value={selectedApp}
-      onChange={(v) => setSelectedApp(v)}
-      options={apps.map((a) => ({ label: a.app_name || a.app_id || '-', value: a.app_id || '' }))}
+      onChange={(v) => {
+        setSelectedApp(v);
+        setDetail(null);
+        setActivePipeline(null);
+      }}
+      options={apps.map((a) => ({
+        label: a.app_name || a.app_id || '-',
+        value: a.app_id || '',
+      }))}
       notFoundContent="该环境下暂无 SAE 应用"
     />
   );
 
   return (
     <Drawer
-      title="SAE 变更单"
+      title="阿里云 SAE 变更单管理"
       placement="right"
       open={open}
       onClose={onClose}
+      destroyOnHidden
       size="large"
       extra={
-        <Button icon={<ReloadOutlined />} onClick={fetchOrders} disabled={!selectedEnv || !selectedApp}>
-          刷新
-        </Button>
+        <Space>
+          <Button icon={<ReloadOutlined />} onClick={fetchOrders} disabled={!selectedEnv || !selectedApp}>
+            刷新
+          </Button>
+        </Space>
       }
     >
       <Space orientation="horizontal" size={12} style={{ marginBottom: 16 }} wrap>
-        {envName ? (
-          <Text strong>环境: {envName}</Text>
-        ) : (
-          envSelect
-        )}
+        {envName ? <Text strong>环境: {envName}</Text> : envSelect}
         {appSelect}
       </Space>
 
       {listError ? (
         <div style={{ textAlign: 'center', padding: '32px 0' }}>
-            <Alert
-              type="error"
-              showIcon
-              title="数据加载失败"
-              description={listError}
+          <Alert
+            type="error"
+            showIcon
+            title="数据加载失败"
+            description={listError}
             style={{ maxWidth: 520, margin: '0 auto 16px', textAlign: 'left' }}
           />
           <Button icon={<ReloadOutlined />} onClick={fetchOrders} disabled={!selectedEnv || !selectedApp}>
@@ -317,43 +472,147 @@ const SAEChangeOrderDrawer: React.FC<SAEChangeOrderDrawerProps> = ({ open, proje
           columns={columns}
           pagination={{ pageSize: 10, showSizeChanger: false }}
           locale={{
-            emptyText: selectedEnv && selectedApp ? '该应用暂无变更单' : '请先选择 SAE 环境与应用',
+            emptyText: selectedEnv && selectedApp ? '该应用暂无变更单流水' : '请先选择 SAE 环境与应用',
           }}
         />
       )}
 
+      {/* 变更单详情抽屉 / 卡片 */}
       {detail && (
-        <div style={{ marginTop: 24 }}>
-          <Space orientation="horizontal" size={8} style={{ marginBottom: 8 }}>
-            <Text strong>变更单详情: {detail.change_order_name || detail.change_order_id}</Text>
-            {renderOrderStatus(detail.status)}
-          </Space>
-          {detail.desc ? (
-            <Paragraph type="secondary" style={{ fontSize: 13 }}>{String(detail.desc)}</Paragraph>
-          ) : null}
-          {/* 阿里云 DescribeChangeOrder 透传字段防御性渲染：描述与流水线阶段 */}
-          {Array.isArray(detail.descriptions) && detail.descriptions.length > 0 ? (
-            <div style={{ marginBottom: 12 }}>
-              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>变更描述</Text>
-              {(detail.descriptions as unknown[]).map((d, i) => (
-                <Tag key={i} color="blue" style={{ marginBottom: 4 }}>{String(d)}</Tag>
-              ))}
+        <Card
+          size="small"
+          title={`变更单详情: ${detail.change_order_name || detail.change_order_id}`}
+          style={{ marginTop: 24 }}
+          extra={
+            <Space>
+              {activePipeline?.next_pipeline_id && (
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<PlayCircleOutlined />}
+                  loading={acting === 'next_batch'}
+                  onClick={handleStartNextBatch}
+                >
+                  执行下一批
+                </Button>
+              )}
+              <Button
+                size="small"
+                danger
+                icon={<RollbackOutlined />}
+                onClick={() => handleRollback(detail)}
+              >
+                一键回滚
+              </Button>
+              <Button
+                size="small"
+                danger
+                icon={<StopOutlined />}
+                onClick={() => handleAbort(detail)}
+              >
+                中止变更
+              </Button>
+            </Space>
+          }
+        >
+          <Descriptions size="small" column={{ xs: 1, sm: 2, md: 3 }} bordered>
+            <Descriptions.Item label="变更单 ID">{detail.change_order_id}</Descriptions.Item>
+            <Descriptions.Item label="变更类型">
+              {ORDER_TYPE_MAP[String(detail.co_type)] || String(detail.co_type || '-')}
+            </Descriptions.Item>
+            <Descriptions.Item label="当前状态">{renderOrderStatus(detail.status)}</Descriptions.Item>
+            <Descriptions.Item label="分批策略">
+              {detail.batch_count ? `${detail.batch_count} 批` : '单批'} ({String(detail.batch_type || '按比例')})
+            </Descriptions.Item>
+            <Descriptions.Item label="创建时间">{fmtTime(detail.create_time)}</Descriptions.Item>
+            <Descriptions.Item label="描述">{String(detail.desc || detail.description || '-')}</Descriptions.Item>
+          </Descriptions>
+
+          {/* 分批进度步骤条 (Steps) */}
+          {Array.isArray(detail.pipelines) && detail.pipelines.length > 0 && (
+            <div style={{ marginTop: 24 }}>
+              <Text strong style={{ display: 'block', marginBottom: 12 }}>
+                分批流水发布进度 (Pipelines / Batches)
+              </Text>
+              <Steps
+                size="small"
+                current={
+                  detail.pipelines.findIndex((p: any) => p.pipeline_id === activePipeline?.pipeline_id) >= 0
+                    ? detail.pipelines.findIndex((p: any) => p.pipeline_id === activePipeline?.pipeline_id)
+                    : 0
+                }
+                onChange={(idx) => {
+                  const p = (detail.pipelines as any[])[idx];
+                  if (p?.pipeline_id) loadPipelineDetail(p.pipeline_id);
+                }}
+                items={(detail.pipelines as any[]).map((p: any, idx: number) => {
+                  const statusNum = Number(p.status);
+                  const isDone = statusNum === 2;
+                  const isFail = statusNum === 3;
+                  const isRunning = statusNum === 1;
+                  return {
+                    title: p.pipeline_name || `批次 ${idx + 1}`,
+                    description: isDone ? '执行完成' : isFail ? '失败' : isRunning ? '执行中' : '等待确认',
+                    status: isDone ? 'finish' : isFail ? 'error' : isRunning ? 'process' : 'wait',
+                  };
+                })}
+              />
             </div>
-          ) : null}
-          {Array.isArray(detail.pipelines) && detail.pipelines.length > 0 ? (
-            <Table
-              size="small"
-              pagination={false}
-              rowKey={(_, i) => String(i)}
-              dataSource={detail.pipelines as Array<Record<string, unknown>>}
-              columns={[
-                { title: '阶段', dataIndex: 'stage_name', key: 'stage', render: (v) => String(v || '-') },
-                { title: '流水线', dataIndex: 'pipeline_name', key: 'pipeline', render: (v) => String(v || '-') },
-                { title: '状态', dataIndex: 'pipeline_status', key: 'status', render: (v) => String(v || '-') },
-              ]}
-            />
-          ) : null}
-        </div>
+          )}
+
+          {/* 当前批次实例明细 */}
+          {activePipeline && (
+            <div style={{ marginTop: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text strong>
+                  当前批次实例状态 ({activePipeline.pipeline_name || activePipeline.pipeline_id})
+                </Text>
+                {pipelineLoading && <SyncOutlined spin />}
+              </div>
+
+              <Table
+                size="small"
+                pagination={false}
+                rowKey={(r) => r.instance_id || String(Math.random())}
+                dataSource={activePipeline.instances || []}
+                locale={{ emptyText: '该批次暂无实例数据' }}
+                columns={[
+                  {
+                    title: '实例 ID',
+                    dataIndex: 'instance_id',
+                    key: 'instance_id',
+                    render: (v) => <Text code>{String(v || '-')}</Text>,
+                  },
+                  {
+                    title: 'IP 地址',
+                    dataIndex: 'ip',
+                    key: 'ip',
+                    render: (v) => String(v || '-'),
+                  },
+                  {
+                    title: '状态',
+                    dataIndex: 'status',
+                    key: 'status',
+                    render: (v) => {
+                      const isOk = String(v).toLowerCase() === 'running' || v === 2 || v === '2';
+                      return (
+                        <Tag color={isOk ? 'success' : 'processing'}>
+                          {String(v || '-')}
+                        </Tag>
+                      );
+                    },
+                  },
+                  {
+                    title: '执行进度',
+                    dataIndex: 'progress',
+                    key: 'progress',
+                    render: (p) => <Progress percent={Number(p) || 100} size="small" />,
+                  },
+                ]}
+              />
+            </div>
+          )}
+        </Card>
       )}
     </Drawer>
   );

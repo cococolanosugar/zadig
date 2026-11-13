@@ -46,6 +46,7 @@ import { useProjectStore } from '../../stores/project';
 import { deliveryApi, DeliveryVersionItem } from '../../api/delivery';
 import CreateHelmReleaseModal from './CreateHelmReleaseModal';
 import { LogViewer } from '../../components/Terminal/LogViewer';
+import { logApi } from '../../api/log';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -1099,6 +1100,14 @@ export const DeliveryPage: React.FC = () => {
             <LogViewer
               streamUrl={`/api/aslan/logs/sse/delivery/500?projectName=${encodeURIComponent(distLogDrawer.projectName)}&version=${encodeURIComponent(distLogDrawer.version)}&serviceName=${encodeURIComponent(distLogDrawer.serviceName)}&serviceModule=${encodeURIComponent(distLogDrawer.serviceModule)}`}
               height="calc(100vh - 180px)"
+              onDownloadArchive={() =>
+                logApi.getDeliveryLogs({
+                  projectName: distLogDrawer.projectName,
+                  version: distLogDrawer.version,
+                  serviceName: distLogDrawer.serviceName,
+                  serviceModule: distLogDrawer.serviceModule,
+                })
+              }
             />
           </div>
         )}

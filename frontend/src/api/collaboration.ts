@@ -179,6 +179,86 @@ export const collaborationApi = {
       { products }
     );
   },
+
+  /**
+   * 创建协同/远程调试房间
+   * POST /api/v1/room/create?name=&group=&title=
+   */
+  async createRoom(params: {
+    group: string;
+    title: string;
+    name?: string;
+    useSecret?: boolean;
+    secret?: string;
+  }): Promise<{ name: string; address: string; roomUrl?: string }> {
+    const q = new URLSearchParams({
+      group: params.group,
+      title: params.title,
+      name: params.name || (typeof navigator !== 'undefined' ? navigator.userAgent : 'zadig-client'),
+    });
+    return http.post<{ name: string; address: string }>(
+      `/api/v1/room/create?${q.toString()}`,
+      { useSecret: params.useSecret, secret: params.secret },
+      { skipErrorHandler: true }
+    );
+  },
+
+  /**
+   * 获取协同房间 WebSocket 连接 URL
+   * ws(s)://<host>/api/v1/ws/room/join?name=&group=&room=
+   */
+  getRoomWsUrl(params: { group: string; room: string; name?: string }): string {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const q = new URLSearchParams({
+      group: params.group,
+      room: params.room,
+      name: params.name || (typeof navigator !== 'undefined' ? navigator.userAgent : 'zadig-client'),
+    });
+    const endpoint = '/api/v1/ws/room/join';
+    return `${proto}//${window.location.host}${endpoint}?${q.toString()}`;
+  },
+
+  /**
+   * 客户端协作与排障离线日志上传
+   * POST /api/v1/log/upload
+   */
+  async uploadClientLog(formData: FormData): Promise<unknown> {
+    return http.post('/api/v1/log/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 客户端协作排障日志下载
+   * GET /api/v1/log/download?fileId=
+   */
+  async downloadClientLog(fileId: string): Promise<Blob> {
+    return http.get<Blob>(`/api/v1/log/download?fileId=${encodeURIComponent(fileId)}`, {
+      responseType: 'blob',
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 匿名运营分析遥测上报 (KodeRover Cloud)
+   * POST /api/operation/upload
+   */
+  async uploadTelemetry(payload: unknown): Promise<unknown> {
+    return http.post('/api/operation/upload', payload, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 用户运营遥测上报
+   * POST /api/operation/upload/user
+   */
+  async uploadUserTelemetry(payload: unknown): Promise<unknown> {
+    return http.post('/api/operation/upload/user', payload, {
+      skipErrorHandler: true,
+    });
+  },
 };
 
 export default collaborationApi;

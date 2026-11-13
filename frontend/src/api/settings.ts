@@ -1065,6 +1065,105 @@ export const settingsApi = {
     const res = await http.get<CICDToolItem[]>('/api/aslan/system/cicdTools', { skipErrorHandler: true });
     return Array.isArray(res) ? res : [];
   },
+
+  /**
+   * 钉钉部门获取
+   * GET /api/aslan/system/dingtalk/:id/department/:departmentId?projectName=
+   */
+  async getDingtalkDepartment(id: string, departmentId: string, projectName: string): Promise<unknown> {
+    return http.get(`/api/aslan/system/dingtalk/${encodeURIComponent(id)}/department/${encodeURIComponent(departmentId)}?projectName=${encodeURIComponent(projectName)}`, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 飞书部门获取
+   * GET /api/aslan/system/lark/:id/department/:departmentId?projectName=&user_id_type=
+   */
+  async getLarkDepartment(id: string, departmentId: string, projectName: string, userIdType = 'open_id'): Promise<unknown> {
+    return http.get(`/api/aslan/system/lark/${encodeURIComponent(id)}/department/${encodeURIComponent(departmentId)}?projectName=${encodeURIComponent(projectName)}&user_id_type=${encodeURIComponent(userIdType)}`, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * DMS 工单列表
+   * GET /api/aslan/system/dms/:id/orders?keyword=
+   */
+  async getDMSOrders(id: string, keyword = ''): Promise<unknown[]> {
+    const res = await http.get<unknown[]>(`/api/aslan/system/dms/${encodeURIComponent(id)}/orders?keyword=${encodeURIComponent(keyword)}`, {
+      skipErrorHandler: true,
+    });
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * Grafana 告警列表
+   * GET /api/aslan/system/grafana/:id/alert
+   */
+  async getGrafanaAlerts(id: string): Promise<unknown> {
+    return http.get(`/api/aslan/system/grafana/${encodeURIComponent(id)}/alert`, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 检查集群是否支持临时容器调试 (ephemeral containers)
+   * GET /api/aslan/cluster/check/ephemeralcontainers?clusterId=
+   */
+  async checkEphemeralContainers(clusterId: string): Promise<{ enabled: boolean }> {
+    return http.get<{ enabled: boolean }>(`/api/aslan/cluster/check/ephemeralcontainers?clusterId=${encodeURIComponent(clusterId)}`, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 获取代码源信息列表
+   * GET /api/aslan/code/codehost/infos
+   */
+  async getCodeHostInfos(): Promise<unknown[]> {
+    const res = await http.get<unknown[]>('/api/aslan/code/codehost/infos', { skipErrorHandler: true });
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 代码源 OAuth 回调通知
+   * GET /api/directory/codehosts/callback
+   */
+  async notifyCodeHostCallback(params: Record<string, string>): Promise<unknown> {
+    const q = new URLSearchParams(params);
+    return http.get(`/api/directory/codehosts/callback?${q.toString()}`, { skipErrorHandler: true });
+  },
+
+  /**
+   * 企业微信部门查询
+   * GET /api/aslan/system/workwx/:id/department?projectName=
+   */
+  async getWorkwxDepartment(id: string, projectName: string): Promise<unknown> {
+    return http.get(`/api/aslan/system/workwx/${encodeURIComponent(id)}/department?projectName=${encodeURIComponent(projectName)}`, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 企业微信部门下属成员查询
+   * GET /api/aslan/system/workwx/:id/user?department_id=&projectName=
+   */
+  async getWorkwxUsers(id: string, departmentId: string | number, projectName: string): Promise<unknown> {
+    return http.get(`/api/aslan/system/workwx/${encodeURIComponent(id)}/user?department_id=${encodeURIComponent(String(departmentId))}&projectName=${encodeURIComponent(projectName)}`, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 按镜像名批量获取镜像仓镜像
+   * POST /api/aslan/system/registry/images?projectName=&registryId=
+   */
+  async getRegistryImages(projectName: string, registryId: string, imageNames: string[]): Promise<unknown> {
+    return http.post(`/api/aslan/system/registry/images?projectName=${encodeURIComponent(projectName)}&registryId=${encodeURIComponent(registryId)}`, { names: imageNames }, {
+      skipErrorHandler: true,
+    });
+  },
 };
 
 export interface CICDToolItem {

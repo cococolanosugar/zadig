@@ -194,6 +194,43 @@ export const rbacApi = {
   async deleteRoleTemplate(name: string): Promise<unknown> {
     return http.delete(`/api/v1/policy/role-templates/${encodeURIComponent(name)}`, { skipErrorHandler: true });
   },
+
+  /**
+   * Picket 用户删除
+   * DELETE /api/v1/picket/users/:id
+   */
+  async deletePicketUser(uid: string): Promise<void> {
+    return http.delete(`/api/v1/picket/users/${encodeURIComponent(uid)}`, { skipErrorHandler: true });
+  },
+
+  /**
+   * 获取策略列表 (Policies)
+   * GET /api/v1/policies?projectName=
+   */
+  async getPolicies(projectName: string): Promise<unknown[]> {
+    const res = await http.get<unknown[]>(`/api/v1/policies?projectName=${encodeURIComponent(projectName)}`, {
+      skipErrorHandler: true,
+    });
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 获取策略详情
+   * GET /api/v1/policies/:name?projectName=
+   */
+  async getPolicyDetail(name: string, projectName: string): Promise<unknown> {
+    return http.get(`/api/v1/policies/${encodeURIComponent(name)}?projectName=${encodeURIComponent(projectName)}`, {
+      skipErrorHandler: true,
+    });
+  },
+
+  /**
+   * 注册触发器特性配置更新
+   * PUT /api/v1/features/RegisterTrigger
+   */
+  async updateRegisterTriggerFeature(payload: unknown): Promise<unknown> {
+    return http.put('/api/v1/features/RegisterTrigger', payload, { skipErrorHandler: true });
+  },
 };
 
 export default rbacApi;

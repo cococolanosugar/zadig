@@ -1278,6 +1278,61 @@ export const workflowApi = {
       { responseType: 'blob' }
     );
   },
+
+  /**
+   * 获取构建目标列表
+   * GET /api/aslan/build/targets?projectName=
+   */
+  async getBuildTargets(projectName = ''): Promise<string[]> {
+    const res = await http.get<string[]>(`/api/aslan/build/targets?projectName=${encodeURIComponent(projectName)}`, {
+      skipErrorHandler: true,
+    });
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 获取 Picket 权限下所有工作流
+   * GET /api/v1/picket/workflows/all?projectName=
+   */
+  async getPicketAllWorkflows(projectName: string): Promise<unknown[]> {
+    const res = await http.get<unknown[]>(`/api/v1/picket/workflows/all?projectName=${encodeURIComponent(projectName)}`, {
+      skipErrorHandler: true,
+    });
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 获取测试名称关联的工作流
+   * GET /api/v1/picket/workflows/testName/:testName?projectName=
+   */
+  async getPicketWorkflowTestName(projectName: string, testName: string): Promise<unknown[]> {
+    const res = await http.get<unknown[]>(`/api/v1/picket/workflows/testName/${encodeURIComponent(testName)}?projectName=${encodeURIComponent(projectName)}`, {
+      skipErrorHandler: true,
+    });
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 查询人工审批工单
+   * GET /api/aslan/ticket/approval?query=&projectName=
+   */
+  async getApprovalTickets(query: string, projectName: string): Promise<unknown[]> {
+    const res = await http.get<unknown[]>(`/api/aslan/ticket/approval?query=${encodeURIComponent(query)}&projectName=${encodeURIComponent(projectName)}`, {
+      skipErrorHandler: true,
+    });
+    return Array.isArray(res) ? res : [];
+  },
+
+  /**
+   * 质量中心测试任务列表
+   * GET /api/aslan/quality/tests?search=&pageNum=&pageSize=
+   */
+  async getQualityTests(search = '', pageNum = 1, pageSize = 200): Promise<unknown[]> {
+    const res = await http.get<unknown[]>(`/api/aslan/quality/tests?search=${encodeURIComponent(search)}&pageNum=${pageNum}&pageSize=${pageSize}`, {
+      skipErrorHandler: true,
+    });
+    return Array.isArray(res) ? res : [];
+  },
 };
 
 export interface HelmDeployJobMergeImageParams {
